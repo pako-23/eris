@@ -1,7 +1,6 @@
-#include "client.h"
+#include "coordinator.h"
 #include <iostream>
 
-void Client::run()
-{
+void ErisCoordinator::run(void) {
   std::cout << "TODO: implement" << std::endl;
 }
