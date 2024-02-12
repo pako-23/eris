@@ -1,7 +1,7 @@
 #pragma once
 
 class Coordinator {
-public:
+ public:
   virtual ~Coordinator() {}
   virtual void run(void) = 0;
 };

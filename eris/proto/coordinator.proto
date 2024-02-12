@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package coordinator;
+
+service Coordinator {
+  rpc Join (JoinRequest) returns (JoinResponse) {}
+};
+
+message JoinRequest {
+  string address = 1;
+  uint32 port = 2;
+};
+
+message JoinResponse {
+  string model = 1;
+};

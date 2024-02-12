@@ -3,6 +3,6 @@
 #include "../client.h"
 
 class ErisClient : public Client {
-public:
+ public:
   void run(void) override;
 };
