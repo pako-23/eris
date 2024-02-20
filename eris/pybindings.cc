@@ -1,8 +1,12 @@
 #include <pybind11/pybind11.h>
 
-#include "client.h"
-#include "coordinator.h"
-#include "eris/coordinator.h"
+#include <cstdint>
+#include <string>
+
+#include "algorithms/eris/client.h"
+#include "algorithms/eris/coordinator.h"
+#include "erisfl/client.h"
+#include "erisfl/coordinator.h"
 
 namespace py = pybind11;
 
@@ -30,6 +34,21 @@ class PyClient : public Client {
   }
 };
 
+class PyErisClient : public ErisClient {
+ public:
+  using ErisClient::ErisClient;
+
+  void get_parameters(void) override {
+    PYBIND11_OVERRIDE_PURE(void, Client, get_parameters, );
+  }
+
+  void fit(void) override { PYBIND11_OVERRIDE_PURE(void, Client, fit, ); }
+
+  void evaluate(void) override {
+    PYBIND11_OVERRIDE_PURE(void, Client, evaluate, );
+  }
+};
+
 PYBIND11_MODULE(eris, m) {
   py::class_<Coordinator, PyCoordinator>(m, "Coordinator")
       .def(py::init<>())
@@ -45,4 +64,11 @@ PYBIND11_MODULE(eris, m) {
       .def("get_parameters", &Client::get_parameters)
       .def("fit", &Client::fit)
       .def("evaluate", &Client::evaluate);
+
+  py::class_<ErisClient, Client, PyErisClient>(m, "ErisClient")
+      .def(py::init<const std::string&, const std::string&, uint16_t>())
+      .def("run", &ErisClient::run)
+      .def("get_parameters", &ErisClient::get_parameters)
+      .def("fit", &ErisClient::fit)
+      .def("evaluate", &ErisClient::evaluate);
 }
