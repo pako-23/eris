@@ -87,7 +87,7 @@ def generate_data(num_samples, num_features, batch_size=64):
     return train_loader, val_loader, test_loader
 
 
-class Client():
+class Client(ErisClient):
     def __init__(self, model, train_loader, val_loader, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.local_epochs = 200
