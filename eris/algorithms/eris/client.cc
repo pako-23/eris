@@ -1,17 +1,15 @@
 #include "algorithms/eris/client.h"
-
-#include <grpcpp/support/status.h>
-
 #include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.pb.h"
 #include "grpcpp/channel.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/security/credentials.h"
+#include "spdlog/spdlog.h"
 #include "zmq.hpp"
 #include <chrono>
 #include <condition_variable>
-#include <cstdint>
+#include <grpcpp/support/status.h>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -23,11 +21,10 @@ using grpc::Status;
 static std::chrono::minutes timeout = std::chrono::minutes(1);
 
 ErisClient::ErisClient(const std::string &coordinator_address,
-                       const std::string &address, uint16_t grpc_port,
-                       std::optional<uint16_t> pub_port)
-    : bind_addr_{address}, coordinator_addr_{coordinator_address},
-      grpc_port_{grpc_port}, pub_port_{pub_port}, publisher_ctx_{},
-      publisher_sock_{publisher_ctx_, zmq::socket_type::sub} {
+                       std::optional<AggregatorConfig> aggregator_opts)
+    : coordinator_addr_{coordinator_address}, zmq_context_{},
+      publisher_sock_{zmq_context_, zmq::socket_type::sub}, subscriptions_{},
+      aggregator_{nullptr}, aggregator_config_{aggregator_opts} {
   // TODO: Validate parameters
 }
 
@@ -36,30 +33,38 @@ void ErisClient::start(void) {
       coordinator_addr_, grpc::InsecureChannelCredentials())};
 
   if (!channel->WaitForConnected(std::chrono::system_clock::now() + timeout)) {
-    std::cerr << "Failed to connect to the coordinator" << std::endl;
+    spdlog::error("Failed to connect the coordinator on {0}",
+                  coordinator_addr_);
     return;
   }
 
   ClientImpl client{channel, shared_from_this()};
 
-  if (!client.Join()) {
-    std::cerr << "Failed to join the training" << std::endl;
+  if (!client.Join())
     return;
-  }
-
   std::cout << "Successfully joined the training" << std::endl;
+
+  fit();
+
+  get_parameters();
 }
+
+bool ErisClient::start_aggregator(void) { return true; }
 
 ErisClient::ClientImpl::ClientImpl(std::shared_ptr<Channel> channel,
                                    std::shared_ptr<ErisClient> client)
     : stub_{coordinator::Coordinator::NewStub(channel)}, client_{client} {}
 
 bool ErisClient::ClientImpl::Join(void) {
-  coordinator::Endpoint request;
-  request.set_rpc_port(client_->grpc_port_);
-  request.set_address(client_->bind_addr_);
-  if (client_->pub_port_.has_value())
-    request.set_publish_port(client_->pub_port_.value());
+  coordinator::JoinRequest request;
+  if (this->client_->aggregator_config_.has_value()) {
+    request.mutable_aggregator()->set_address(
+        this->client_->aggregator_config_.value().address);
+    request.mutable_aggregator()->set_submit_port(
+        this->client_->aggregator_config_.value().submit_port);
+    request.mutable_aggregator()->set_publish_port(
+        this->client_->aggregator_config_.value().publish_port);
+  }
 
   coordinator::JoinResponse response;
   grpc::ClientContext context;
@@ -75,20 +80,34 @@ bool ErisClient::ClientImpl::Join(void) {
       [&done, &result, &response, this](Status status) {
         done = true;
         if (!status.ok()) {
-          std::cerr << status.error_message() << std::endl;
+          spdlog::error("Failed to join the training: {0}",
+                        status.error_message());
           result = false;
-        } else {
-          this->client_->options_ = response.options();
-          this->client_->aggregators_.resize(response.options().splits());
-          this->client_->publisher_sock_.connect(response.events_address());
-          if (response.has_assigned_fragment()) {
-            // TODO: start aggregator service
-          }
-          for (const auto &aggregator : response.aggregators()) {
-            this->client_->aggregators_[aggregator.id()] = aggregator.address();
-            // TODO: connect to zmq address
-          }
+          return;
         }
+        this->client_->options_ = response.options();
+        this->client_->aggregators_.resize(response.options().splits());
+        this->client_->subscriptions_.resize(
+            response.options().splits(),
+            zmq::socket_t{this->client_->zmq_context_, zmq::socket_type::sub});
+        this->client_->publisher_sock_.connect(response.events_address());
+
+        for (const auto &aggregator : response.aggregators()) {
+          if (aggregator.id() < 0 &&
+              aggregator.id() >= response.options().splits()) {
+
+            result = false;
+            return;
+          }
+          this->client_->aggregators_[aggregator.id()] =
+              aggregator.submit_address();
+          this->client_->subscriptions_[aggregator.id()].connect(
+              aggregator.publish_address());
+        }
+
+        if (response.has_assigned_fragment() &&
+            !this->client_->start_aggregator())
+          result = false;
       });
   std::unique_lock<std::mutex> lock(m);
   c.wait(lock, [&done] { return done; });

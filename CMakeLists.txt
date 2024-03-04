@@ -10,8 +10,11 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 include_directories(eris/include)
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 
-add_subdirectory(extern/pybind11)
+add_subdirectory(third_party/pybind11)
 pybind11_add_module(eris eris/pybindings.cc)
+
+add_library(util eris/util/util.cc eris/include/util/util.h)
+set_target_properties(util PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(algorithms eris/algorithms/eris/coordinator.cc eris/algorithms/eris/client.cc)
 set_target_properties(algorithms PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -23,7 +26,7 @@ set(_PROTOBUF_LIBPROTOBUF libprotobuf)
 set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
 set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:grpc_cpp_plugin>)
 
-add_subdirectory(extern/grpc EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/grpc EXCLUDE_FROM_ALL)
 
 foreach(proto_file eris/coordinator)
   get_filename_component(proto "eris/proto/${proto_file}.proto" ABSOLUTE)
@@ -61,20 +64,21 @@ endforeach()
 set_target_properties(grpc_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 ## Add zmq libraries
-set(ZeroMQ_DIR "${CMAKE_CURRENT_BINARY_DIR}/extern/libzmq")
-add_subdirectory(extern/libzmq EXCLUDE_FROM_ALL)
-include_directories(extern/libzmq)
-include_directories(extern/cppzmq)
+set(ZeroMQ_DIR "${CMAKE_CURRENT_BINARY_DIR}/third_party/libzmq")
+add_subdirectory(third_party/libzmq EXCLUDE_FROM_ALL)
+include_directories(third_party/libzmq)
+include_directories(third_party/cppzmq)
 
 ## Add boost log library
-
+add_subdirectory(third_party/spdlog EXCLUDE_FROM_ALL)
+include_directories(third_party/spdlog/include)
 
 target_link_libraries(algorithms
   grpc_proto
   "${_REFLECTION}"
   "${_GRPC_GRPCPP}"
   "${_PROTOBUF_LIBPROTOBUF}"
+  util
   libzmq)
-
 
 target_link_libraries(eris PRIVATE algorithms)

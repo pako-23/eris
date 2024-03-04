@@ -35,16 +35,24 @@ private:
   public:
     explicit CoordinatorImpl(std::shared_ptr<ErisCoordinator>);
     grpc::ServerUnaryReactor *Join(CallbackServerContext *,
-                                   const coordinator::Endpoint *,
+                                   const coordinator::JoinRequest *,
                                    coordinator::JoinResponse *) override;
 
     std::shared_ptr<ErisCoordinator> coordinator_;
   };
 
+  struct Aggregator {
+    const std::string publish_address;
+    const std::string submit_address;
+    const std::string id;
+    Aggregator(const coordinator::Aggregator &);
+  };
+
   const std::string grpc_address_;
-  const std::string pub_address_;
+  const std::string zmq_listening_address_;
+  const std::string zmq_publish_address_;
   const coordinator::TrainingOptions options_;
-  zmq::socket_t zmq_socket_;
   zmq::context_t zmq_context_;
-  std::vector<coordinator::Endpoint *> aggregators_;
+  zmq::socket_t zmq_socket_;
+  std::vector<std::unique_ptr<Aggregator>> aggregators_;
 };

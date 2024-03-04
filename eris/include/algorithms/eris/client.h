@@ -7,22 +7,32 @@
 
 #include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.pb.h"
+#include "algorithms/eris/split.h"
 #include "erisfl/client.h"
 #include "grpcpp/channel.h"
+#include "grpcpp/server.h"
 #include "zmq.hpp"
 
 using grpc::Channel;
+using grpc::Server;
+
+struct AggregatorConfig {
+  std::string address;
+  uint16_t submit_port;
+  uint16_t publish_port;
+};
 
 class ErisClient : public Client,
                    public std::enable_shared_from_this<ErisClient> {
 public:
-  explicit ErisClient(const std::string &coordinator_address,
-                      const std::string &address = "0.0.0.0",
-                      uint16_t grpc_port = 50051,
-                      std::optional<uint16_t> pub_port = std::nullopt);
+  explicit ErisClient(
+      const std::string &coordinator_address,
+      std::optional<AggregatorConfig> aggregator_opts = std::nullopt);
   void start(void) override;
 
 private:
+  bool start_aggregator(void);
+
   class ClientImpl {
   public:
     explicit ClientImpl(std::shared_ptr<Channel>, std::shared_ptr<ErisClient>);
@@ -42,13 +52,17 @@ private:
     std::shared_ptr<ErisClient> client_;
   };
 
-  const std::string bind_addr_;
-  const uint16_t grpc_port_;
-  const std::optional<uint16_t> pub_port_;
   const std::string coordinator_addr_;
-  std::vector<coordinator::Endpoint> aggregators_;
-  coordinator::TrainingOptions options_;
-
-  zmq::context_t publisher_ctx_;
   zmq::socket_t publisher_sock_;
+  coordinator::TrainingOptions options_;
+  const std::unique_ptr<SplitStrategy> splitter_;
+
+  // Model publishing fields
+  zmq::context_t zmq_context_;
+  std::vector<std::string> aggregators_;
+  std::vector<zmq::socket_t> subscriptions_;
+
+  // Aggregation related fields
+  std::unique_ptr<Server> aggregator_;
+  const std::optional<AggregatorConfig> aggregator_config_;
 };

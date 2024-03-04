@@ -4,9 +4,7 @@ from eris import ErisCoordinator
 from model import SimplestModel
 
 def main():
-    c = ErisCoordinator()
-    m = SimplestModel()
-    print(m)
+    ErisCoordinator().run()
 
 
 if __name__ == "__main__":

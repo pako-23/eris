@@ -1,14 +1,34 @@
-[submodule "extern/pybind11"]
-	path = extern/pybind11
+[submodule "third_party/grpc"]
+	path = third_party/grpc
+	url = https://github.com/grpc/grpc.git
+	ignore = dirty
+[submodule "third_party/pybind11"]
+	path = third_party/pybind11
 	url = https://github.com/pybind/pybind11.git
-	branch = stable
-[submodule "extern/grpc"]
-	path = extern/grpc
-	url = https://github.com/grpc/grpc
-	branch = v1.60.x
-[submodule "extern/libzmq"]
-	path = extern/libzmq
+[submodule "third_party/libzmq"]
+	path = third_party/libzmq
 	url = https://github.com/zeromq/libzmq
-[submodule "extern/cppzmq"]
-	path = extern/cppzmq
+[submodule "third_party/cppzmq"]
+	path = third_party/cppzmq
 	url = https://github.com/zeromq/cppzmq
+[submodule "third_party/log"]
+	path = third_party/log
+	url = https://github.com/boostorg/log.git
+[submodule "third_party/array"]
+	path = third_party/array
+	url = https://github.com/boostorg/array.git
+[submodule "third_party/assert"]
+	path = third_party/assert
+	url = https://github.com/boostorg/assert.git
+[submodule "third_party/config"]
+	path = third_party/config
+	url = https://github.com/boostorg/config.git
+[submodule "third_party/core"]
+	path = third_party/core
+	url = https://github.com/boostorg/core.git
+[submodule "third_party/container"]
+	path = third_party/container
+	url = https://github.com/boostorg/container.git
+[submodule "third_party/spdlog"]
+	path = third_party/spdlog
+	url = https://github.com/gabime/spdlog.git
