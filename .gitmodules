@@ -6,3 +6,9 @@
 	path = extern/grpc
 	url = https://github.com/grpc/grpc
 	branch = v1.60.x
+[submodule "extern/libzmq"]
+	path = extern/libzmq
+	url = https://github.com/zeromq/libzmq
+[submodule "extern/cppzmq"]
+	path = extern/cppzmq
+	url = https://github.com/zeromq/cppzmq

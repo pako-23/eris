@@ -1,8 +1,6 @@
 import numpy as np
 from torch import nn
 
-
-
 # Model class
 class SimplestModel(nn.Module):
     def __init__(
@@ -18,9 +16,3 @@ class SimplestModel(nn.Module):
     def forward(self, x):
         pred = self.linear(x)
         return pred
-
-
-
-
-
-

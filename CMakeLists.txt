@@ -60,10 +60,21 @@ foreach(proto_file eris/coordinator)
 endforeach()
 set_target_properties(grpc_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+## Add zmq libraries
+set(ZeroMQ_DIR "${CMAKE_CURRENT_BINARY_DIR}/extern/libzmq")
+add_subdirectory(extern/libzmq EXCLUDE_FROM_ALL)
+include_directories(extern/libzmq)
+include_directories(extern/cppzmq)
+
+## Add boost log library
+
+
 target_link_libraries(algorithms
   grpc_proto
   "${_REFLECTION}"
   "${_GRPC_GRPCPP}"
-  "${_PROTOBUF_LIBPROTOBUF}")
+  "${_PROTOBUF_LIBPROTOBUF}"
+  libzmq)
+
 
 target_link_libraries(eris PRIVATE algorithms)

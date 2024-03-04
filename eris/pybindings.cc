@@ -14,14 +14,14 @@ class PyCoordinator : public Coordinator {
  public:
   using Coordinator::Coordinator;
 
-  void run(void) override { PYBIND11_OVERRIDE_PURE(void, Coordinator, run, ); }
+  void start(void) override { PYBIND11_OVERRIDE_PURE(void, Coordinator, start, ); }
 };
 
 class PyClient : public Client {
  public:
   using Client::Client;
 
-  void run(void) override { PYBIND11_OVERRIDE_PURE(void, Client, run, ); }
+  void start(void) override { PYBIND11_OVERRIDE_PURE(void, Client, start, ); }
 
   void get_parameters(void) override {
     PYBIND11_OVERRIDE_PURE(void, Client, get_parameters, );
@@ -52,22 +52,22 @@ class PyErisClient : public ErisClient {
 PYBIND11_MODULE(eris, m) {
   py::class_<Coordinator, PyCoordinator>(m, "Coordinator")
       .def(py::init<>())
-      .def("run", &Coordinator::run);
+      .def("start", &Coordinator::start);
 
   py::class_<ErisCoordinator, Coordinator>(m, "ErisCoordinator")
-      .def(py::init<>())
-      .def("run", &ErisCoordinator::run);
+      .def(py::init<const ErisCoordinatorOptions&, const std::string&, uint16_t, uint16_t>())
+      .def("start", &ErisCoordinator::start);
 
   py::class_<Client, PyClient>(m, "Client")
       .def(py::init<>())
-      .def("run", &Client::run)
+      .def("start", &Client::start)
       .def("get_parameters", &Client::get_parameters)
       .def("fit", &Client::fit)
       .def("evaluate", &Client::evaluate);
 
   py::class_<ErisClient, Client, PyErisClient>(m, "ErisClient")
       .def(py::init<const std::string&, const std::string&, uint16_t>())
-      .def("run", &ErisClient::run)
+      .def("start", &ErisClient::start)
       .def("get_parameters", &ErisClient::get_parameters)
       .def("fit", &ErisClient::fit)
       .def("evaluate", &ErisClient::evaluate);

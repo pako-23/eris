@@ -3,14 +3,28 @@ syntax = "proto3";
 package coordinator;
 
 service Coordinator {
-  rpc Join (JoinRequest) returns (JoinResponse) {}
-};
+    rpc Join (Endpoint) returns (JoinResponse) {}
+}
 
-message JoinRequest {
-  string address = 1;
-  uint32 port = 2;
-};
+message Endpoint {
+    string address = 1;
+    uint32 rpc_port = 2;
+    optional uint32 publish_port = 3;
+}
+
+message FragmentInfo {
+    uint32 id = 1;
+    Endpoint address = 2;
+}
+
+message TrainingOptions {
+    uint32 min_clients = 1;
+    uint32 splits = 2;
+}
 
 message JoinResponse {
-  string model = 1;
-};
+    TrainingOptions options = 1;
+    string events_address = 2;
+    optional uint32 assigned_fragment = 3;
+    repeated FragmentInfo aggregators = 4;
+}
