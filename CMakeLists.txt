@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.27)
 project(eris VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(ABSL_ENABLE_INSTALL ON)
 set(h_files_dir eris/include)
 
