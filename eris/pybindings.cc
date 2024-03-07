@@ -1,3 +1,4 @@
+#include <memory>
 #include <pybind11/pybind11.h>
 
 #include <cstdint>
@@ -68,8 +69,9 @@ PYBIND11_MODULE(eris, m) {
       .def("fit", &Client::fit)
       .def("evaluate", &Client::evaluate);
 
-  py::class_<ErisClient, Client, PyErisClient>(m, "ErisClient")
-      .def(py::init<const std::string &, const std::string &, uint16_t>())
+  py::class_<ErisClient, Client, PyErisClient, std::shared_ptr<ErisClient>>(
+      m, "ErisClient")
+      .def(py::init<const std::string &, std::optional<AggregatorConfig>>())
       .def("start", &ErisClient::start)
       .def("get_parameters", &ErisClient::get_parameters)
       .def("fit", &ErisClient::fit)

@@ -42,7 +42,7 @@ void ErisClient::start(void) {
 
   if (!client.Join())
     return;
-  std::cout << "Successfully joined the training" << std::endl;
+  spdlog::info("Successfully joined the training");
 
   fit();
 
