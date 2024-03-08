@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package aggregator;
+import "google/protobuf/empty.proto";
+
+service Aggregator {
+    rpc SubmitWeights (Weight) returns (google.protobuf.Empty) {}
+}
+
+message Weight {
+    repeated int32 weight = 1;
+}

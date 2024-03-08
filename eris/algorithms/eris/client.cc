@@ -9,8 +9,8 @@
 #include "zmq.hpp"
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <grpcpp/support/status.h>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -87,9 +87,10 @@ bool ErisClient::ClientImpl::Join(void) {
         }
         this->client_->options_ = response.options();
         this->client_->aggregators_.resize(response.options().splits());
-        this->client_->subscriptions_.resize(
-            response.options().splits(),
-            zmq::socket_t{this->client_->zmq_context_, zmq::socket_type::sub});
+        this->client_->subscriptions_.resize(0);
+        for (uint32_t i{0}; i < response.options().splits(); ++i)
+          this->client_->subscriptions_.emplace_back(zmq::socket_t{
+              this->client_->zmq_context_, zmq::socket_type::sub});
         this->client_->publisher_sock_.connect(response.events_address());
 
         for (const auto &aggregator : response.aggregators()) {

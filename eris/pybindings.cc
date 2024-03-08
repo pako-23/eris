@@ -2,10 +2,12 @@
 #include <pybind11/pybind11.h>
 
 #include <cstdint>
+#include <shared_mutex>
 #include <string>
 
 #include "algorithms/eris/client.h"
 #include "algorithms/eris/coordinator.h"
+#include "algorithms/eris/coordinator.pb.h"
 #include "erisfl/client.h"
 #include "erisfl/coordinator.h"
 
@@ -57,8 +59,9 @@ PYBIND11_MODULE(eris, m) {
       .def(py::init<>())
       .def("start", &Coordinator::start);
 
-  py::class_<ErisCoordinator, Coordinator>(m, "ErisCoordinator")
-      .def(py::init<const ErisCoordinatorOptions &, const std::string &,
+  py::class_<ErisCoordinator, Coordinator, std::shared_ptr<ErisCoordinator>>(
+      m, "ErisCoordinator")
+      .def(py::init<const coordinator::TrainingOptions &, const std::string &,
                     uint16_t, uint16_t>())
       .def("start", &ErisCoordinator::start);
 

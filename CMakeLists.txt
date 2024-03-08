@@ -1,32 +1,54 @@
 cmake_minimum_required(VERSION 3.27)
-project(eris VERSION 0.0.1)
+project(eris
+  VERSION 0.0.1
+  LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(FetchContent)
+set(FETCHCONTENT_QUIET OFF)
+
+# pybind11 configurations
+FetchContent_Declare(
+  pybind11
+  GIT_REPOSITORY https://github.com/pybind/pybind11.git
+  GIT_TAG        v2.11.1)
+FetchContent_MakeAvailable(pybind11)
+
+# gRPC configurations
 set(ABSL_ENABLE_INSTALL ON)
-set(h_files_dir eris/include)
+find_package(Threads REQUIRED)
+FetchContent_Declare(
+  grpc
+  GIT_REPOSITORY https://github.com/grpc/grpc.git
+  GIT_TAG        v1.62.0)
+FetchContent_MakeAvailable(grpc)
 
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
-include_directories(eris/include)
-include_directories("${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
-
-add_subdirectory(third_party/pybind11)
-pybind11_add_module(eris eris/pybindings.cc)
-
-add_library(util eris/util/util.cc eris/include/util/util.h)
-set_target_properties(util PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-add_library(algorithms eris/algorithms/eris/coordinator.cc eris/algorithms/eris/client.cc)
-set_target_properties(algorithms PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-## Add gRPC libraries
-set(_REFLECTION grpc++_reflection)
-set(_GRPC_GRPCPP grpc++)
 set(_PROTOBUF_LIBPROTOBUF libprotobuf)
+set(_REFLECTION grpc++_reflection)
 set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
+set(_GRPC_GRPCPP grpc++)
 set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:grpc_cpp_plugin>)
 
-add_subdirectory(third_party/grpc EXCLUDE_FROM_ALL)
+# Add zmq libraries
+FetchContent_Declare(
+  libzmq
+  GIT_REPOSITORY https://github.com/zeromq/libzmq.git
+  GIT_TAG        v4.3.5)
+FetchContent_MakeAvailable(libzmq)
+FetchContent_Declare(
+  cppzmq
+  GIT_REPOSITORY https://github.com/zeromq/cppzmq.git
+  GIT_TAG        v4.10.0)
+FetchContent_MakeAvailable(cppzmq)
+
+# Add logging library
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG        v1.13.0)
+FetchContent_MakeAvailable(spdlog)
+
+# Building gRPC stubs
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 
 foreach(proto_file eris/coordinator)
   get_filename_component(proto "eris/proto/${proto_file}.proto" ABSOLUTE)
@@ -61,18 +83,31 @@ foreach(proto_file eris/coordinator)
     "${_GRPC_GRPCPP}"
     "${_PROTOBUF_LIBPROTOBUF}")
 endforeach()
+
 set_target_properties(grpc_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-## Add zmq libraries
-set(ZeroMQ_DIR "${CMAKE_CURRENT_BINARY_DIR}/third_party/libzmq")
-add_subdirectory(third_party/libzmq EXCLUDE_FROM_ALL)
-include_directories(third_party/libzmq)
-include_directories(third_party/cppzmq)
 
-## Add boost log library
-add_subdirectory(third_party/spdlog EXCLUDE_FROM_ALL)
-include_directories(third_party/spdlog/include)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+
+add_library(util eris/util/util.cc eris/include/util/util.h)
+set_target_properties(util PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(util PRIVATE eris/include)
+
+
+add_library(algorithms
+  eris/include/algorithms/eris/coordinator.h
+  eris/include/algorithms/eris/client.h
+  eris/algorithms/eris/coordinator.cc
+  eris/algorithms/eris/client.cc)
+set_target_properties(algorithms PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(algorithms
+  PRIVATE eris/include
+  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
+  PRIVATE "${spdlog_SOURCE_DIR}/include"
+  PRIVATE "${libzmq_SOURCE_DIR}"
+  PRIVATE "${cppzmq_SOURCE_DIR}")
 target_link_libraries(algorithms
   grpc_proto
   "${_REFLECTION}"
@@ -81,4 +116,12 @@ target_link_libraries(algorithms
   util
   libzmq)
 
+
+pybind11_add_module(eris eris/pybindings.cc)
+target_include_directories(eris
+  PRIVATE eris/include
+  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
+  PRIVATE "${spdlog_SOURCE_DIR}/include"
+  PRIVATE "${libzmq_SOURCE_DIR}"
+  PRIVATE "${cppzmq_SOURCE_DIR}")
 target_link_libraries(eris PRIVATE algorithms)
