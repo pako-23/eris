@@ -1,37 +1,34 @@
 #pragma once
 
-#include <cstdint>
-#include <memory>
-#include <optional>
-#include <vector>
-
+#include "algorithms/eris/aggregator.grpc.pb.h"
+#include "algorithms/eris/aggregator.pb.h"
+#include "algorithms/eris/builder.h"
 #include "algorithms/eris/coordinator.grpc.pb.h"
+#include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
-#include "algorithms/eris/split.h"
 #include "erisfl/client.h"
 #include "grpcpp/channel.h"
 #include "grpcpp/server.h"
+#include "grpcpp/support/server_callback.h"
 #include "zmq.hpp"
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <thread>
+#include <vector>
 
 using grpc::Channel;
 using grpc::Server;
 
-struct AggregatorConfig {
-  std::string address;
-  uint16_t submit_port;
-  uint16_t publish_port;
-};
-
 class ErisClient : public Client,
                    public std::enable_shared_from_this<ErisClient> {
 public:
-  explicit ErisClient(
-      const std::string &coordinator_address,
-      std::optional<AggregatorConfig> aggregator_opts = std::nullopt);
-  void start(void) override;
+  explicit ErisClient(std::optional<ErisAggregatorBuilder> = std::nullopt);
+  void start(const std::string &) override;
 
 private:
-  bool start_aggregator(void);
+  void start_aggregator(const ErisAggregatorBuilder &);
 
   class ClientImpl {
   public:
@@ -44,25 +41,30 @@ private:
     std::shared_ptr<ErisClient> client_;
   };
 
-  class AggregatorImpl {
+  class AggregatorImpl final : public aggregator::Aggregator::CallbackService {
   public:
-    explicit AggregatorImpl(std::shared_ptr<ErisClient>);
+    explicit AggregatorImpl(const ErisAggregatorBuilder &);
+    grpc::ServerUnaryReactor *SubmitWeights(CallbackServerContext *,
+                                            const aggregator::Weight *,
+                                            aggregator::Empty *) override;
 
   private:
-    std::shared_ptr<ErisClient> client_;
+    uint32_t current_round_;
+    uint32_t min_clients_;
+    aggregator::WeightUpdate weight_update_;
+    zmq::context_t zmq_context_;
+    zmq::socket_t zmq_socket_;
   };
 
-  const std::string coordinator_addr_;
+  zmq::context_t zmq_context_;
   zmq::socket_t publisher_sock_;
   coordinator::TrainingOptions options_;
-  const std::unique_ptr<SplitStrategy> splitter_;
 
   // Model publishing fields
-  zmq::context_t zmq_context_;
   std::vector<std::string> aggregators_;
   std::vector<zmq::socket_t> subscriptions_;
 
   // Aggregation related fields
-  std::unique_ptr<Server> aggregator_;
-  const std::optional<AggregatorConfig> aggregator_config_;
+  std::unique_ptr<std::thread> aggregator_;
+  std::optional<ErisAggregatorBuilder> aggregator_builder_;
 };

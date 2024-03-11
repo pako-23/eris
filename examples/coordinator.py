@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-from eris import ErisCoordinator
-from model import SimplestModel
+from eris import ErisCoordinator, ErisCoordinatorBuilder
+
 
 def main():
-    ErisCoordinator().run()
+    builder = ErisCoordinatorBuilder()
+    coordinator = ErisCoordinator(builder)
+    coordinator.start()
 
 
 if __name__ == "__main__":

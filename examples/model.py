@@ -1,6 +1,7 @@
 import numpy as np
 from torch import nn
 
+
 # Model class
 class SimplestModel(nn.Module):
     def __init__(

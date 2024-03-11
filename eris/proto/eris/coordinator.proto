@@ -25,10 +25,11 @@ message FragmentInfo {
 message TrainingOptions {
     uint32 min_clients = 1;
     uint32 splits = 2;
+    uint32 rounds = 3;
 }
 
 message JoinResponse {
-   TrainingOptions options = 1;
+    TrainingOptions options = 1;
     string events_address = 2;
     optional uint32 assigned_fragment = 3;
     repeated FragmentInfo aggregators = 4;

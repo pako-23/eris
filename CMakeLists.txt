@@ -3,6 +3,11 @@ project(eris
   VERSION 0.0.1
   LANGUAGES C CXX)
 
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
 
@@ -50,7 +55,9 @@ FetchContent_MakeAvailable(spdlog)
 # Building gRPC stubs
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 
-foreach(proto_file eris/coordinator)
+set(grpc_proto_dependencies "")
+
+foreach(proto_file eris/coordinator eris/aggregator)
   get_filename_component(proto "eris/proto/${proto_file}.proto" ABSOLUTE)
   get_filename_component(proto_path "${proto}" PATH)
 
@@ -60,8 +67,11 @@ foreach(proto_file eris/coordinator)
   set(grpc_srcs "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs/algorithms/${proto_file}.grpc.pb.cc")
 
   get_filename_component(proto_out_dir "${proto_hdrs}" PATH)
-  add_custom_target(create_proto_out_dir 
-  COMMAND "${CMAKE_COMMAND}" -E make_directory "${proto_out_dir}")
+  string(REGEX REPLACE "[^A-Za-z0-9]" "_" create_proto_out_dir "${proto_out_dir}_out_dir")
+  if (NOT TARGET "${create_proto_out_dir}")
+    add_custom_target("${create_proto_out_dir}"
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "${proto_out_dir}")
+  endif()
   
   add_custom_command(
     OUTPUT "${proto_hdrs}" "${grpc_hdrs}" "${proto_srcs}" "${grpc_srcs}"
@@ -71,40 +81,42 @@ foreach(proto_file eris/coordinator)
          -I "${proto_path}"
          --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
          "${proto}"
-    DEPENDS "${proto}" create_proto_out_dir)
+    DEPENDS "${proto}" "${create_proto_out_dir}")
 
-  add_library(grpc_proto
-    "${proto_srcs}"
-    "${proto_hdrs}"
-    "${grpc_srcs}"
-    "${grpc_hdrs}")
-  target_link_libraries(grpc_proto
-    "${_REFLECTION}"
-    "${_GRPC_GRPCPP}"
-    "${_PROTOBUF_LIBPROTOBUF}")
+  list(APPEND grpc_proto_dependencies "${proto_hdrs}" "${grpc_hdrs}" "${proto_srcs}" "${grpc_srcs}")  
 endforeach()
 
+add_library(grpc_proto "${grpc_proto_dependencies}")
 set_target_properties(grpc_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(grpc_proto
+  "${_REFLECTION}"
+  "${_GRPC_GRPCPP}"
+  "${_PROTOBUF_LIBPROTOBUF}")
 
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-
-add_library(util eris/util/util.cc eris/include/util/util.h)
+add_library(util
+  eris/util/networking.cc
+  eris/include/util/networking.h)
 set_target_properties(util PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(util PRIVATE eris/include)
 
 
+find_package(Python COMPONENTS Development)
 add_library(algorithms
+  eris/include/erisfl/coordinator.h
+  eris/include/erisfl/client.h
+  eris/include/algorithms/eris/builder.h
   eris/include/algorithms/eris/coordinator.h
   eris/include/algorithms/eris/client.h
   eris/algorithms/eris/coordinator.cc
-  eris/algorithms/eris/client.cc)
+  eris/algorithms/eris/client.cc
+  eris/algorithms/eris/builder.cc)
 set_target_properties(algorithms PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(algorithms
   PRIVATE eris/include
   PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
+  PRIVATE "${pybind11_INCLUDE_DIR}"
+  PRIVATE "${Python_INCLUDE_DIRS}"
   PRIVATE "${spdlog_SOURCE_DIR}/include"
   PRIVATE "${libzmq_SOURCE_DIR}"
   PRIVATE "${cppzmq_SOURCE_DIR}")

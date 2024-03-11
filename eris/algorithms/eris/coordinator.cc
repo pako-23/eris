@@ -5,28 +5,30 @@
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/server_callback.h"
 #include "spdlog/spdlog.h"
-#include "util/util.h"
 #include "zmq.hpp"
 #include <grpcpp/support/status.h>
 #include <memory>
 #include <string>
 
-ErisCoordinator::ErisCoordinator(const coordinator::TrainingOptions &options,
-                                 const std::string &address, uint16_t rpc_port,
-                                 uint16_t pub_port)
-    : grpc_address_{address + ":" + std::to_string(rpc_port)},
-      zmq_listening_address_{zmq_listen_address(address, pub_port)},
-      zmq_publish_address_{zmq_publish_address(address, pub_port)},
-      options_{options}, zmq_context_{},
+ErisCoordinator::ErisCoordinator(const ErisCoordinatorBuilder &builder)
+    : grpc_address_{builder.get_rpc_address()},
+      zmq_listening_address_{builder.get_zmq_listen_address()},
+      zmq_publish_address_{builder.get_zmq_publish_address()},
+      options_{builder.options_},
+      aggregators_(builder.options_.splits(), nullptr), zmq_context_{},
       zmq_socket_{zmq_context_, zmq::socket_type::pub} {}
 
-ErisCoordinator::~ErisCoordinator(void) {}
+ErisCoordinator::~ErisCoordinator(void) {
+  zmq_socket_.close();
+  for (const Aggregator *aggregator : aggregators_)
+    delete (aggregator);
+}
 
 void ErisCoordinator::start(void) {
   CoordinatorImpl service{shared_from_this()};
 
   zmq_socket_.bind(zmq_publish_address_);
-  spdlog::info("Started ZeroMQ publisher on {0}", zmq_publish_address_);
+  spdlog::info("Started ZeroMQ publisher on {0}", zmq_listening_address_);
 
   ServerBuilder builder;
   builder.AddListeningPort(grpc_address_, grpc::InsecureServerCredentials());
@@ -45,10 +47,11 @@ grpc::ServerUnaryReactor *
 ErisCoordinator::CoordinatorImpl::Join(CallbackServerContext *context,
                                        const coordinator::JoinRequest *request,
                                        coordinator::JoinResponse *response) {
+  grpc::ServerUnaryReactor *reactor{context->DefaultReactor()};
+
   if (request->has_aggregator()) {
     for (const auto &aggregator : coordinator_->aggregators_)
       if (aggregator && aggregator->id == request->aggregator().address()) {
-        grpc::ServerUnaryReactor *reactor = context->DefaultReactor();
         reactor->Finish(
             Status(StatusCode::ALREADY_EXISTS,
                    "An aggregator on the provided address already exists"));
@@ -59,8 +62,7 @@ ErisCoordinator::CoordinatorImpl::Join(CallbackServerContext *context,
   for (auto i = 0; i < coordinator_->aggregators_.size(); ++i) {
     if (request->has_aggregator() && !coordinator_->aggregators_[i]) {
       response->set_assigned_fragment(i);
-      coordinator_->aggregators_[i] =
-          std::make_unique<Aggregator>(request->aggregator());
+      coordinator_->aggregators_[i] = new Aggregator{request->aggregator()};
 
       coordinator::FragmentInfo info{};
       info.set_id(i);
@@ -78,7 +80,7 @@ ErisCoordinator::CoordinatorImpl::Join(CallbackServerContext *context,
 
   *response->mutable_options() = coordinator_->options_;
   response->set_events_address(coordinator_->zmq_publish_address_);
-  grpc::ServerUnaryReactor *reactor = context->DefaultReactor();
+
   reactor->Finish(Status::OK);
   return reactor;
 }
