@@ -1,15 +1,31 @@
 cmake_minimum_required(VERSION 3.27)
+
 project(eris
   VERSION 0.0.1
-  LANGUAGES C CXX)
+  LANGUAGES CXX)
 
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(ERIS_BUILD_TESTS "Build test programs" OFF)
 
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
+
+add_library(compiler_flags INTERFACE)
+target_compile_features(compiler_flags INTERFACE cxx_std_17)
+target_compile_options(compiler_flags INTERFACE -Wall -Wextra)
+target_include_directories(compiler_flags INTERFACE
+  "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
+  eris/include)
+
+
+if (ERIS_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
 
 # pybind11 configurations
 FetchContent_Declare(
@@ -17,6 +33,7 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/pybind/pybind11.git
   GIT_TAG        v2.11.1)
 FetchContent_MakeAvailable(pybind11)
+
 
 # gRPC configurations
 set(ABSL_ENABLE_INSTALL ON)
@@ -26,6 +43,7 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/grpc/grpc.git
   GIT_TAG        v1.62.0)
 FetchContent_MakeAvailable(grpc)
+
 
 set(_PROTOBUF_LIBPROTOBUF libprotobuf)
 set(_REFLECTION grpc++_reflection)
@@ -39,11 +57,12 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/zeromq/libzmq.git
   GIT_TAG        v4.3.5)
 FetchContent_MakeAvailable(libzmq)
-FetchContent_Declare(
-  cppzmq
+
+FetchContent_Declare(cppzmq
   GIT_REPOSITORY https://github.com/zeromq/cppzmq.git
   GIT_TAG        v4.10.0)
 FetchContent_MakeAvailable(cppzmq)
+
 
 # Add logging library
 FetchContent_Declare(
@@ -52,9 +71,8 @@ FetchContent_Declare(
   GIT_TAG        v1.13.0)
 FetchContent_MakeAvailable(spdlog)
 
-# Building gRPC stubs
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 
+# Building gRPC stubs
 set(grpc_proto_dependencies "")
 
 foreach(proto_file eris/coordinator eris/aggregator)
@@ -70,7 +88,7 @@ foreach(proto_file eris/coordinator eris/aggregator)
   string(REGEX REPLACE "[^A-Za-z0-9]" "_" create_proto_out_dir "${proto_out_dir}_out_dir")
   if (NOT TARGET "${create_proto_out_dir}")
     add_custom_target("${create_proto_out_dir}"
-      COMMAND "${CMAKE_COMMAND}" -E make_directory "${proto_out_dir}")
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${proto_out_dir}")
   endif()
   
   add_custom_command(
@@ -79,61 +97,65 @@ foreach(proto_file eris/coordinator eris/aggregator)
     ARGS --grpc_out "${proto_out_dir}"
          --cpp_out "${proto_out_dir}"
          -I "${proto_path}"
-         --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+         --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN_EXECUTABLE}
          "${proto}"
     DEPENDS "${proto}" "${create_proto_out_dir}")
 
   list(APPEND grpc_proto_dependencies "${proto_hdrs}" "${grpc_hdrs}" "${proto_srcs}" "${grpc_srcs}")  
 endforeach()
 
-add_library(grpc_proto "${grpc_proto_dependencies}")
-set_target_properties(grpc_proto PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(grpc_proto
+add_library(grpc_proto STATIC
+  "${grpc_proto_dependencies}")
+target_link_libraries(grpc_proto PUBLIC
   "${_REFLECTION}"
   "${_GRPC_GRPCPP}"
   "${_PROTOBUF_LIBPROTOBUF}")
+set_target_properties(grpc_proto
+  PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-
-add_library(util
+add_library(util STATIC
   eris/util/networking.cc
   eris/include/util/networking.h)
-set_target_properties(util PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(util PRIVATE eris/include)
+target_link_libraries(util PUBLIC
+  compiler_flags)
+set_target_properties(util
+  PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 
 find_package(Python COMPONENTS Development)
-add_library(algorithms
-  eris/include/erisfl/coordinator.h
-  eris/include/erisfl/client.h
-  eris/include/algorithms/eris/builder.h
-  eris/include/algorithms/eris/coordinator.h
-  eris/include/algorithms/eris/client.h
-  eris/algorithms/eris/coordinator.cc
+add_library(algorithms STATIC
+  eris/algorithms/eris/builder.cc
   eris/algorithms/eris/client.cc
-  eris/algorithms/eris/builder.cc)
-set_target_properties(algorithms PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  eris/algorithms/eris/coordinator.cc
+  eris/algorithms/eris/split.cc
+  eris/include/algorithms/eris/builder.h
+  eris/include/algorithms/eris/client.h
+  eris/include/algorithms/eris/coordinator.h
+  eris/include/algorithms/eris/split.h
+  eris/include/erisfl/client.h
+  eris/include/erisfl/coordinator.h)
 target_include_directories(algorithms
-  PRIVATE eris/include
-  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
   PRIVATE "${pybind11_INCLUDE_DIR}"
   PRIVATE "${Python_INCLUDE_DIRS}"
-  PRIVATE "${spdlog_SOURCE_DIR}/include"
   PRIVATE "${libzmq_SOURCE_DIR}"
+  PRIVATE "${spdlog_SOURCE_DIR}/include"
   PRIVATE "${cppzmq_SOURCE_DIR}")
-target_link_libraries(algorithms
-  grpc_proto
+target_link_libraries(algorithms PUBLIC
   "${_REFLECTION}"
   "${_GRPC_GRPCPP}"
   "${_PROTOBUF_LIBPROTOBUF}"
-  util
-  libzmq)
-
+  libzmq
+  compiler_flags
+  grpc_proto
+  util)
+set_target_properties(algorithms
+  PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 pybind11_add_module(eris eris/pybindings.cc)
 target_include_directories(eris
-  PRIVATE eris/include
-  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
   PRIVATE "${spdlog_SOURCE_DIR}/include"
   PRIVATE "${libzmq_SOURCE_DIR}"
   PRIVATE "${cppzmq_SOURCE_DIR}")
-target_link_libraries(eris PRIVATE algorithms)
+target_link_libraries(eris PUBLIC
+  compiler_flags
+  algorithms)

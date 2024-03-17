@@ -8,21 +8,21 @@ import numpy as np
 
 
 ## Functions to split and reconstruct the weights of the model (eris package)
-def concatenate_weights(weights_list):
-    flattened_weights = []
-    shapes = []
-    for layer in weights_list:
-        for weight_matrix in layer:
-            # Flatten and store the weight matrix
-            flattened_weights.append(weight_matrix.flatten())
-            # Store the shape for reconstruction
-            if len(weight_matrix.shape) > 0:
-                shapes.append(weight_matrix.shape)
-            else:
-                shapes.append((1,))
-    # Concatenate all flattened weights into a single vector
-    concatenated_weights = np.concatenate(flattened_weights)
-    return concatenated_weights, shapes
+# def concatenate_weights(weights_list):
+#     flattened_weights = []
+#     shapes = []
+#     for layer in weights_list:
+#         for weight_matrix in layer:
+#             # Flatten and store the weight matrix
+#             flattened_weights.append(weight_matrix.flatten())
+#             # Store the shape for reconstruction
+#             if len(weight_matrix.shape) > 0:
+#                 shapes.append(weight_matrix.shape)
+#             else:
+#                 shapes.append((1,))
+#     # Concatenate all flattened weights into a single vector
+#     concatenated_weights = np.concatenate(flattened_weights)
+#     return concatenated_weights, shapes
 
 
 # def deconcatenate_weights(flat_vector, shapes):
@@ -36,24 +36,24 @@ def concatenate_weights(weights_list):
 #     return reconstructed_weights
 
 
-class NamedArray:
-    def __init__(self, array, name=None):
-        self.array = np.array(array)
-        self.name = name
+# class NamedArray:
+#     def __init__(self, array, name=None):
+#         self.array = np.array(array)
+#         self.name = name
 
 
-def split_weights(weights_list, n_splits, seed=42):
-    # Flatten the matrix
-    flat_matrix, shapes = concatenate_weights(weights_list)
-    # Shuffle both using the same seed
-    np.random.seed(seed)
-    np.random.shuffle(flat_matrix)
-    # Split the matrix into N parts and assign names
-    splitted_parts = np.array_split(flat_matrix, n_splits)
-    named_parts = [
-        NamedArray(part, name=str(i)) for i, part in enumerate(splitted_parts)
-    ]
-    return named_parts, shapes
+# def split_weights(weights_list, n_splits, seed=42):
+#     # Flatten the matrix
+#     flat_matrix, shapes = concatenate_weights(weights_list)
+#     # Shuffle both using the same seed
+#     np.random.seed(seed)
+#     np.random.shuffle(flat_matrix)
+#     # Split the matrix into N parts and assign names
+#     splitted_parts = np.array_split(flat_matrix, n_splits)
+#     named_parts = [
+#         NamedArray(part, name=str(i)) for i, part in enumerate(splitted_parts)
+#     ]
+#     return named_parts, shapes
 
 
 # def reconstruct_weights(splitted_named_matrices, shapes, seed=42):
@@ -174,6 +174,8 @@ def main():
     model = SimplestModel()
     # create client and run it
     client = Client(model, train_loader, val_loader)
+    print(client.get_parameters())
+    #print([p.shape for p in client.get_parameters()])
     client.start("127.0.0.1:5051")
 
 

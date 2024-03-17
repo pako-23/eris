@@ -12,6 +12,7 @@ public:
   virtual ~Client(){};
   virtual void start(const std::string &) = 0;
   virtual py::list get_parameters(void) = 0;
+  virtual void set_parameters(py::list) = 0;
   virtual void fit(void) = 0;
   virtual void evaluate(void) = 0;
 };

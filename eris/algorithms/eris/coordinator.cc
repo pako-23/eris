@@ -59,7 +59,8 @@ ErisCoordinator::CoordinatorImpl::Join(CallbackServerContext *context,
       }
   }
 
-  for (auto i = 0; i < coordinator_->aggregators_.size(); ++i) {
+  for (std::vector<ErisCoordinator::Aggregator *>::size_type i{0};
+       i < coordinator_->aggregators_.size(); ++i) {
     if (request->has_aggregator() && !coordinator_->aggregators_[i]) {
       response->set_assigned_fragment(i);
       coordinator_->aggregators_[i] = new Aggregator{request->aggregator()};

@@ -6,13 +6,16 @@
 #include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
+#include "algorithms/eris/split.h"
 #include "erisfl/client.h"
 #include "grpcpp/channel.h"
 #include "grpcpp/server.h"
 #include "grpcpp/support/server_callback.h"
 #include "zmq.hpp"
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -29,6 +32,10 @@ public:
 
 private:
   void start_aggregator(const ErisAggregatorBuilder &);
+  void listen_coordinator_events(const std::string &);
+  bool aggregator_connect(const coordinator::FragmentInfo &);
+  void submit_parameters(uint32_t);
+  void receive_parameters(uint32_t);
 
   class ClientImpl {
   public:
@@ -57,14 +64,21 @@ private:
   };
 
   zmq::context_t zmq_context_;
-  zmq::socket_t publisher_sock_;
+
+  //  zmq::socket_t publisher_sock_;
+  std::unique_ptr<std::thread> coordinator_thread_;
   coordinator::TrainingOptions options_;
 
-  // Model publishing fields
-  std::vector<std::string> aggregators_;
+  // Parameter contribution fields
+  std::vector<std::unique_ptr<aggregator::Aggregator::Stub>> aggregators_;
   std::vector<zmq::socket_t> subscriptions_;
+  std::mutex aggregation_mutex_;
+  uint32_t known_aggregators_;
+  std::condition_variable all_aggregators_connected_;
 
   // Aggregation related fields
-  std::unique_ptr<std::thread> aggregator_;
+  std::unique_ptr<std::thread> aggregator_thread_;
   std::optional<ErisAggregatorBuilder> aggregator_builder_;
+
+  RandomSplit splitter_;
 };

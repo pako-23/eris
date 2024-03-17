@@ -14,6 +14,7 @@ message Weight {
 }
 
 message WeightUpdate {
-    uint32 contributors = 1;
-    repeated double weight = 2;
+    uint32 round = 1;
+    uint32 contributors = 2;
+    repeated double weight = 3;
 }

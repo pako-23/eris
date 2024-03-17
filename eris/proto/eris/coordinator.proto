@@ -25,7 +25,8 @@ message FragmentInfo {
 message TrainingOptions {
     uint32 min_clients = 1;
     uint32 splits = 2;
-    uint32 rounds = 3;
+    uint32 split_seed = 3;
+    uint32 rounds = 4;
 }
 
 message JoinResponse {

@@ -34,6 +34,10 @@ public:
     PYBIND11_OVERRIDE_PURE(py::list, Client, get_parameters, );
   }
 
+  void set_parameters(py::list parameters) override {
+    PYBIND11_OVERRIDE_PURE(void, Client, set_parameters, parameters);
+  }
+
   void fit(void) override { PYBIND11_OVERRIDE_PURE(void, Client, fit, ); }
 
   void evaluate(void) override {
@@ -47,6 +51,10 @@ public:
 
   py::list get_parameters(void) override {
     PYBIND11_OVERRIDE_PURE(py::list, ErisClient, get_parameters, );
+  }
+
+  void set_parameters(py::list parameters) override {
+    PYBIND11_OVERRIDE_PURE(void, Client, set_parameters, parameters);
   }
 
   void fit(void) override { PYBIND11_OVERRIDE_PURE(void, ErisClient, fit, ); }
@@ -64,7 +72,11 @@ PYBIND11_MODULE(eris, m) {
       .def("add_rpc_port", &ErisCoordinatorBuilder::add_rpc_port,
            py::arg("port"))
       .def("add_listen_address", &ErisCoordinatorBuilder::add_listen_address,
-           py::arg("address"));
+           py::arg("address"))
+      .def("add_rounds", &ErisCoordinatorBuilder::add_rounds, py::arg("rounds"))
+      .def("add_splits", &ErisCoordinatorBuilder::add_splits, py::arg("splits"))
+      .def("add_min_clients", &ErisCoordinatorBuilder::add_min_clients,
+           py::arg("min_clients"));
 
   py::class_<Coordinator, PyCoordinator, std::shared_ptr<Coordinator>>(
       m, "Coordinator")
@@ -91,6 +103,7 @@ PYBIND11_MODULE(eris, m) {
       .def(py::init<>())
       .def("start", &Client::start)
       .def("get_parameters", &Client::get_parameters)
+      .def("set_parameters", &Client::set_parameters)
       .def("fit", &Client::fit)
       .def("evaluate", &Client::evaluate);
 
@@ -100,6 +113,7 @@ PYBIND11_MODULE(eris, m) {
            py::arg("aggregator_builder") = std::nullopt)
       .def("start", &ErisClient::start)
       .def("get_parameters", &ErisClient::get_parameters)
+      .def("set_parameters", &ErisClient::set_parameters)
       .def("fit", &ErisClient::fit)
       .def("evaluate", &ErisClient::evaluate);
 }
