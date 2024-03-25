@@ -28,4 +28,3 @@ services:
       dockerfile: Dockerfile
       stage: client
     hostname: client-2
-   
