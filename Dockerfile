@@ -1,4 +1,4 @@
-FROM python:3.9-slim-bookworm AS builder
+FROM pytorch/pytorch:latest AS builder
 
 WORKDIR /app
 
@@ -11,3 +11,4 @@ RUN apt update && \
 COPY . .
 RUN pip install -r requirements.txt
 RUN ./setup.py bdist_wheel
+RUN pip install ./dist/*.whl
