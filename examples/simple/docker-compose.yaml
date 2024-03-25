@@ -3,6 +3,7 @@ version: '3.9'
 
 services:
   coordinator:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
@@ -16,6 +17,7 @@ services:
       start_period: 10s
 
   client-1:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
@@ -23,6 +25,7 @@ services:
     hostname: client-1
 
   client-2:
+    platform: linux/amd64
     build:
       context: .
       dockerfile: Dockerfile
