@@ -9,12 +9,6 @@ services:
       dockerfile: Dockerfile
       target: coordinator
     hostname: coordinator
-    healthcheck:
-      test: ["CMD", "nc -z 127.0.0.1 5051"]
-      interval: 30s
-      timeout: 30s
-      retries: 5
-      start_period: 10s
 
   client-1:
     platform: linux/amd64
@@ -23,6 +17,8 @@ services:
       dockerfile: Dockerfile
       target: client
     hostname: client-1
+    depends_on:
+      - coordinator
 
   client-2:
     platform: linux/amd64
@@ -31,3 +27,5 @@ services:
       dockerfile: Dockerfile
       target: client
     hostname: client-2
+    depends_on:
+      - coordinator

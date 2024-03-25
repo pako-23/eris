@@ -49,15 +49,15 @@ ErisCoordinator::CoordinatorImpl::Join(CallbackServerContext *context,
                                        coordinator::JoinResponse *response) {
   grpc::ServerUnaryReactor *reactor{context->DefaultReactor()};
 
-  if (request->has_aggregator()) {
-    for (const auto &aggregator : coordinator_->aggregators_)
-      if (aggregator && aggregator->id == request->aggregator().address()) {
-        reactor->Finish(
-            Status(StatusCode::ALREADY_EXISTS,
-                   "An aggregator on the provided address already exists"));
-        return reactor;
-      }
-  }
+  // if (request->has_aggregator()) {
+  //   for (const auto &aggregator : coordinator_->aggregators_)
+  //     if (aggregator && aggregator->id == request->aggregator().address()) {
+  //       reactor->Finish(
+  //           Status(StatusCode::ALREADY_EXISTS,
+  //                  "An aggregator on the provided address already exists"));
+  //       return reactor;
+  //     }
+  // }
 
   for (std::vector<ErisCoordinator::Aggregator *>::size_type i{0};
        i < coordinator_->aggregators_.size(); ++i) {
