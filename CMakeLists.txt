@@ -159,3 +159,7 @@ target_include_directories(eris
 target_link_libraries(eris PUBLIC
   compiler_flags
   algorithms)
+if(APPLE)
+  set_target_properties(eris PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+endif()
+
