@@ -175,8 +175,8 @@ def main():
     # create client and run it
     client = Client(model, train_loader, val_loader)
     print(client.get_parameters())
-    #print([p.shape for p in client.get_parameters()])
-    client.start("127.0.0.1:5051")
+    # print([p.shape for p in client.get_parameters()])
+    client.start("coordinator:5051")
 
 
 if __name__ == "__main__":

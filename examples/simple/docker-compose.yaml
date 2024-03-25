@@ -6,10 +6,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      stage: coordinator
+      target: coordinator
     hostname: coordinator
     healthcheck:
-      test: ["CMD", "nc -z 127.0.0.1 50051"]
+      test: ["CMD", "nc -z 127.0.0.1 5051"]
       interval: 30s
       timeout: 30s
       retries: 5
@@ -19,12 +19,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      stage: client
+      target: client
     hostname: client-1
 
   client-2:
     build:
       context: .
       dockerfile: Dockerfile
-      stage: client
+      target: client
     hostname: client-2
