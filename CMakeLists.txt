@@ -160,5 +160,6 @@ target_link_libraries(eris PUBLIC
 if(APPLE)
   set_target_properties(algorithms PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
   set_target_properties(eris PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+  set(MACOSX_DEPLOYMENT_TARGET 14_0)
 endif()
 
