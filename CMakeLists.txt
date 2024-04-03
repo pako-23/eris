@@ -16,7 +16,7 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 
 add_library(compiler_flags INTERFACE)
 target_compile_features(compiler_flags INTERFACE cxx_std_17)
-target_compile_options(compiler_flags INTERFACE -Wall -Wextra)
+target_compile_options(compiler_flags INTERFACE -Wall -Wextra -g)
 target_include_directories(compiler_flags INTERFACE
   "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
   eris/include)

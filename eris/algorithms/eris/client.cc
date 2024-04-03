@@ -13,7 +13,6 @@
 #include "spdlog/spdlog.h"
 #include "zmq.hpp"
 #include <chrono>
-#include <cmath>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -47,12 +46,9 @@ void ErisClient::start(const std::string &coordinator_address) {
   }
 
   ClientImpl client{channel, shared_from_this()};
-
   if (!client.Join())
     return;
-
   spdlog::info("Successfully joined the training");
-
   std::unique_lock<std::mutex> lk{aggregation_mutex_};
   all_aggregators_connected_.wait(
       lk, [this] { return known_aggregators_ >= options_.splits(); });
@@ -168,6 +164,8 @@ void ErisClient::listen_coordinator_events(const std::string &publish_address) {
   poller.add(sock, zmq::event_flags::pollin, &info);
 
   std::vector<zmq::poller_event<coordinator::FragmentInfo>> events(1);
+  spdlog::info("Listening on coordinator events on ZeroMQ address {0}",
+               publish_address);
 
   while (true) {
     const auto n = poller.wait_all(events, std::chrono::milliseconds{1000});
@@ -222,16 +220,12 @@ bool ErisClient::ClientImpl::Join(void) {
           spdlog::error("Failed to join the training: {0}",
                         status.error_message());
           result = false;
-          std::lock_guard<std::mutex> lock{mu};
           done = true;
           cv.notify_one();
           return;
         }
 
         this->client_->options_ = response.options();
-        this->client_->splitter_.setup(this->client_->get_parameters(),
-                                       this->client_->options_.splits(),
-                                       this->client_->options_.split_seed());
         this->client_->aggregators_.resize(response.options().splits());
         this->client_->subscriptions_.resize(0);
         for (uint32_t i{0}; i < response.options().splits(); ++i)
@@ -241,28 +235,11 @@ bool ErisClient::ClientImpl::Join(void) {
         for (const coordinator::FragmentInfo &aggregator :
              response.aggregators())
           if (!this->client_->aggregator_connect(aggregator)) {
-
             result = false;
-            std::lock_guard<std::mutex> lock{mu};
             done = true;
             cv.notify_one();
             return;
           }
-
-        this->client_->coordinator_thread_.reset(
-            new std::thread{&ErisClient::listen_coordinator_events,
-                            this->client_, response.events_address()});
-
-        if (response.has_assigned_fragment()) {
-          this->client_->aggregator_builder_.value().add_min_clients(
-              response.options().min_clients());
-          this->client_->aggregator_builder_.value().add_block_size(
-              this->client_->splitter_.get_block_size(
-                  response.assigned_fragment()));
-          this->client_->aggregator_thread_.reset(
-              new std::thread{&ErisClient::start_aggregator, this->client_,
-                              this->client_->aggregator_builder_.value()});
-        }
 
         std::lock_guard<std::mutex> lock{mu};
         done = true;
@@ -271,6 +248,26 @@ bool ErisClient::ClientImpl::Join(void) {
 
   std::unique_lock<std::mutex> lock{mu};
   cv.wait(lock, [&done] { return done; });
+
+  if (!result)
+    return false;
+
+  this->client_->splitter_.setup(this->client_->get_parameters(),
+                                 this->client_->options_.splits(),
+                                 this->client_->options_.split_seed());
+  this->client_->coordinator_thread_.reset(
+      new std::thread{&ErisClient::listen_coordinator_events, this->client_,
+                      response.events_address()});
+
+  if (response.has_assigned_fragment()) {
+    this->client_->aggregator_builder_.value().add_min_clients(
+        response.options().min_clients());
+    this->client_->aggregator_builder_.value().add_block_size(
+        this->client_->splitter_.get_block_size(response.assigned_fragment()));
+    this->client_->aggregator_thread_.reset(
+        new std::thread{&ErisClient::start_aggregator, this->client_,
+                        this->client_->aggregator_builder_.value()});
+  }
 
   return result;
 }
