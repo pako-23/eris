@@ -16,7 +16,7 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs")
 
 add_library(compiler_flags INTERFACE)
 target_compile_features(compiler_flags INTERFACE cxx_std_17)
-target_compile_options(compiler_flags INTERFACE -Wall -Wextra -g)
+target_compile_options(compiler_flags INTERFACE -Wall -Wextra)
 target_include_directories(compiler_flags INTERFACE
   "${CMAKE_CURRENT_BINARY_DIR}/grpc_stubs"
   eris/include)
@@ -34,22 +34,22 @@ FetchContent_Declare(
   GIT_TAG        v2.11.1)
 FetchContent_MakeAvailable(pybind11)
 
-
 # gRPC configurations
 set(ABSL_ENABLE_INSTALL ON)
-find_package(Threads REQUIRED)
 FetchContent_Declare(
   grpc
   GIT_REPOSITORY https://github.com/grpc/grpc.git
   GIT_TAG        v1.62.0)
+set(grpc_BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+set(grpc_gRPC_BUILD_TESTS OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(grpc)
-
 
 set(_PROTOBUF_LIBPROTOBUF libprotobuf)
 set(_REFLECTION grpc++_reflection)
 set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
 set(_GRPC_GRPCPP grpc++)
 set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:grpc_cpp_plugin>)
+
 
 # Add zmq libraries
 FetchContent_Declare(
@@ -141,9 +141,6 @@ target_include_directories(algorithms
   PRIVATE "${spdlog_SOURCE_DIR}/include"
   PRIVATE "${cppzmq_SOURCE_DIR}")
 target_link_libraries(algorithms PUBLIC
-  "${_REFLECTION}"
-  "${_GRPC_GRPCPP}"
-  "${_PROTOBUF_LIBPROTOBUF}"
   libzmq
   compiler_flags
   grpc_proto
