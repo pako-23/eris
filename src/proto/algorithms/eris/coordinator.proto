@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package coordinator;
+
+import "algorithms/eris/common.proto";
+
+service Coordinator {
+    rpc Join (JoinRequest) returns (JoinResponse) {}
+}
+
+
+message JoinRequest {
+    string register_address = 1;
+    bool can_aggregate = 2;
+}
+
+message TrainingOptions {
+    uint32 min_clients = 1;
+    uint32 splits = 2;
+    uint32 split_seed = 3;
+    uint32 rounds = 4;
+}
+
+message JoinResponse {
+    TrainingOptions options = 1;
+    optional uint32 assigned_fragment = 2;
+    repeated FragmentInfo aggregators = 3;
+}

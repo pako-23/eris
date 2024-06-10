@@ -1,0 +1,4 @@
+add_executable(networking_test networking_test.cc)
+target_link_libraries(networking_test PRIVATE util_static)
+AddTests(networking_test)
+EnableCoverage(util_obj)

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package aggregator;
+
+import "algorithms/eris/common.proto";
+
+service Aggregator {
+    rpc SubmitWeights (Weight) returns (Empty) {}
+}
+
+
+message Weight {
+    uint32 round = 1;
+    repeated double weight = 2;
+}
+
+message WeightUpdate {
+    uint32 round = 1;
+    uint32 contributors = 2;
+    repeated double weight = 3;
+}

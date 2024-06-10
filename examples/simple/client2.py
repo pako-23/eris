@@ -39,8 +39,8 @@ def generate_data(num_samples, num_features, batch_size=64):
 class Client(eris.ErisClient):
     def __init__(self, model, train_loader, val_loader, *args, **kwargs):
         builder = eris.ErisAggregatorBuilder()
-        builder.add_publish_port(5556)
-        builder.add_rpc_port(5052)
+        builder.add_publish_port(5557)
+        builder.add_rpc_port(5053)
         super().__init__(builder)
         self.local_epochs = 200
         self.model = model
