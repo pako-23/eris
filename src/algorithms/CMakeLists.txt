@@ -3,8 +3,10 @@ include(pybind11)
 include(coverage)
 
 add_library(algorithms_obj OBJECT
-  eris/builder.cc)
+  eris/builder.cc
+  eris/coordinator.cc)
 target_include_directories(algorithms_obj PUBLIC
+  ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${pybind11_INCLUDE_DIR}
   ${Python_INCLUDE_DIRS}

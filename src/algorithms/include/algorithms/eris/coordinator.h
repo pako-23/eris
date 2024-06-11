@@ -7,7 +7,10 @@
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/server_callback.h"
 #include <grpcpp/grpcpp.h>
+#include <grpcpp/server_context.h>
+#include <grpcpp/support/server_callback.h>
 #include <grpcpp/support/status.h>
+#include <grpcpp/support/sync_stream.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -24,29 +27,29 @@ using grpc::StatusCode;
 class ErisCoordinator final : public Coordinator {
 
 public:
-  explicit ErisCoordinator(const ErisCoordinatorBuilder &);
+  explicit ErisCoordinator(const ErisCoordinatorBuilder &builder);
 
-  void start(void) override;
   ~ErisCoordinator(void);
 
-private:
-  class ClientConnection final {
-    explicit ClientConnection(std::shared_ptr<Channel>);
-  };
+  void start(void) override;
+  void stop(void) override;
 
+private:
   class CoordinatorImpl final
       : public coordinator::Coordinator::CallbackService {
   public:
-    explicit CoordinatorImpl(const coordinator::TrainingOptions &);
-    grpc::ServerUnaryReactor *Join(CallbackServerContext *,
-                                   const coordinator::JoinRequest *,
-                                   coordinator::JoinResponse *) override;
+    explicit CoordinatorImpl(const coordinator::TrainingOptions &opt);
+
+    grpc::ServerWriteReactor<coordinator::CoordinatorUpdate> *
+    Join(CallbackServerContext *ctx,
+         const coordinator::JoinRequest *req) override;
 
   private:
     const coordinator::TrainingOptions &options_;
-    std::unordered_multimap<std::string, ClientConnection> clients_;
+
     std::vector<std::string> aggregators_;
   };
 
   const ErisCoordinatorBuilder &builder_;
+  std::unique_ptr<Server> server_;
 };

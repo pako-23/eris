@@ -5,13 +5,11 @@ package coordinator;
 import "algorithms/eris/common.proto";
 
 service Coordinator {
-    rpc Join (JoinRequest) returns (JoinResponse) {}
+    rpc Join (JoinRequest) returns (stream CoordinatorUpdate) {}
 }
 
-
 message JoinRequest {
-    string register_address = 1;
-    bool can_aggregate = 2;
+    optional bool aggr_address = 1;
 }
 
 message TrainingOptions {
@@ -21,8 +19,15 @@ message TrainingOptions {
     uint32 rounds = 4;
 }
 
-message JoinResponse {
+message InitialUpdate {
     TrainingOptions options = 1;
     optional uint32 assigned_fragment = 2;
     repeated FragmentInfo aggregators = 3;
+}
+
+message CoordinatorUpdate {
+    oneof update {
+	InitialUpdate init_config = 1;
+	FragmentInfo new_aggr = 2;
+    }
 }
