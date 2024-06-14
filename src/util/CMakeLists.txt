@@ -10,6 +10,4 @@ target_link_libraries(util_shared util_obj)
 add_library(util_static STATIC)
 target_link_libraries(util_static util_obj)
 
-
-include(coverage)
 CleanCoverage(util_static)

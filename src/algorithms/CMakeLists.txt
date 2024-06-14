@@ -1,6 +1,5 @@
 include(logging)
 include(pybind11)
-include(coverage)
 
 add_library(algorithms_obj OBJECT
   eris/builder.cc
