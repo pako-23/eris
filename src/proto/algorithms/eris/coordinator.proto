@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package coordinator;
+package eris;
 
 import "algorithms/eris/common.proto";
 
@@ -8,8 +8,9 @@ service Coordinator {
     rpc Join (JoinRequest) returns (stream CoordinatorUpdate) {}
 }
 
+
 message JoinRequest {
-    optional bool aggr_address = 1;
+    optional string aggr_address = 1;
 }
 
 message TrainingOptions {
@@ -28,6 +29,6 @@ message InitialUpdate {
 message CoordinatorUpdate {
     oneof update {
 	InitialUpdate init_config = 1;
-	FragmentInfo new_aggr = 2;
+	FragmentInfo aggregator = 2;
     }
 }

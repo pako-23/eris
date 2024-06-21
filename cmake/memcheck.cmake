@@ -22,6 +22,7 @@ function(AddMemcheck target)
     add_custom_target(memcheck-${target}
       COMMAND ${MEMCHECK_PATH}/memcheck_runner.sh -o
               "${REPORT_PATH}/${target}"
+	      -i "${CMAKE_SOURCE_DIR}/valgrind.supp"
               -- $<TARGET_FILE:${target}>
       WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
     add_dependencies(memcheck memcheck-${target})

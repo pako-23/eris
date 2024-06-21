@@ -1,6 +1,8 @@
 include(logging)
 include(pybind11)
 
+find_package(gRPC REQUIRED)
+
 add_library(algorithms_obj OBJECT
   eris/builder.cc
   eris/coordinator.cc)
@@ -13,8 +15,8 @@ target_include_directories(algorithms_obj PUBLIC
   ${LOGGING_INCLUDE_DIR})
 set_target_properties(algorithms_obj PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
-target_link_libraries(algorithms_obj
-  PUBLIC util_static proto_obj)
+target_link_libraries(algorithms_obj PUBLIC
+  util_static proto_obj erisfl)
 
 add_library(algorithms_static STATIC)
 target_link_libraries(algorithms_static algorithms_obj)

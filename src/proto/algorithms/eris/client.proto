@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package client;
+package eris;
 
 import "algorithms/eris/common.proto";
 

@@ -1,14 +1,14 @@
 #include "algorithms/eris/builder.h"
 #include "util/networking.h"
 #include <cstdint>
+#include <limits>
+#include <random>
 #include <string>
 
 ErisServiceBuilder::ErisServiceBuilder(void)
-    : listen_address_{"0.0.0.0"}, rpc_port_{5051} {}
+    : listen_address_{"0.0.0.0"}, rpc_port_{DEFAULT_ERIS_PORT} {}
 
 bool ErisServiceBuilder::add_rpc_port(uint16_t port) {
-  if (port == 0)
-    return false;
   rpc_port_ = port;
   return true;
 }
@@ -25,6 +25,13 @@ ErisCoordinatorBuilder::ErisCoordinatorBuilder(void)
   options_.set_splits(1);
   options_.set_rounds(1);
   options_.set_min_clients(3);
+
+  std::random_device dev;
+  std::mt19937 rng{dev()};
+  std::uniform_int_distribution<std::mt19937::result_type> dist{
+      0, std::numeric_limits<uint32_t>::max()};
+
+  options_.set_split_seed(dist(rng));
 }
 
 bool ErisCoordinatorBuilder::add_rounds(uint32_t rounds) {
@@ -49,13 +56,7 @@ bool ErisCoordinatorBuilder::add_min_clients(uint32_t min_clients) {
   return true;
 }
 
-// ErisAggregatorBuilder::ErisAggregatorBuilder(void)
-//     : ErisServiceBuilder{}, min_clients_{4} {}
-
-// void ErisAggregatorBuilder::add_min_clients(uint32_t min_clients) {
-//   min_clients_ = min_clients;
-// }
-
-// void ErisAggregatorBuilder::add_block_size(size_t block_size) {
-//   block_size_ = block_size;
-// }
+bool ErisCoordinatorBuilder::add_split_seed(uint32_t split_seed) {
+  options_.set_split_seed(split_seed);
+  return true;
+}
