@@ -5,7 +5,7 @@ package eris;
 import "algorithms/eris/common.proto";
 
 service Coordinator {
-    rpc Join (JoinRequest) returns (stream CoordinatorUpdate) {}
+    rpc Join (JoinRequest) returns (InitialState) {}
 }
 
 
@@ -20,15 +20,8 @@ message TrainingOptions {
     uint32 rounds = 4;
 }
 
-message InitialUpdate {
+message InitialState {
     TrainingOptions options = 1;
     optional uint32 assigned_fragment = 2;
     repeated FragmentInfo aggregators = 3;
-}
-
-message CoordinatorUpdate {
-    oneof update {
-	InitialUpdate init_config = 1;
-	FragmentInfo aggregator = 2;
-    }
 }

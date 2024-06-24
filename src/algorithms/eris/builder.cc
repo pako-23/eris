@@ -6,17 +6,31 @@
 #include <string>
 
 ErisServiceBuilder::ErisServiceBuilder(void)
-    : listen_address_{"0.0.0.0"}, rpc_port_{DEFAULT_ERIS_PORT} {}
+    : rpc_listen_address_{"0.0.0.0"}, rpc_port_{DEFAULT_ERIS_RPC_PORT},
+      pubsub_listen_address_{"0.0.0.0"},
+      pubsub_port_{DEFAULT_ERIS_PUBSUB_PORT} {}
 
 bool ErisServiceBuilder::add_rpc_port(uint16_t port) {
   rpc_port_ = port;
   return true;
 }
 
-bool ErisServiceBuilder::add_listen_address(const std::string &address) {
+bool ErisServiceBuilder::add_rpc_listen_address(const std::string &address) {
   if (!valid_ipv4(address))
     return false;
-  listen_address_ = address;
+  rpc_listen_address_ = address;
+  return true;
+}
+
+bool ErisServiceBuilder::add_pubsub_listen_address(const std::string &address) {
+  if (!valid_ipv4(address))
+    return false;
+  pubsub_listen_address_ = address;
+  return true;
+}
+
+bool ErisServiceBuilder::add_pubsub_port(uint16_t port) {
+  pubsub_port_ = port;
   return true;
 }
 

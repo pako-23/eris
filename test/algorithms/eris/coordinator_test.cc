@@ -2,8 +2,10 @@
 #include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
+#include "zmq.h"
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <grpc/grpc.h>
@@ -25,22 +27,49 @@
 #include <thread>
 #include <unistd.h>
 #include <unordered_set>
+#include <vector>
 
-using eris::CoordinatorUpdate;
+using eris::InitialState;
+using eris::JoinRequest;
 
 static constexpr std::chrono::minutes timeout = std::chrono::minutes(1);
+static const int zmq_timeout = 500;
 static const uint32_t min_clients = 2;
 static const uint32_t rounds = 10;
 static const uint32_t split_seed = 42;
-static const uint32_t splits = 5;
+static const uint32_t splits = 10;
 
-static void validate_training_options(const CoordinatorUpdate &res) {
-  ASSERT_TRUE(res.has_init_config());
+static void validate_training_options(const InitialState &state) {
+  ASSERT_EQ(state.options().min_clients(), min_clients);
+  ASSERT_EQ(state.options().rounds(), rounds);
+  ASSERT_EQ(state.options().split_seed(), split_seed);
+  ASSERT_EQ(state.options().splits(), splits);
+}
 
-  ASSERT_EQ(res.init_config().options().min_clients(), min_clients);
-  ASSERT_EQ(res.init_config().options().rounds(), rounds);
-  ASSERT_EQ(res.init_config().options().split_seed(), split_seed);
-  ASSERT_EQ(res.init_config().options().splits(), splits);
+static void test_join(const std::string &coordinator, const JoinRequest &req,
+                      InitialState *res,
+                      std::function<void(Status, InitialState *)> check) {
+  std::shared_ptr<grpc::Channel> channel =
+      grpc::CreateChannel(coordinator, grpc::InsecureChannelCredentials());
+  std::unique_ptr<eris::Coordinator::Stub> stub =
+      eris::Coordinator::NewStub(channel);
+
+  grpc::ClientContext ctx;
+  std::mutex mu;
+  std::condition_variable cv;
+  bool done = false;
+
+  stub->async()->Join(&ctx, &req, res,
+                      [&check, &mu, &done, &cv, res](Status s) {
+                        check(s, res);
+                        std::lock_guard<std::mutex> lk(mu);
+
+                        done = true;
+                        cv.notify_one();
+                      });
+
+  std::unique_lock<std::mutex> lk(mu);
+  cv.wait(lk, [&done] { return done; });
 }
 
 class ErisCoordinatorTest : public testing::Test {
@@ -50,11 +79,11 @@ protected:
     builder.add_min_clients(min_clients);
     builder.add_rounds(rounds);
     builder.add_rpc_port(0);
+    builder.add_pubsub_port(0);
     builder.add_split_seed(split_seed);
     builder.add_splits(splits);
 
     server_ = std::make_shared<ErisCoordinator>(builder);
-    server_port_ = server_->get_listening_port();
     server_thread_ = std::make_unique<std::thread>(
         [](std::shared_ptr<ErisCoordinator> coordinator) {
           coordinator->start();
@@ -62,7 +91,7 @@ protected:
         server_);
 
     std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
-        get_server_address(), grpc::InsecureChannelCredentials());
+        get_rpc_address(), grpc::InsecureChannelCredentials());
 
     bool connected =
         channel->WaitForConnected(std::chrono::system_clock::now() + timeout);
@@ -82,55 +111,40 @@ protected:
       server_thread_->join();
   }
 
-  std::string get_server_address(void) const {
-    return "127.0.0.1:" + std::to_string(server_port_);
+  void SetUp(void) override {
+    for (size_t i = 0; i < subscribers; ++i) {
+      ctx[i] = zmq_ctx_new();
+      ASSERT_NE(ctx[i], nullptr);
+      subscriber[i] = zmq_socket(ctx[i], ZMQ_SUB);
+      ASSERT_NE(subscriber[i], nullptr);
+      ASSERT_EQ(zmq_connect(subscriber[i], get_pubsub_address().c_str()), 0);
+      ASSERT_EQ(zmq_setsockopt(subscriber[i], ZMQ_SUBSCRIBE, "", 0), 0);
+      ASSERT_EQ(zmq_setsockopt(subscriber[i], ZMQ_RCVTIMEO, &zmq_timeout,
+                               sizeof(zmq_timeout)),
+                0);
+    }
   }
 
-  std::unique_ptr<eris::Coordinator::Stub> connect(void) {
-    std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
-        get_server_address(), grpc::InsecureChannelCredentials());
-    return eris::Coordinator::NewStub(channel);
+  void TearDown(void) override {
+    for (size_t i = 0; i < subscribers; ++i) {
+      zmq_close(subscriber[i]);
+      zmq_ctx_destroy(ctx[i]);
+    }
   }
 
+  inline std::string get_rpc_address(void) const {
+    return "127.0.0.1:" + std::to_string(server_->get_rpc_port());
+  }
+
+  inline std::string get_pubsub_address(void) const {
+    return "tcp://127.0.0.1:" + std::to_string(server_->get_pubssub_port());
+  }
+
+  static const size_t subscribers = 5;
   std::shared_ptr<ErisCoordinator> server_;
   std::unique_ptr<std::thread> server_thread_;
-  uint16_t server_port_;
-};
-
-class TestClient : public grpc::ClientReadReactor<CoordinatorUpdate> {
-public:
-  TestClient(eris::Coordinator::Stub *stub, const eris::JoinRequest &req,
-             std::function<void(bool, const CoordinatorUpdate &)> check)
-      : check_{check} {
-    stub->async()->Join(&ctx_, &req, this);
-    StartRead(&res_);
-    StartCall();
-  }
-
-  void OnReadDone(bool ok) override { check_(ok, res_); }
-
-  void OnDone(const Status &s) override {
-    std::lock_guard<std::mutex> lk(mu_);
-    status_ = s;
-    done_ = true;
-    cv_.notify_one();
-  }
-
-  Status Await() {
-    std::unique_lock<std::mutex> lk(mu_);
-    cv_.wait(lk, [this] { return done_; });
-    return std::move(status_);
-  }
-
-private:
-  CoordinatorUpdate res_;
-  grpc::ClientContext ctx_;
-
-  std::function<void(bool, const CoordinatorUpdate &)> check_;
-  std::mutex mu_;
-  std::condition_variable cv_;
-  Status status_;
-  bool done_ = false;
+  void *ctx[subscribers];
+  void *subscriber[subscribers];
 };
 
 TEST_F(ErisCoordinatorTest, Initialization) {
@@ -142,18 +156,32 @@ TEST_F(ErisCoordinatorTest, JoinClient) {
   ASSERT_NE(server_, nullptr);
   ASSERT_NE(server_thread_, nullptr);
 
-  eris::JoinRequest req;
+  JoinRequest req;
+  InitialState res;
 
-  std::unique_ptr<eris::Coordinator::Stub> stub = connect();
+  test_join(get_rpc_address(), req, &res,
+            [](Status status, InitialState *state) {
+              ASSERT_TRUE(status.ok());
+              validate_training_options(*state);
+              ASSERT_FALSE(state->has_assigned_fragment());
+              ASSERT_EQ(state->aggregators_size(), 0);
+            });
 
-  TestClient cli(stub.get(), req, [](bool ok, const CoordinatorUpdate &res) {
-    ASSERT_TRUE(ok);
-    ASSERT_FALSE(res.has_aggregator());
-    validate_training_options(res);
-    ASSERT_EQ(res.init_config().aggregators_size(), 0);
-  });
-  grpc::Status status = cli.Await();
-  ASSERT_TRUE(status.ok());
+  std::vector<std::thread> threads;
+  threads.reserve(subscribers);
+
+  for (size_t i = 0; i < subscribers; ++i)
+    threads.emplace_back(
+        [](void *sub) {
+          zmq_msg_t msg;
+          zmq_msg_init(&msg);
+          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          zmq_msg_close(&msg);
+        },
+        subscriber[i]);
+
+  for (auto &thread : threads)
+    thread.join();
 }
 
 TEST_F(ErisCoordinatorTest, JoinAggregator) {
@@ -162,33 +190,50 @@ TEST_F(ErisCoordinatorTest, JoinAggregator) {
 
   const std::string aggregation_address = "127.0.0.0:50052";
 
-  eris::JoinRequest req;
+  InitialState res;
+  JoinRequest req;
   *req.mutable_aggr_address() = aggregation_address;
 
-  std::unique_ptr<eris::Coordinator::Stub> stub = connect();
+  std::vector<std::thread> threads;
+  threads.reserve(subscribers);
 
-  TestClient cli(stub.get(), req,
-                 [&aggregation_address](bool ok, const CoordinatorUpdate &res) {
-                   ASSERT_TRUE(ok);
-                   ASSERT_FALSE(res.has_aggregator());
+  for (size_t i = 0; i < subscribers; ++i)
+    threads.emplace_back(
+        [&aggregation_address](void *sub) {
+          zmq_msg_t msg;
+          FragmentInfo info;
 
-                   validate_training_options(res);
+          zmq_msg_init(&msg);
+          int size = zmq_msg_recv(&msg, sub, 0);
+          ASSERT_NE(size, -1);
+          ASSERT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
+          ASSERT_EQ(info.aggregator(), aggregation_address);
+          ASSERT_LT(info.id(), splits);
 
-                   ASSERT_EQ(res.init_config().aggregators_size(), 1);
-                   ASSERT_TRUE(res.init_config().has_assigned_fragment());
-                   ASSERT_GE(res.init_config().assigned_fragment(), 0);
-                   ASSERT_LT(res.init_config().assigned_fragment(), splits);
+          zmq_msg_close(&msg);
+        },
+        subscriber[i]);
 
-                   bool found = false;
+  test_join(get_rpc_address(), req, &res,
+            [&aggregation_address](Status status, InitialState *state) {
+              ASSERT_TRUE(status.ok());
+              validate_training_options(*state);
+              ASSERT_TRUE(state->has_assigned_fragment());
+              ASSERT_EQ(state->aggregators_size(), 1);
+              ASSERT_GE(state->assigned_fragment(), 0);
+              ASSERT_LT(state->assigned_fragment(), splits);
 
-                   for (auto aggr : res.init_config().aggregators())
-                     if (aggr.aggregator() == aggregation_address)
-                       found = true;
+              bool found = false;
 
-                   ASSERT_TRUE(found);
-                 });
-  grpc::Status status = cli.Await();
-  ASSERT_TRUE(status.ok());
+              for (auto aggr : state->aggregators())
+                if (aggr.aggregator() == aggregation_address)
+                  found = true;
+
+              ASSERT_TRUE(found);
+            });
+
+  for (auto &thread : threads)
+    thread.join();
 }
 
 TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
@@ -201,149 +246,123 @@ TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
   for (uint16_t i = 0; i < splits; ++i)
     aggregators.insert("127.0.0.0:" + std::to_string(base_port + i));
 
+  std::vector<std::thread> subscriber_threads;
+  subscriber_threads.reserve(subscribers);
+
+  for (size_t i = 0; i < subscribers; ++i)
+    subscriber_threads.emplace_back(
+        [&aggregators](void *sub) {
+          zmq_msg_t msg;
+          FragmentInfo info;
+
+          std::unordered_set<std::string> addresses;
+          std::unordered_set<uint32_t> ids;
+
+          for (size_t i = 0; i < aggregators.size(); ++i) {
+            zmq_msg_init(&msg);
+            int size = zmq_msg_recv(&msg, sub, 0);
+            ASSERT_NE(size, -1);
+            ASSERT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
+            ASSERT_NE(aggregators.find(info.aggregator()), aggregators.end());
+            ASSERT_LT(info.id(), splits);
+            addresses.insert(info.aggregator());
+            ids.insert(info.id());
+            zmq_msg_close(&msg);
+          }
+
+          ASSERT_EQ(addresses.size(), aggregators.size());
+          ASSERT_EQ(ids.size(), splits);
+
+          zmq_msg_init(&msg);
+          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          zmq_msg_close(&msg);
+        },
+        subscriber[i]);
+
   std::vector<std::thread> threads;
   threads.reserve(aggregators.size());
 
   for (const std::string &address : aggregators)
     threads.emplace_back(
         [this](const std::string &address) {
-          eris::JoinRequest req;
+          InitialState res;
+          JoinRequest req;
           *req.mutable_aggr_address() = address;
 
-          std::unique_ptr<eris::Coordinator::Stub> stub = connect();
+          test_join(get_rpc_address(), req, &res,
+                    [&address](Status status, InitialState *state) {
+                      ASSERT_TRUE(status.ok());
+                      validate_training_options(*state);
+                      ASSERT_TRUE(state->has_assigned_fragment());
+                      ASSERT_GE(state->assigned_fragment(), 0);
+                      ASSERT_LT(state->assigned_fragment(), splits);
+                      bool found = false;
 
-          TestClient cli(
-              stub.get(), req,
-              [address](bool ok, const CoordinatorUpdate &res) {
-                ASSERT_TRUE(ok);
-                ASSERT_FALSE(res.has_aggregator());
+                      for (auto aggr : state->aggregators())
+                        if (aggr.aggregator() == address)
+                          found = true;
 
-                validate_training_options(res);
-
-                ASSERT_GT(res.init_config().aggregators_size(), 0);
-
-                ASSERT_TRUE(res.init_config().has_assigned_fragment());
-                ASSERT_GE(res.init_config().assigned_fragment(), 0);
-                ASSERT_LT(res.init_config().assigned_fragment(), splits);
-
-                bool found = false;
-
-                for (auto aggr : res.init_config().aggregators())
-                  if (aggr.aggregator() == address)
-                    found = true;
-
-                ASSERT_TRUE(found);
-              });
-          grpc::Status status = cli.Await();
-          ASSERT_TRUE(status.ok());
+                      ASSERT_TRUE(found);
+                    });
         },
         address);
 
-  for (auto &t : threads)
-    t.join();
+  for (auto &thread : threads)
+    thread.join();
 
-  eris::JoinRequest req;
+  InitialState res;
+  JoinRequest req;
   *req.mutable_aggr_address() =
       "127.0.0.0:" + std::to_string(base_port + aggregators.size() + 1);
 
-  std::unique_ptr<eris::Coordinator::Stub> stub = connect();
+  test_join(get_rpc_address(), req, &res,
+            [&aggregators](Status status, InitialState *state) {
+              ASSERT_TRUE(status.ok());
+              validate_training_options(*state);
+              ASSERT_FALSE(state->has_assigned_fragment());
 
-  TestClient cli(
-      stub.get(), req, [&aggregators](bool ok, const CoordinatorUpdate &res) {
-        ASSERT_TRUE(ok);
-        ASSERT_FALSE(res.has_aggregator());
+              ASSERT_EQ(aggregators.size(), state->aggregators_size());
 
-        validate_training_options(res);
+              for (auto aggr : state->aggregators())
+                if (aggregators.find(aggr.aggregator()) == aggregators.end())
+                  FAIL();
+            });
 
-        ASSERT_EQ(res.init_config().aggregators_size(), splits);
-
-        ASSERT_FALSE(res.init_config().has_assigned_fragment());
-        ASSERT_EQ(aggregators.size(), res.init_config().aggregators_size());
-
-        for (auto aggr : res.init_config().aggregators())
-          if (aggregators.find(aggr.aggregator()) == aggregators.end())
-            FAIL();
-      });
-  grpc::Status status = cli.Await();
-  ASSERT_TRUE(status.ok());
+  for (auto &thread : subscriber_threads)
+    thread.join();
 }
 
 TEST_F(ErisCoordinatorTest, InvalidAggregatorAddress) {
   ASSERT_NE(server_, nullptr);
   ASSERT_NE(server_thread_, nullptr);
 
-  eris::JoinRequest req;
+  JoinRequest req;
+  InitialState res;
   *req.mutable_aggr_address() = "Some random string";
 
-  std::unique_ptr<eris::Coordinator::Stub> stub = connect();
+  test_join(get_rpc_address(), req, &res,
+            [](Status status, InitialState *state) {
+              ASSERT_FALSE(status.ok());
+              ASSERT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
+              ASSERT_STREQ(
+                  status.error_message().c_str(),
+                  "An aggregator address must have the form <address>:<port> "
+                  "where address is a valid IPv4 address");
+            });
 
-  TestClient cli(stub.get(), req, [](bool ok, const CoordinatorUpdate &res) {
-    ASSERT_FALSE(ok);
-  });
-  grpc::Status status = cli.Await();
-  ASSERT_FALSE(status.ok());
+  std::vector<std::thread> threads;
+  threads.reserve(subscribers);
 
-  ASSERT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
-  ASSERT_STREQ(status.error_message().c_str(),
-               "An aggregator address must have the form <address>:<port> "
-               "where address is a valid IPv4 address");
+  for (size_t i = 0; i < subscribers; ++i)
+    threads.emplace_back(
+        [](void *sub) {
+          zmq_msg_t msg;
+          zmq_msg_init(&msg);
+          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          zmq_msg_close(&msg);
+        },
+        subscriber[i]);
+
+  for (auto &thread : threads)
+    thread.join();
 }
-
-// TEST_F(ErisCoordinatorTest, ReceiveUpdates) {
-//   ASSERT_NE(server_, nullptr);
-//   ASSERT_NE(server_thread_, nullptr);
-
-//   const uint16_t base_port = 50052;
-//   std::unordered_set<std::string> aggregators;
-
-//   for (uint16_t i = 0; i < splits; ++i)
-//     aggregators.insert("127.0.0.0:" + std::to_string(base_port + i));
-
-//   std::vector<std::thread> threads;
-//   threads.reserve(aggregators.size());
-
-//   for (const std::string &address : aggregators)
-//     threads.emplace_back(
-//         [this](const std::string &address) {
-//           eris::JoinRequest req;
-//           *req.mutable_aggr_address() = address;
-
-//           std::unique_ptr<eris::Coordinator::Stub> stub = connect();
-
-//           TestClient cli(stub.get(), req,
-//                          [address](bool ok, const CoordinatorUpdate &res)
-//                          {});
-//           grpc::Status status = cli.Await();
-//           ASSERT_TRUE(status.ok());
-//         },
-//         address);
-
-//   for (auto &t : threads)
-//     t.join();
-
-//   eris::JoinRequest req;
-//   *req.mutable_aggr_address() =
-//       "127.0.0.0:" + std::to_string(base_port + aggregators.size() + 1);
-
-//   std::unique_ptr<eris::Coordinator::Stub> stub = connect();
-
-//   TestClient cli(
-//       stub.get(), req, [&aggregators](bool ok, const CoordinatorUpdate &res)
-//       {
-//         ASSERT_TRUE(ok);
-//         ASSERT_FALSE(res.has_aggregator());
-
-//         validate_training_options(res);
-
-//         ASSERT_EQ(res.init_config().aggregators_size(), splits);
-
-//         ASSERT_FALSE(res.init_config().has_assigned_fragment());
-//         ASSERT_EQ(aggregators.size(), res.init_config().aggregators_size());
-
-//         for (auto aggr : res.init_config().aggregators())
-//           if (aggregators.find(aggr.aggregator()) == aggregators.end())
-//             FAIL();
-//       });
-//   grpc::Status status = cli.Await();
-//   ASSERT_TRUE(status.ok());
-// }

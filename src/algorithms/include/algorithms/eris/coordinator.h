@@ -7,8 +7,6 @@
 #include "erisfl/coordinator.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/server_callback.h"
-#include <condition_variable>
-#include <cstddef>
 #include <cstdint>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -22,9 +20,8 @@
 #include <string>
 #include <vector>
 
-using eris::CoordinatorUpdate;
 using eris::FragmentInfo;
-using eris::InitialUpdate;
+using eris::InitialState;
 using eris::JoinRequest;
 using eris::TrainingOptions;
 using grpc::CallbackServerContext;
@@ -34,9 +31,21 @@ using grpc::ServerBuilder;
 using grpc::Status;
 using grpc::StatusCode;
 
+/**
+ * The ErisCoordinator class implements the Coordinator interface for the eris
+ * federated training algorithm. In particular, it registers the clients and the
+ * aggregators via a gRPC interface, and notifies the clients about new
+ * aggregators joining via a ZeroMQ interface.
+ */
 class ErisCoordinator final : public Coordinator {
 
 public:
+  /**
+   * It constructs an ErisCoordinator object with the provided configurations.
+   *
+   * @param builder The builder class carrying all the configurations to build
+   * an ErisCoordinator
+   */
   explicit ErisCoordinator(const ErisCoordinatorBuilder &builder);
 
   ~ErisCoordinator(void);
@@ -44,36 +53,32 @@ public:
   void start(void) override;
   void stop(void) override;
 
-  inline uint32_t get_listening_port(void) const { return listening_port_; }
+  inline uint16_t get_pubssub_port(void) const { return pubsub_port_; }
+  inline uint16_t get_rpc_port(void) const { return rpc_port_; }
+
+  bool publish_aggregator(const FragmentInfo &info);
 
 private:
-  class Aggregators {
-  public:
-    explicit Aggregators(size_t splits);
-
-    void handle_join_request(const JoinRequest *req, InitialUpdate *update);
-    void wait_update(void);
-
-  private:
-    std::vector<FragmentInfo> aggregators_;
-    std::mutex mu_;
-    std::condition_variable cv_;
-  };
-
   class CoordinatorImpl : public eris::Coordinator::CallbackService {
   public:
-    explicit CoordinatorImpl(const TrainingOptions &options);
+    explicit CoordinatorImpl(const TrainingOptions &options,
+                             ErisCoordinator *coordinator);
 
-    grpc::ServerWriteReactor<CoordinatorUpdate> *
-    Join(CallbackServerContext *ctx, const JoinRequest *req) override;
+    grpc::ServerUnaryReactor *Join(CallbackServerContext *ctx,
+                                   const JoinRequest *req, InitialState *res);
 
   private:
     const TrainingOptions options_;
-    Aggregators aggregators_;
+    std::vector<FragmentInfo> aggregators_;
+    std::mutex mu_;
+    ErisCoordinator *coordinator_;
   };
 
   std::unique_ptr<Server> server_;
-  uint16_t listening_port_;
+  void *zmq_ctx;
+  void *publisher;
+  uint16_t rpc_port_;
+  uint16_t pubsub_port_;
   CoordinatorImpl service_;
   bool started_;
   const std::string listening_address_;
