@@ -19,6 +19,9 @@
 #include <new>
 #include <vector>
 
+using grpc::Status;
+using grpc::StatusCode;
+
 ErisCoordinator::ErisCoordinator(const ErisCoordinatorBuilder &builder)
     : server_{nullptr}, service_{builder.get_options(), this}, started_{false},
       listening_address_{builder.get_rpc_listen_address()} {

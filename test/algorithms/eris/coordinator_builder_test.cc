@@ -13,9 +13,9 @@ TEST_F(ErisCoordinatorBuilderTest, DefaultConfiguration) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
   EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ChangeAddress) {
@@ -25,9 +25,9 @@ TEST_F(ErisCoordinatorBuilderTest, ChangeAddress) {
             "192.168.0.1:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://192.168.0.1:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, InvalidIPAddress) {
@@ -37,9 +37,9 @@ TEST_F(ErisCoordinatorBuilderTest, InvalidIPAddress) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ChangePort) {
@@ -47,9 +47,9 @@ TEST_F(ErisCoordinatorBuilderTest, ChangePort) {
   EXPECT_TRUE(builder.add_publish_port(8081));
   EXPECT_EQ(builder.get_rpc_listen_address(), "0.0.0.0:8080");
   EXPECT_EQ(builder.get_pubsub_listen_address(), "tcp://*:8081");
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ConfigurePortAndAddress) {
@@ -59,9 +59,9 @@ TEST_F(ErisCoordinatorBuilderTest, ConfigurePortAndAddress) {
   EXPECT_TRUE(builder.add_publish_address("192.168.0.1"));
   EXPECT_EQ(builder.get_rpc_listen_address(), "192.168.0.1:8080");
   EXPECT_EQ(builder.get_pubsub_listen_address(), "tcp://192.168.0.1:8081");
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ConfigureRounds) {
@@ -69,8 +69,8 @@ TEST_F(ErisCoordinatorBuilderTest, ConfigureRounds) {
   EXPECT_EQ(builder.get_rpc_listen_address(),
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_options().rounds(), 10);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, InvalidRounds) {
@@ -79,9 +79,9 @@ TEST_F(ErisCoordinatorBuilderTest, InvalidRounds) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ConfigureSplits) {
@@ -90,9 +90,9 @@ TEST_F(ErisCoordinatorBuilderTest, ConfigureSplits) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
   EXPECT_EQ(builder.get_options().splits(), 15);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, InvalidSplits) {
@@ -101,9 +101,9 @@ TEST_F(ErisCoordinatorBuilderTest, InvalidSplits) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ConfigureMinClients) {
@@ -112,8 +112,8 @@ TEST_F(ErisCoordinatorBuilderTest, ConfigureMinClients) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
   EXPECT_EQ(builder.get_options().min_clients(), 5);
 }
 
@@ -124,8 +124,8 @@ TEST_F(ErisCoordinatorBuilderTest, InvalidMinClients) {
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
   EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
 }
 
 TEST_F(ErisCoordinatorBuilderTest, ConfigureSplitSeed) {
@@ -134,9 +134,9 @@ TEST_F(ErisCoordinatorBuilderTest, ConfigureSplitSeed) {
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
             "tcp://*:" + std::to_string(DEFAULT_ERIS_PUBSUB_PORT));
-  EXPECT_EQ(builder.get_options().rounds(), 1);
-  EXPECT_EQ(builder.get_options().splits(), 1);
-  EXPECT_EQ(builder.get_options().min_clients(), 3);
+  EXPECT_EQ(builder.get_options().rounds(), DEFAULT_ERIS_ROUNDS);
+  EXPECT_EQ(builder.get_options().splits(), DEFAULT_ERIS_SPLITS);
+  EXPECT_EQ(builder.get_options().min_clients(), DEFAULT_ERIS_MIN_CLIENTS);
   EXPECT_EQ(builder.get_options().split_seed(), 10);
 }
 

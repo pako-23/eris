@@ -25,11 +25,7 @@ using eris::InitialState;
 using eris::JoinRequest;
 using eris::TrainingOptions;
 using grpc::CallbackServerContext;
-using grpc::Channel;
 using grpc::Server;
-using grpc::ServerBuilder;
-using grpc::Status;
-using grpc::StatusCode;
 
 /**
  * The ErisCoordinator class implements the Coordinator interface for the eris
@@ -57,7 +53,7 @@ public:
 
   /**
    * Starts the coordinator process. In practice, it will start serving RPC
-   * requests and publishing events for new aggregators joining the training.
+   * requests and publishing events about new aggregators joining the training.
    */
   void start(void) override;
 

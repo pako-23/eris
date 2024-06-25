@@ -5,11 +5,11 @@ package eris;
 import "algorithms/eris/common.proto";
 
 service Aggregator {
-    rpc SubmitWeights (Weight) returns (Empty) {}
+    rpc SubmitWeights (FragmentWeights) returns (Empty) {}
 }
 
 
-message Weight {
+message FragmentWeights {
     uint32 round = 1;
     repeated double weight = 2;
 }

@@ -31,6 +31,8 @@
 
 using eris::InitialState;
 using eris::JoinRequest;
+using grpc::Status;
+using grpc::StatusCode;
 
 static constexpr std::chrono::minutes timeout = std::chrono::minutes(1);
 static const int zmq_timeout = 500;

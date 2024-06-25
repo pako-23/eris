@@ -1,11 +1,15 @@
 #pragma once
 
 #include "algorithms/eris/coordinator.pb.h"
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 #define DEFAULT_ERIS_RPC_PORT 50051
 #define DEFAULT_ERIS_PUBSUB_PORT 5555
+#define DEFAULT_ERIS_SPLITS 1
+#define DEFAULT_ERIS_ROUNDS 1
+#define DEFAULT_ERIS_MIN_CLIENTS 3
 
 using eris::TrainingOptions;
 
@@ -19,13 +23,13 @@ protected:
   /**
    * It constructs a builder with the default parameters.
    */
-  explicit ErisServiceBuilder(void);
+  explicit ErisServiceBuilder(void) noexcept;
 
 public:
   /**
    * Deletes an instance of an ErisServiceBuilder object.
    */
-  virtual ~ErisServiceBuilder(void) = default;
+  virtual ~ErisServiceBuilder(void) noexcept = default;
 
   /**
    * It sets the port on which the service should listen for incoming RPC
@@ -35,7 +39,7 @@ public:
    * @return It returns true if it manages to successfully set the RPC port;
    * otherwise it returns false. In practice, it always returns true.
    */
-  bool add_rpc_port(uint16_t port);
+  bool add_rpc_port(uint16_t port) noexcept;
 
   /**
    * It sets the IPv4 address on which the service should listen for incoming
@@ -47,7 +51,7 @@ public:
    * otherwise it returns false. In practice, it returns false only if the
    * address is not a valid IPv4 address.
    */
-  bool add_rpc_listen_address(const std::string &address);
+  bool add_rpc_listen_address(const std::string &address) noexcept;
 
   /**
    * It sets the port on which the service should publish events.
@@ -56,7 +60,7 @@ public:
    * @return It returns true if it manages to successfully set the Pub-Sub port;
    * otherwise it returns false. In practice, it always returns true.
    */
-  bool add_publish_port(uint16_t port);
+  bool add_publish_port(uint16_t port) noexcept;
 
   /**
    * It sets the IPv4 address on which the service should publish events.
@@ -67,7 +71,7 @@ public:
    * address; otherwise it returns false. In practice, it returns false only if
    * the address is not a valid IPv4 address.
    */
-  bool add_publish_address(const std::string &address);
+  bool add_publish_address(const std::string &address) noexcept;
 
   /**
    * It returns the full address on which the service should listen for RPC
@@ -77,7 +81,7 @@ public:
    * @return The listening address on which the service should listen for RPC
    * requests
    */
-  inline const std::string get_rpc_listen_address(void) const {
+  inline const std::string get_rpc_listen_address(void) const noexcept {
     return rpc_listen_address_ + ":" + std::to_string(rpc_port_);
   }
 
@@ -89,7 +93,7 @@ public:
    *
    * @return The ZeroMQ DSN identifying the publishing address.
    */
-  inline const std::string get_pubsub_listen_address(void) const {
+  inline const std::string get_pubsub_listen_address(void) const noexcept {
     std::string address =
         publish_address_ == "0.0.0.0" ? "*" : publish_address_;
     return "tcp://" + address + ":" + std::to_string(publish_port_);
@@ -103,17 +107,21 @@ protected:
   uint16_t publish_port_;       /**< The port of the publisher */
 };
 
+/**
+ * The ErisCoordinatorBuilder class contains all the configuration parameters
+ * for building an ErisCoordinator.
+ */
 class ErisCoordinatorBuilder final : public ErisServiceBuilder {
 public:
   /**
    * It constructs a builder with the default parameters.
    */
-  explicit ErisCoordinatorBuilder(void);
+  explicit ErisCoordinatorBuilder(void) noexcept;
 
   /**
    * Deletes an instance of an ErisCoordinatorBuilder object.
    */
-  virtual ~ErisCoordinatorBuilder(void) = default;
+  virtual ~ErisCoordinatorBuilder(void) noexcept = default;
 
   /**
    * It sets the number of training rounds.
@@ -123,7 +131,7 @@ public:
    * training rounds; otherwise it returns false. In practice, it returns
    * false if rounds = 0.
    */
-  bool add_rounds(uint32_t rounds);
+  bool add_rounds(uint32_t rounds) noexcept;
 
   /**
    * It sets the number of fragments that the splitting function should produce.
@@ -134,7 +142,7 @@ public:
    * fragments the splitting function should produce; otherwise it returns
    * false. In practice, it returns false if min_clients = 0.
    */
-  bool add_splits(uint32_t splits);
+  bool add_splits(uint32_t splits) noexcept;
 
   /**
    * It sets the minimum number of clients that should contribute with their
@@ -146,7 +154,7 @@ public:
    * number of contributing clients; otherwise it returns false. In practice,
    * it returns false if min_clients = 0.
    */
-  bool add_min_clients(uint32_t min_clients);
+  bool add_min_clients(uint32_t min_clients) noexcept;
 
   /**
    * It sets the seed used in the splitting of the model weights.
@@ -156,15 +164,47 @@ public:
    * @return It returns true if it manages to successfully set the splitting
    * seed; otherwise it returns false. In practice, it always returns true.
    */
-  bool add_split_seed(uint32_t split_seed);
+  bool add_split_seed(uint32_t split_seed) noexcept;
 
   /**
    * It returns the configurations that should be used during the training.
    *
    * @return The training configurations.
    */
-  inline const TrainingOptions &get_options(void) const { return options_; }
+  inline const TrainingOptions &get_options(void) const noexcept {
+    return options_;
+  }
 
 private:
   TrainingOptions options_; /**< The training configurations */
+};
+
+/**
+ * The ErisAggregatorBuilder class contains all the configuration parameters
+ * for building an ErisAggregator.
+ */
+class ErisAggregatorBuilder final : public ErisServiceBuilder {
+public:
+  /**
+   * It constructs a builder with the default parameters.
+   */
+  explicit ErisAggregatorBuilder(uint32_t fragment_id, size_t fragment_size);
+
+  /**
+   * Deletes an instance of an ErisAggregatorBuilder object.
+   */
+  virtual ~ErisAggregatorBuilder(void) = default;
+
+  bool add_min_clients(uint32_t min_clients) noexcept;
+
+  inline uint32_t get_min_client(void) const noexcept { return min_clients_; }
+  inline uint32_t get_fragment_id(void) const noexcept { return fragment_id_; }
+  inline size_t get_fragment_size(void) const noexcept {
+    return fragment_size_;
+  }
+
+private:
+  uint32_t fragment_id_;
+  size_t fragment_size_;
+  uint32_t min_clients_;
 };
