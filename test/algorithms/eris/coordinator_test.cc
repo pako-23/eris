@@ -79,7 +79,7 @@ protected:
     builder.add_min_clients(min_clients);
     builder.add_rounds(rounds);
     builder.add_rpc_port(0);
-    builder.add_pubsub_port(0);
+    builder.add_publish_port(0);
     builder.add_split_seed(split_seed);
     builder.add_splits(splits);
 
@@ -137,7 +137,7 @@ protected:
   }
 
   inline std::string get_pubsub_address(void) const {
-    return "tcp://127.0.0.1:" + std::to_string(server_->get_pubssub_port());
+    return "tcp://127.0.0.1:" + std::to_string(server_->get_publish_port());
   }
 
   static const size_t subscribers = 5;

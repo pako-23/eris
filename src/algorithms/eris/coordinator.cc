@@ -39,7 +39,7 @@ ErisCoordinator::ErisCoordinator(const ErisCoordinatorBuilder &builder)
   zmq_bind(publisher, builder.get_pubsub_listen_address().c_str());
   zmq_getsockopt(publisher, ZMQ_LAST_ENDPOINT, &endpoint, &endpointlen);
 
-  pubsub_port_ = atoi(strchr(strchr(endpoint, ':') + 1, ':') + 1);
+  publish_port_ = atoi(strchr(strchr(endpoint, ':') + 1, ':') + 1);
 
   srv_builder.AddListeningPort(builder.get_rpc_listen_address(),
                                grpc::InsecureServerCredentials(), &port);

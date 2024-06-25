@@ -20,7 +20,7 @@ TEST_F(ErisCoordinatorBuilderTest, DefaultConfiguration) {
 
 TEST_F(ErisCoordinatorBuilderTest, ChangeAddress) {
   EXPECT_TRUE(builder.add_rpc_listen_address("192.168.0.1"));
-  EXPECT_TRUE(builder.add_pubsub_listen_address("192.168.0.1"));
+  EXPECT_TRUE(builder.add_publish_address("192.168.0.1"));
   EXPECT_EQ(builder.get_rpc_listen_address(),
             "192.168.0.1:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
@@ -32,7 +32,7 @@ TEST_F(ErisCoordinatorBuilderTest, ChangeAddress) {
 
 TEST_F(ErisCoordinatorBuilderTest, InvalidIPAddress) {
   EXPECT_FALSE(builder.add_rpc_listen_address("not an Ipaddress"));
-  EXPECT_FALSE(builder.add_pubsub_listen_address("not an Ipaddress"));
+  EXPECT_FALSE(builder.add_publish_address("not an Ipaddress"));
   EXPECT_EQ(builder.get_rpc_listen_address(),
             "0.0.0.0:" + std::to_string(DEFAULT_ERIS_RPC_PORT));
   EXPECT_EQ(builder.get_pubsub_listen_address(),
@@ -44,7 +44,7 @@ TEST_F(ErisCoordinatorBuilderTest, InvalidIPAddress) {
 
 TEST_F(ErisCoordinatorBuilderTest, ChangePort) {
   EXPECT_TRUE(builder.add_rpc_port(8080));
-  EXPECT_TRUE(builder.add_pubsub_port(8081));
+  EXPECT_TRUE(builder.add_publish_port(8081));
   EXPECT_EQ(builder.get_rpc_listen_address(), "0.0.0.0:8080");
   EXPECT_EQ(builder.get_pubsub_listen_address(), "tcp://*:8081");
   EXPECT_EQ(builder.get_options().rounds(), 1);
@@ -55,8 +55,8 @@ TEST_F(ErisCoordinatorBuilderTest, ChangePort) {
 TEST_F(ErisCoordinatorBuilderTest, ConfigurePortAndAddress) {
   EXPECT_TRUE(builder.add_rpc_listen_address("192.168.0.1"));
   EXPECT_TRUE(builder.add_rpc_port(8080));
-  EXPECT_TRUE(builder.add_pubsub_port(8081));
-  EXPECT_TRUE(builder.add_pubsub_listen_address("192.168.0.1"));
+  EXPECT_TRUE(builder.add_publish_port(8081));
+  EXPECT_TRUE(builder.add_publish_address("192.168.0.1"));
   EXPECT_EQ(builder.get_rpc_listen_address(), "192.168.0.1:8080");
   EXPECT_EQ(builder.get_pubsub_listen_address(), "tcp://192.168.0.1:8081");
   EXPECT_EQ(builder.get_options().rounds(), 1);
