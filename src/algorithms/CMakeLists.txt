@@ -11,9 +11,10 @@ set(BUILD_TESTS OFF CACHE INTERNAL "")
 FetchContent_MakeAvailable(libzmq)
 
 add_library(algorithms_obj OBJECT
+  eris/aggregator.cc
   eris/builder.cc
   eris/coordinator.cc
-  eris/aggregator.cc)
+  eris/split.cc)
 target_include_directories(algorithms_obj PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/include

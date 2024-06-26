@@ -20,3 +20,10 @@ add_executable(eris_aggregator_test
 target_link_libraries(eris_aggregator_test PRIVATE
   proto_obj algorithms_static)
 AddTests(eris_aggregator_test)
+
+
+add_executable(eris_split_test
+  eris/split_test.cc)
+target_link_libraries(eris_split_test PRIVATE
+  proto_obj algorithms_static)
+AddTests(eris_split_test)

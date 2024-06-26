@@ -43,10 +43,10 @@ static const uint32_t split_seed = 42;
 static const uint32_t splits = 10;
 
 static void validate_training_options(const InitialState &state) {
-  ASSERT_EQ(state.options().min_clients(), min_clients);
-  ASSERT_EQ(state.options().rounds(), rounds);
-  ASSERT_EQ(state.options().split_seed(), split_seed);
-  ASSERT_EQ(state.options().splits(), splits);
+  EXPECT_EQ(state.options().min_clients(), min_clients);
+  EXPECT_EQ(state.options().rounds(), rounds);
+  EXPECT_EQ(state.options().split_seed(), split_seed);
+  EXPECT_EQ(state.options().splits(), splits);
 }
 
 static void test_join(const std::string &coordinator, const JoinRequest &req,
@@ -117,12 +117,12 @@ protected:
   void SetUp(void) override {
     for (size_t i = 0; i < subscribers; ++i) {
       ctx[i] = zmq_ctx_new();
-      ASSERT_NE(ctx[i], nullptr);
+      EXPECT_NE(ctx[i], nullptr);
       subscriber[i] = zmq_socket(ctx[i], ZMQ_SUB);
-      ASSERT_NE(subscriber[i], nullptr);
-      ASSERT_EQ(zmq_connect(subscriber[i], get_pubsub_address().c_str()), 0);
-      ASSERT_EQ(zmq_setsockopt(subscriber[i], ZMQ_SUBSCRIBE, "", 0), 0);
-      ASSERT_EQ(zmq_setsockopt(subscriber[i], ZMQ_RCVTIMEO, &zmq_timeout,
+      EXPECT_NE(subscriber[i], nullptr);
+      EXPECT_EQ(zmq_connect(subscriber[i], get_pubsub_address().c_str()), 0);
+      EXPECT_EQ(zmq_setsockopt(subscriber[i], ZMQ_SUBSCRIBE, "", 0), 0);
+      EXPECT_EQ(zmq_setsockopt(subscriber[i], ZMQ_RCVTIMEO, &zmq_timeout,
                                sizeof(zmq_timeout)),
                 0);
     }
@@ -151,23 +151,23 @@ protected:
 };
 
 TEST_F(ErisCoordinatorTest, Initialization) {
-  ASSERT_NE(server_, nullptr);
-  ASSERT_NE(server_thread_, nullptr);
+  EXPECT_NE(server_, nullptr);
+  EXPECT_NE(server_thread_, nullptr);
 }
 
 TEST_F(ErisCoordinatorTest, JoinClient) {
-  ASSERT_NE(server_, nullptr);
-  ASSERT_NE(server_thread_, nullptr);
+  EXPECT_NE(server_, nullptr);
+  EXPECT_NE(server_thread_, nullptr);
 
   JoinRequest req;
   InitialState res;
 
   test_join(get_rpc_address(), req, &res,
             [](Status status, InitialState *state) {
-              ASSERT_TRUE(status.ok());
+              EXPECT_TRUE(status.ok());
               validate_training_options(*state);
-              ASSERT_FALSE(state->has_assigned_fragment());
-              ASSERT_EQ(state->aggregators_size(), 0);
+              EXPECT_FALSE(state->has_assigned_fragment());
+              EXPECT_EQ(state->aggregators_size(), 0);
             });
 
   std::vector<std::thread> threads;
@@ -178,7 +178,7 @@ TEST_F(ErisCoordinatorTest, JoinClient) {
         [](void *sub) {
           zmq_msg_t msg;
           zmq_msg_init(&msg);
-          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
           zmq_msg_close(&msg);
         },
         subscriber[i]);
@@ -188,8 +188,8 @@ TEST_F(ErisCoordinatorTest, JoinClient) {
 }
 
 TEST_F(ErisCoordinatorTest, JoinAggregator) {
-  ASSERT_NE(server_, nullptr);
-  ASSERT_NE(server_thread_, nullptr);
+  EXPECT_NE(server_, nullptr);
+  EXPECT_NE(server_thread_, nullptr);
 
   const std::string aggregation_address = "127.0.0.0:50052";
 
@@ -208,22 +208,22 @@ TEST_F(ErisCoordinatorTest, JoinAggregator) {
 
           zmq_msg_init(&msg);
           int size = zmq_msg_recv(&msg, sub, 0);
-          ASSERT_NE(size, -1);
-          ASSERT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
-          ASSERT_EQ(info.aggregator(), aggregation_address);
-          ASSERT_LT(info.id(), splits);
+          EXPECT_NE(size, -1);
+          EXPECT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
+          EXPECT_EQ(info.aggregator(), aggregation_address);
+          EXPECT_LT(info.id(), splits);
           zmq_msg_close(&msg);
         },
         subscriber[i]);
 
   test_join(get_rpc_address(), req, &res,
             [&aggregation_address](Status status, InitialState *state) {
-              ASSERT_TRUE(status.ok());
+              EXPECT_TRUE(status.ok());
               validate_training_options(*state);
-              ASSERT_TRUE(state->has_assigned_fragment());
-              ASSERT_EQ(state->aggregators_size(), 1);
-              ASSERT_GE(state->assigned_fragment(), 0);
-              ASSERT_LT(state->assigned_fragment(), splits);
+              EXPECT_TRUE(state->has_assigned_fragment());
+              EXPECT_EQ(state->aggregators_size(), 1);
+              EXPECT_GE(state->assigned_fragment(), 0);
+              EXPECT_LT(state->assigned_fragment(), splits);
 
               bool found = false;
 
@@ -231,7 +231,7 @@ TEST_F(ErisCoordinatorTest, JoinAggregator) {
                 if (aggr.aggregator() == aggregation_address)
                   found = true;
 
-              ASSERT_TRUE(found);
+              EXPECT_TRUE(found);
             });
 
   for (auto &thread : threads)
@@ -239,8 +239,8 @@ TEST_F(ErisCoordinatorTest, JoinAggregator) {
 }
 
 TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
-  ASSERT_NE(server_, nullptr);
-  ASSERT_NE(server_thread_, nullptr);
+  EXPECT_NE(server_, nullptr);
+  EXPECT_NE(server_thread_, nullptr);
 
   std::unordered_set<std::string> aggregators;
 
@@ -263,20 +263,20 @@ TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
           for (size_t i = 0; i < aggregators.size(); ++i) {
             zmq_msg_init(&msg);
             int size = zmq_msg_recv(&msg, sub, 0);
-            ASSERT_NE(size, -1);
-            ASSERT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
-            ASSERT_NE(aggregators.find(info.aggregator()), aggregators.end());
-            ASSERT_LT(info.id(), splits);
+            EXPECT_NE(size, -1);
+            EXPECT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
+            EXPECT_NE(aggregators.find(info.aggregator()), aggregators.end());
+            EXPECT_LT(info.id(), splits);
             addresses.insert(info.aggregator());
             ids.insert(info.id());
             zmq_msg_close(&msg);
           }
 
-          ASSERT_EQ(addresses.size(), aggregators.size());
-          ASSERT_EQ(ids.size(), splits);
+          EXPECT_EQ(addresses.size(), aggregators.size());
+          EXPECT_EQ(ids.size(), splits);
 
           zmq_msg_init(&msg);
-          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
           zmq_msg_close(&msg);
         },
         subscriber[i]);
@@ -293,18 +293,18 @@ TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
 
           test_join(get_rpc_address(), req, &res,
                     [&address](Status status, InitialState *state) {
-                      ASSERT_TRUE(status.ok());
+                      EXPECT_TRUE(status.ok());
                       validate_training_options(*state);
-                      ASSERT_TRUE(state->has_assigned_fragment());
-                      ASSERT_GE(state->assigned_fragment(), 0);
-                      ASSERT_LT(state->assigned_fragment(), splits);
+                      EXPECT_TRUE(state->has_assigned_fragment());
+                      EXPECT_GE(state->assigned_fragment(), 0);
+                      EXPECT_LT(state->assigned_fragment(), splits);
                       bool found = false;
 
                       for (auto aggr : state->aggregators())
                         if (aggr.aggregator() == address)
                           found = true;
 
-                      ASSERT_TRUE(found);
+                      EXPECT_TRUE(found);
                     });
         },
         address);
@@ -319,11 +319,11 @@ TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
 
   test_join(get_rpc_address(), req, &res,
             [&aggregators](Status status, InitialState *state) {
-              ASSERT_TRUE(status.ok());
+              EXPECT_TRUE(status.ok());
               validate_training_options(*state);
-              ASSERT_FALSE(state->has_assigned_fragment());
+              EXPECT_FALSE(state->has_assigned_fragment());
 
-              ASSERT_EQ(aggregators.size(), state->aggregators_size());
+              EXPECT_EQ(aggregators.size(), state->aggregators_size());
 
               for (auto aggr : state->aggregators())
                 if (aggregators.find(aggr.aggregator()) == aggregators.end())
@@ -335,8 +335,8 @@ TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
 }
 
 TEST_F(ErisCoordinatorTest, InvalidAggregatorAddress) {
-  ASSERT_NE(server_, nullptr);
-  ASSERT_NE(server_thread_, nullptr);
+  EXPECT_NE(server_, nullptr);
+  EXPECT_NE(server_thread_, nullptr);
 
   JoinRequest req;
   InitialState res;
@@ -344,9 +344,9 @@ TEST_F(ErisCoordinatorTest, InvalidAggregatorAddress) {
 
   test_join(get_rpc_address(), req, &res,
             [](Status status, InitialState *state) {
-              ASSERT_FALSE(status.ok());
-              ASSERT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
-              ASSERT_STREQ(
+              EXPECT_FALSE(status.ok());
+              EXPECT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
+              EXPECT_STREQ(
                   status.error_message().c_str(),
                   "An aggregator address must have the form <address>:<port> "
                   "where address is a valid IPv4 address");
@@ -360,7 +360,7 @@ TEST_F(ErisCoordinatorTest, InvalidAggregatorAddress) {
         [](void *sub) {
           zmq_msg_t msg;
           zmq_msg_init(&msg);
-          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
           zmq_msg_close(&msg);
         },
         subscriber[i]);

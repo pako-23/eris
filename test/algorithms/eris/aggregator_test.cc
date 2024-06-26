@@ -105,8 +105,7 @@ protected:
   }
 
   void generate_weights(void) {
-
-    std::default_random_engine rng;
+    std::default_random_engine rng(time(NULL));
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
     weights.clear();
@@ -283,7 +282,7 @@ TEST_F(ErisAggregatorTest, MultipleRounds) {
           }
 
           zmq_msg_init(&msg);
-          ASSERT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
+          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
           zmq_msg_close(&msg);
         },
         subscriber[i]);
@@ -291,7 +290,7 @@ TEST_F(ErisAggregatorTest, MultipleRounds) {
   for (int round = 0; round < rounds; ++round) {
     for (size_t i = 0; i < min_clients; ++i)
       test_submit(get_rpc_address(), round, weights[i].cbegin(),
-                  weights[i].cend(), [](Status s) { ASSERT_TRUE(s.ok()); });
+                  weights[i].cend(), [](Status s) { EXPECT_TRUE(s.ok()); });
 
     generate_weights();
   }
