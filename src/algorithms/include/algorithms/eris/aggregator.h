@@ -4,6 +4,7 @@
 #include "algorithms/eris/aggregator.pb.h"
 #include "algorithms/eris/builder.h"
 #include "algorithms/eris/common.pb.h"
+#include "algorithms/eris/service.h"
 #include <cstddef>
 #include <cstdint>
 #include <grpcpp/server.h>
@@ -19,7 +20,8 @@ using grpc::Server;
 /**
  * The ErisAggregator class aggreagtes the weights submitted during the training
  * phase by the clients to obtain an updated version of the model at each round
- * of the training.
+ * of the training. A client can submit his weights via a gRPC interface, and
+ * the event publishing happens via a ZeroMQ interface.
  */
 class ErisAggregator final {
 public:
@@ -36,19 +38,19 @@ public:
   /**
    * Deletes an instance of an ErisAggregator object.
    */
-  ~ErisAggregator(void);
+  ~ErisAggregator(void) = default;
 
   /**
    * Starts the aggregation process. In practice, it will start serving RPC
    * requests and publishing events about model fragment changes.
    */
-  void start(void);
+  void start(void) noexcept;
 
   /**
    * Stops the aggregation process. In practice, it will stop serving RPC
-   * requests and publishing events about model fragment changes.
+   * requests and publishing events.
    */
-  void stop(void);
+  void stop(void) noexcept;
 
   /**
    * It returns the port on which the aggregator is publishing events about
@@ -57,23 +59,33 @@ public:
    * @return The port on which the aggregator is publishing events about model
    * fragment changes.
    */
-  inline uint16_t get_publish_port(void) const { return publish_port_; }
+  inline uint16_t get_publish_port(void) const {
+    return service_.get_publish_port();
+  }
 
   /**
    * It returns the port on which the aggregator is listening for RPC requests.
    *
    * @return The port on which the aggregator is listening for RPC requests.
    */
-  inline uint16_t get_rpc_port(void) const noexcept { return rpc_port_; }
-
-  bool publish_weight(const WeightUpdate &update);
+  inline uint16_t get_rpc_port(void) const noexcept {
+    return service_.get_rpc_port();
+  }
 
 private:
   /**
-   * The AggregatorImpl class implements the Aggregator RPC interface.
+   * The AggregatorImpl class implements the Aggregator gRPC interface.
    */
   class AggregatorImpl : public eris::Aggregator::CallbackService {
   public:
+    /**
+     * It constructs an AggregatorImpl object with the provided training
+     * configurations and the registering ErisAggregator.
+     *
+     * @param aggregator The ErisAggregator that registerd the Aggregator
+     * service.
+     * @param builder The builder carrying all the aggregation configurations.
+     */
     explicit AggregatorImpl(ErisAggregator *aggregator,
                             const ErisAggregatorBuilder &builder) noexcept;
 
@@ -93,23 +105,18 @@ private:
                                             eris::Empty *res) override;
 
   private:
-    uint32_t round_;
-    std::vector<double> weights_;
-    uint32_t contributors_;
-    std::mutex mu_;
-    const size_t fragment_size_;
-    const uint32_t min_clients_;
-    ErisAggregator *aggregator_;
+    uint32_t round_; /**< The current round of the training */
+    std::vector<double>
+        weights_; /**< The accumulated weights shared by the clients */
+    uint32_t contributors_; /**< The number of contributing clients */
+    std::mutex
+        mu_; /**< A mutex providing mulital exclusion the internal state */
+    const size_t fragment_size_; /**< The size of the assigned fragment */
+    const uint32_t min_clients_; /**< The minimum number of weight contributions
+                                    required before sharing an update */
+    ErisAggregator *aggregator_; /**< The registrating ErisAggregator */
   };
 
-  std::unique_ptr<Server> server_; /**< The listening gRPC server */
-  void *zmq_ctx;                   /**< The ZeroMQ socket context */
-  void *publisher;                 /**< The ZeroMQ publisher socket  */
-  uint16_t rpc_port_;              /**< The effective RPC listening port */
-  uint16_t publish_port_;          /**< The effective publishing port */
-  AggregatorImpl service_;         /**< The implementation of the gRPC
-                                      Aggregator interface */
-  bool started_; /**< If the ErisAggregator has been started */
-  const std::string listening_address_; /**< The RPC listening address from the
-                                           builder configurations */
+  ErisService<AggregatorImpl> service_; /**< The ErisService that will listen on
+                   gRPC requests and publish events.*/
 };

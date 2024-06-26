@@ -14,9 +14,10 @@
 using eris::TrainingOptions;
 
 /**
- * The ErisServiceBuilder is a base class for building an eris service
- * builder. A builder will carry configuration parameters for building an
- * eris service. The ErisCoordinator is an example fo an eris service.
+ * The ErisServiceBuilder is a base class for building an ErisService.
+ * A builder will carry configuration parameters for building an
+ * ErisSerice. For instance, it will carry the ports and addresses RPC
+ * connections and ZeroMQ publishing.
  */
 class ErisServiceBuilder {
 protected:
@@ -102,9 +103,8 @@ public:
 protected:
   std::string rpc_listen_address_; /**< The IPv4 address of the RPC server */
   uint16_t rpc_port_;              /**< The port of the RPC server */
-
-  std::string publish_address_; /**< The IPv4 address of the publisher */
-  uint16_t publish_port_;       /**< The port of the publisher */
+  std::string publish_address_;    /**< The IPv4 address of the publisher */
+  uint16_t publish_port_;          /**< The port of the publisher */
 };
 
 /**
@@ -187,6 +187,10 @@ class ErisAggregatorBuilder final : public ErisServiceBuilder {
 public:
   /**
    * It constructs a builder with the default parameters.
+   *
+   * @param fragment_id The identifier of the model fragment as provided by the
+   * ErisCoordinator.
+   * @param fragment_size The size of the model fragment.
    */
   explicit ErisAggregatorBuilder(uint32_t fragment_id, size_t fragment_size);
 
@@ -195,16 +199,53 @@ public:
    */
   virtual ~ErisAggregatorBuilder(void) = default;
 
+  /**
+   * It sets the minimum number of clients that should contribute with their
+   * local weights before the ErisAggregator can publish a new model weight
+   * update.
+   *
+   * @param min_clients The minimum number of contributing clients. It must be a
+   * positive number.
+   * @return It returns true if it manages to successfully set the minimum
+   * number of contributing clients; otherwise it returns false. In practice,
+   * it returns false if min_clients = 0.
+   */
   bool add_min_clients(uint32_t min_clients) noexcept;
 
+  /**
+   * It returns the minimum number of clients that should contribute with their
+   * local weights before the ErisAggregator can publish a new model weight
+   * update.
+   *
+   * @return The minimum number of clients that should contribute with their
+   * local weights before the ErisAggregator can publish a new model weight
+   * update.
+   */
   inline uint32_t get_min_client(void) const noexcept { return min_clients_; }
+
+  /**
+   * It returns the identifier of the model fragment the ErisAggregator is
+   * responsible for.
+   *
+   * @return The identifier of the model fragment the ErisAggregator is
+   * responsible for.
+   */
   inline uint32_t get_fragment_id(void) const noexcept { return fragment_id_; }
+
+  /**
+   * It returns the size of the model fragment the ErisAggregator is
+   * responsible for.
+   *
+   * @return The size of the model fragment the ErisAggregator is
+   * responsible for.
+   */
   inline size_t get_fragment_size(void) const noexcept {
     return fragment_size_;
   }
 
 private:
-  uint32_t fragment_id_;
-  size_t fragment_size_;
-  uint32_t min_clients_;
+  uint32_t fragment_id_; /**< The identifier of the fragment */
+  size_t fragment_size_; /**< The size of the fragment */
+  uint32_t min_clients_; /**< The number of contributing clients needed before
+                            publishing a new weight update */
 };

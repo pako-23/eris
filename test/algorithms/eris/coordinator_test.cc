@@ -2,6 +2,7 @@
 #include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
+#include "spdlog/spdlog.h"
 #include "zmq.h"
 #include <chrono>
 #include <condition_variable>
@@ -211,7 +212,6 @@ TEST_F(ErisCoordinatorTest, JoinAggregator) {
           ASSERT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
           ASSERT_EQ(info.aggregator(), aggregation_address);
           ASSERT_LT(info.id(), splits);
-
           zmq_msg_close(&msg);
         },
         subscriber[i]);

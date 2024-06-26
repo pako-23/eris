@@ -1,8 +1,6 @@
 #include "algorithms/eris/aggregator.h"
 #include "algorithms/eris/builder.h"
 #include "algorithms/eris/coordinator.h"
-#include "spdlog/spdlog.h"
-#include "zmq.h"
 #include <algorithm>
 #include <cstddef>
 #include <grpcpp/server_builder.h>
@@ -13,70 +11,11 @@ using grpc::Status;
 using grpc::StatusCode;
 
 ErisAggregator::ErisAggregator(const ErisAggregatorBuilder &builder)
-    : server_{nullptr}, service_{this, builder}, started_{false},
-      listening_address_{builder.get_rpc_listen_address()} {
-  grpc::ServerBuilder srv_builder;
-  int port;
+    : service_{builder, this, builder} {}
 
-  char endpoint[255];
-  size_t endpointlen = sizeof(endpoint);
+void ErisAggregator::start(void) noexcept { service_.start(); }
 
-  zmq_ctx = zmq_ctx_new();
-  if (!zmq_ctx)
-    throw std::bad_alloc();
-
-  publisher = zmq_socket(zmq_ctx, ZMQ_PUB);
-  if (!publisher)
-    throw std::bad_alloc();
-
-  zmq_bind(publisher, builder.get_pubsub_listen_address().c_str());
-  zmq_getsockopt(publisher, ZMQ_LAST_ENDPOINT, &endpoint, &endpointlen);
-
-  publish_port_ = atoi(strchr(strchr(endpoint, ':') + 1, ':') + 1);
-
-  srv_builder.AddListeningPort(builder.get_rpc_listen_address(),
-                               grpc::InsecureServerCredentials(), &port);
-  srv_builder.RegisterService(&service_);
-
-  server_ = srv_builder.BuildAndStart();
-  rpc_port_ = port;
-}
-
-ErisAggregator::~ErisAggregator(void) {
-  if (started_)
-    stop();
-  zmq_close(publisher);
-  zmq_ctx_destroy(zmq_ctx);
-}
-
-void ErisAggregator::start(void) {
-  started_ = true;
-  char endpoint[255];
-  size_t endpointlen = sizeof(endpoint);
-
-  zmq_getsockopt(publisher, ZMQ_LAST_ENDPOINT, &endpoint, &endpointlen);
-
-  spdlog::info("listening RPC requests on {0}:{1} and publishing on {2}",
-               listening_address_.substr(0, listening_address_.find(':')),
-               rpc_port_, endpoint);
-  server_->Wait();
-}
-
-void ErisAggregator::stop(void) {
-  server_->Shutdown();
-  started_ = false;
-}
-
-bool ErisAggregator::publish_weight(const WeightUpdate &update) {
-  zmq_msg_t msg;
-
-  zmq_msg_init_size(&msg, update.ByteSizeLong());
-  update.SerializeToArray(zmq_msg_data(&msg), update.ByteSizeLong());
-  bool ret = zmq_msg_send(&msg, publisher, 0) > 0;
-  zmq_msg_close(&msg);
-
-  return ret;
-}
+void ErisAggregator::stop(void) noexcept { service_.stop(); }
 
 ErisAggregator::AggregatorImpl::AggregatorImpl(
     ErisAggregator *aggregator, const ErisAggregatorBuilder &builder) noexcept
@@ -111,7 +50,7 @@ grpc::ServerUnaryReactor *ErisAggregator::AggregatorImpl::SubmitWeights(
         for (const double val : ctx->weights_)
           update.add_weight(val);
 
-        ctx->aggregator_->publish_weight(update);
+        ctx->aggregator_->service_.publish(update);
         std::fill(ctx->weights_.begin(), ctx->weights_.end(), 0);
         ctx->contributors_ = 0;
         ++ctx->round_;
