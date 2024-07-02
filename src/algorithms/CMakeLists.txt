@@ -13,6 +13,7 @@ FetchContent_MakeAvailable(libzmq)
 add_library(algorithms_obj OBJECT
   eris/aggregator.cc
   eris/builder.cc
+  eris/client.cc
   eris/coordinator.cc
   eris/split.cc)
 target_include_directories(algorithms_obj PUBLIC

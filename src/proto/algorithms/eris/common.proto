@@ -6,5 +6,6 @@ message Empty {}
 
 message FragmentInfo {
     uint32 id = 1;
-    string aggregator = 2;
+    string submit_address = 2;
+    string publish_address = 3;
 }

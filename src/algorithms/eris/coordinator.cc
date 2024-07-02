@@ -34,23 +34,42 @@ grpc::ServerUnaryReactor *ErisCoordinator::CoordinatorImpl::Join(
   public:
     explicit Reactor(CoordinatorImpl *ctx, const JoinRequest *req,
                      InitialState *res) {
-      if (req->has_aggr_address() && !valid_aggregator(req->aggr_address())) {
-        Finish(
-            Status(StatusCode::INVALID_ARGUMENT,
-                   "An aggregator address must have the form <address>:<port> "
-                   "where address is a valid IPv4 address"));
+
+      if (req->has_submit_address() && !req->has_publish_address()) {
+        Finish(Status(StatusCode::INVALID_ARGUMENT,
+                      "Missing model updates publishing address"));
+        return;
+      } else if (req->has_publish_address() && !req->has_submit_address()) {
+        Finish(Status(StatusCode::INVALID_ARGUMENT,
+                      "Missing weight submission address"));
+        return;
+      } else if (req->has_submit_address() &&
+                 !valid_aggregator_submit(req->submit_address())) {
+        Finish(Status(
+            StatusCode::INVALID_ARGUMENT,
+            "A weight submission address must have the form <address>:<port>"
+            "where address is a valid IPv4 address"));
+        return;
+      } else if (req->has_publish_address() &&
+                 !valid_aggregator_publish(req->publish_address())) {
+        Finish(Status(StatusCode::INVALID_ARGUMENT,
+                      "A model updates publishing address must have the "
+                      "form tcp://<address>:<port>"
+                      "where address is a valid IPv4 address"));
         return;
       }
+
       {
         std::lock_guard<std::mutex> lk(ctx->mu_);
 
-        if (req->has_aggr_address()) {
+        if (req->has_submit_address()) {
           for (size_t i = 0; i < ctx->aggregators_.size(); ++i) {
-            if (ctx->aggregators_[i].aggregator().empty()) {
+            if (ctx->aggregators_[i].submit_address().empty()) {
               FragmentInfo info;
 
               info.set_id(i);
-              info.set_aggregator(req->aggr_address());
+              info.set_submit_address(req->submit_address());
+              info.set_publish_address(req->publish_address());
               ctx->coordinator_->service_.publish(info);
               res->set_assigned_fragment(i);
               ctx->aggregators_[i] = info;
@@ -61,7 +80,7 @@ grpc::ServerUnaryReactor *ErisCoordinator::CoordinatorImpl::Join(
         }
 
         for (size_t i = 0; i < ctx->aggregators_.size(); ++i)
-          if (!ctx->aggregators_[i].aggregator().empty())
+          if (!ctx->aggregators_[i].submit_address().empty())
             *res->add_aggregators() = ctx->aggregators_[i];
       }
 

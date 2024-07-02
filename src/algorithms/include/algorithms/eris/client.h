@@ -1,84 +1,62 @@
 #pragma once
 
 #include "algorithms/eris/aggregator.grpc.pb.h"
-#include "algorithms/eris/aggregator.pb.h"
+#include "algorithms/eris/aggregator.h"
 #include "algorithms/eris/builder.h"
-#include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
 #include "algorithms/eris/split.h"
 #include "erisfl/client.h"
-#include "grpcpp/channel.h"
-#include "grpcpp/server.h"
-#include "grpcpp/support/server_callback.h"
-#include <condition_variable>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
 
-// using grpc::Channel;
-// using grpc::Server;
+using eris::TrainingOptions;
 
-// class ErisClient : public Client,
-//                    public std::enable_shared_from_this<ErisClient> {
-// public:
-//   explicit ErisClient(std::optional<ErisAggregatorBuilder> = std::nullopt);
-//   void start(const std::string &) override;
+class ErisClient : public Client {
+public:
+  explicit ErisClient(void);
 
-// private:
-//   void start_aggregator(const ErisAggregatorBuilder &);
-//   void listen_coordinator_events(const std::string &);
-//   bool aggregator_connect(const coordinator::FragmentInfo &);
-//   void submit_parameters(uint32_t);
-//   void receive_parameters(uint32_t);
+  virtual ~ErisClient(void);
+  void start(void) override;
 
-//   class ClientImpl {
-//   public:
-//     explicit ClientImpl(std::shared_ptr<Channel>,
-//     std::shared_ptr<ErisClient>);
+  bool set_coordinator_rpc(const std::string &address);
+  bool set_coordinator_subscription(const std::string &address);
+  bool set_aggregator_config(const std::string &address, uint16_t submit_port,
+                             uint16_t publish_port);
 
-//     bool Join(void);
+protected:
+  bool join(void);
 
-//   private:
-//     std::unique_ptr<coordinator::Coordinator::Stub> stub_;
-//     std::shared_ptr<ErisClient> client_;
-//   };
+  std::mutex mu_;
+  TrainingOptions options_;
+  std::vector<void *> subscriptions_;
+  std::vector<std::unique_ptr<eris::Aggregator::Stub>> submitters_;
 
-//   class AggregatorImpl final : public aggregator::Aggregator::CallbackService
-//   { public:
-//     explicit AggregatorImpl(const ErisAggregatorBuilder &);
-//     grpc::ServerUnaryReactor *SubmitWeights(CallbackServerContext *,
-//                                             const aggregator::Weight *,
-//                                             aggregator::Empty *) override;
+  std::unique_ptr<ErisAggregator> aggregator_;
+  std::unique_ptr<std::thread> aggregator_thread_;
 
-//   private:
-//     uint32_t current_round_;
-//     uint32_t min_clients_;
-//     aggregator::WeightUpdate weight_update_;
-//     zmq::context_t zmq_context_;
-//     zmq::socket_t zmq_socket_;
-//   };
+private:
+  bool register_aggregator(const FragmentInfo &aggregator) noexcept;
+  void start_aggregator(uint32_t fragment_id) noexcept;
+  void coordinator_subscribe(void) noexcept;
 
-//   zmq::context_t zmq_context_;
+  std::string rpc_address_;
+  std::string subscribe_address_;
 
-//   //  zmq::socket_t publisher_sock_;
-//   std::unique_ptr<std::thread> coordinator_thread_;
-//   coordinator::TrainingOptions options_;
+  std::string aggr_address_;
+  uint16_t aggr_rpc_port_;
+  uint16_t aggr_publish_port_;
 
-//   // Parameter contribution fields
-//   std::vector<std::unique_ptr<aggregator::Aggregator::Stub>> aggregators_;
-//   std::vector<zmq::socket_t> subscriptions_;
-//   std::mutex aggregation_mutex_;
-//   uint32_t known_aggregators_;
-//   std::condition_variable all_aggregators_connected_;
+  void *zmq_ctx;
+  void *coord_sub;
 
-//   // Aggregation related fields
-//   std::unique_ptr<std::thread> aggregator_thread_;
-//   std::optional<ErisAggregatorBuilder> aggregator_builder_;
+  std::unique_ptr<std::thread> coord_updater_;
 
-//   RandomSplit splitter_;
-// };
+  RandomSplit splitter;
+  std::atomic_bool listening_;
+};

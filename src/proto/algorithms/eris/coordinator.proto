@@ -10,7 +10,8 @@ service Coordinator {
 
 
 message JoinRequest {
-    optional string aggr_address = 1;
+    optional string submit_address = 1;
+    optional string publish_address = 2;
 }
 
 message TrainingOptions {

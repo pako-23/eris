@@ -1,7 +1,6 @@
 #pragma once
 
 #include "algorithms/eris/builder.h"
-#include "algorithms/eris/common.pb.h"
 #include "spdlog/spdlog.h"
 #include "zmq.h"
 #include <grpcpp/impl/codegen/config_protobuf.h>

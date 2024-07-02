@@ -1,14 +1,13 @@
 #include "algorithms/eris/split.h"
-#include "algorithms/eris/coordinator.h"
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <random>
 
-RandomSplit::RandomSplit(const std::vector<double> &parameters, uint32_t splits,
-                         uint32_t seed) noexcept
-    : aggregator_mapping_{}, nsplits_{splits} {
+void RandomSplit::configure(const std::vector<double> &parameters,
+                            uint32_t splits, uint32_t seed) noexcept {
   aggregator_mapping_.reserve(parameters.size());
+  nsplits_ = splits;
 
   for (uint32_t i = 0; i < nsplits_; ++i)
     for (size_t j = 0; j < get_fragment_size(i); ++j)

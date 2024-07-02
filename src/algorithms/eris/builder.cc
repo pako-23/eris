@@ -1,8 +1,10 @@
 #include "algorithms/eris/builder.h"
+#include "algorithms/eris/client.h"
 #include "util/networking.h"
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>

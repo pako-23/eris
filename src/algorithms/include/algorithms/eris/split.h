@@ -15,17 +15,17 @@ using eris::WeightUpdate;
 class RandomSplit final {
 public:
   /**
-   * It constructs a RandomSplit object that splits a model with weights of the
-   * shape of parameters into splits fragments using a seed as seed of the
-   * random splitting function.
+   * It configures a RandomSplit object such that it splits a model with weights
+   * of the shape of parameters into splits fragments using seed as seed of
+   * the random splitting function.
    *
    * @param parameters The model weights.
    * @param splits The number of fragments that should be produced by the
    * splitting.
    * @param seed The seed of the randomic splitting function.
    */
-  RandomSplit(const std::vector<double> &parameters, uint32_t splits,
-              uint32_t seed) noexcept;
+  void configure(const std::vector<double> &parameters, uint32_t splits,
+                 uint32_t seed) noexcept;
 
   /**
    * It returns the size of a fragment with a given identifier.
@@ -63,6 +63,5 @@ private:
   std::vector<uint32_t>
       aggregator_mapping_; /**< The mapping from parameter position to assigned
                               aggregator */
-  const uint32_t
-      nsplits_; /**< The number of fragments the spliting should produce */
+  uint32_t nsplits_; /**< The number of fragments the spliting should produce */
 };

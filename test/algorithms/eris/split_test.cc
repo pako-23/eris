@@ -28,7 +28,9 @@ TEST_F(SplitTest, GetFragmentSizeDivisible) {
   const uint32_t splits = integer(rng);
   const uint32_t fragment_size = integer(rng);
   std::vector<double> parameters = test_parameters(splits * fragment_size);
-  RandomSplit splitter(parameters, splits, 42);
+  RandomSplit splitter;
+
+  splitter.configure(parameters, splits, 42);
 
   for (uint32_t i = 0; i < splits; ++i)
     ASSERT_EQ(splitter.get_fragment_size(i), fragment_size);
@@ -38,7 +40,9 @@ TEST_F(SplitTest, GetFragmentSizeNonDivisible) {
   const uint32_t splits = 10;
   const uint32_t fragment_size = integer(rng) + 3;
   std::vector<double> parameters = test_parameters(splits * fragment_size + 3);
-  RandomSplit splitter(parameters, splits, 42);
+  RandomSplit splitter;
+
+  splitter.configure(parameters, splits, 42);
 
   for (uint32_t i = 0; i < 3; ++i)
     ASSERT_EQ(splitter.get_fragment_size(i), fragment_size + 1);
@@ -50,7 +54,9 @@ TEST_F(SplitTest, GetFragmentSizeNonDivisibleByOne) {
   const uint32_t splits = 10;
   const uint32_t fragment_size = integer(rng) + 1;
   std::vector<double> parameters = test_parameters(splits * fragment_size + 1);
-  RandomSplit splitter(parameters, splits, 42);
+  RandomSplit splitter;
+
+  splitter.configure(parameters, splits, 42);
 
   ASSERT_EQ(splitter.get_fragment_size(0), fragment_size + 1);
   for (uint32_t i = 1; i < splits; ++i)
@@ -63,7 +69,9 @@ TEST_F(SplitTest, Split) {
   const uint32_t round = integer(rng);
   std::vector<double> parameters = test_parameters(splits * fragment_size);
 
-  RandomSplit splitter(parameters, splits, 42);
+  RandomSplit splitter;
+
+  splitter.configure(parameters, splits, 42);
   std::vector<FragmentWeights> fragments = splitter.split(parameters, round);
 
   size_t total_size = 0;
@@ -90,11 +98,15 @@ TEST_F(SplitTest, SplitSameSeed) {
   const uint32_t round = integer(rng);
   std::vector<double> parameters = test_parameters(splits * fragment_size);
 
-  RandomSplit first_splitter(parameters, splits, 42);
+  RandomSplit first_splitter;
+
+  first_splitter.configure(parameters, splits, 42);
   std::vector<FragmentWeights> first_fragments =
       first_splitter.split(parameters, round);
 
-  RandomSplit second_splitter(parameters, splits, 42);
+  RandomSplit second_splitter;
+
+  second_splitter.configure(parameters, splits, 42);
   std::vector<FragmentWeights> second_fragments =
       second_splitter.split(parameters, round);
 
@@ -110,11 +122,15 @@ TEST_F(SplitTest, SplitDifferentSeed) {
   const uint32_t round = integer(rng);
   std::vector<double> parameters = test_parameters(splits * fragment_size);
 
-  RandomSplit first_splitter(parameters, splits, 42);
+  RandomSplit first_splitter;
+
+  first_splitter.configure(parameters, splits, 42);
   std::vector<FragmentWeights> first_fragments =
       first_splitter.split(parameters, round);
 
-  RandomSplit second_splitter(parameters, splits, 100);
+  RandomSplit second_splitter;
+
+  second_splitter.configure(parameters, splits, 100);
   std::vector<FragmentWeights> second_fragments =
       second_splitter.split(parameters, round);
 
@@ -135,7 +151,9 @@ TEST_F(SplitTest, Reassemble) {
   const uint32_t round = integer(rng);
   std::vector<double> parameters = test_parameters(splits * fragment_size);
 
-  RandomSplit splitter(parameters, splits, 42);
+  RandomSplit splitter;
+
+  splitter.configure(parameters, splits, 42);
   std::vector<FragmentWeights> fragments = splitter.split(parameters, round);
 
   std::vector<WeightUpdate> updates(fragments.size());
