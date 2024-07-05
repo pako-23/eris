@@ -30,7 +30,11 @@ AddTests(eris_split_test)
 
 
 add_executable(eris_client_test
-  eris/client_test.cc)
+  eris/client_join_test.cc
+  eris/client_test.cc
+  eris/client_weight_submit_test.cc)
 target_link_libraries(eris_client_test PRIVATE
   proto_obj algorithms_static)
+target_include_directories(eris_client_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include)
 AddTests(eris_client_test)

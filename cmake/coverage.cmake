@@ -1,7 +1,8 @@
 function(EnableCoverage target)
   if (CMAKE_BUILD_TYPE STREQUAL Debug)
     target_compile_options(${target} PRIVATE --coverage
-                                             -fno-inline)
+      -fno-inline
+      -fprofile-update=atomic)
     target_link_options(${target} PUBLIC --coverage)
   endif()
 endfunction()
