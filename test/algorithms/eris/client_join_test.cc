@@ -20,7 +20,8 @@ static const uint32_t splits = 10;
 class ClientJoinTest : public testing::Test, public ErisMockClient {
 protected:
   ClientJoinTest(void)
-      : coordinator_{min_clients, rounds, split_seed, splits}, rng(time(NULL)),
+      : ErisMockClient{100},
+        coordinator_{min_clients, rounds, split_seed, splits}, rng(time(NULL)),
         dist(0, splits - 4) {}
   ~ClientJoinTest(void) {}
 

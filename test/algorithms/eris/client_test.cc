@@ -3,7 +3,7 @@
 
 class ErisClientTest : public testing::Test {
 protected:
-  ErisClientTest(void) {}
+  ErisClientTest(void) : client{100} {}
   ~ErisClientTest(void) {}
 
   ErisMockClient client;

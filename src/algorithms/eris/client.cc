@@ -6,8 +6,10 @@
 #include "algorithms/eris/coordinator.pb.h"
 #include "util/networking.h"
 #include "zmq.h"
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
@@ -202,6 +204,44 @@ bool ErisClient::ClientState::submit_weights(
   return success;
 }
 
+std::vector<double> ErisClient::ClientState::receive_weights(uint32_t *round) {
+  std::vector<WeightUpdate> weights(options_.splits());
+
+  std::vector<bool> done(options_.splits(), false);
+  size_t i = 0;
+
+  while (i < subscriptions_.size()) {
+    zmq_msg_t msg;
+
+    if (done[i]) {
+      ++i;
+      continue;
+    }
+
+    zmq_msg_init(&msg);
+
+    int size = zmq_msg_recv(&msg, subscriptions_[i], 0);
+    if (size <= 0) {
+      zmq_msg_close(&msg);
+      continue;
+    }
+    weights[i].ParseFromArray(zmq_msg_data(&msg), size);
+    zmq_msg_close(&msg);
+
+    if (weights[i].round() == *round) {
+      done[i] = true;
+      ++i;
+    } else if (weights[i].round() > *round) {
+      *round = weights[i].round();
+      std::fill(done.begin(), done.end(), false);
+      done[i] = true;
+      i = 0;
+    }
+  }
+
+  return splitter.reassemble(weights);
+}
+
 bool ErisClient::ClientState::register_aggregator(
     const FragmentInfo &aggregator) noexcept {
   std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
@@ -212,6 +252,8 @@ bool ErisClient::ClientState::register_aggregator(
       zmq_connect(subscriptions_[aggregator.id()],
                   aggregator.publish_address().c_str()) != 0)
     return false;
+
+  zmq_setsockopt(subscriptions_[aggregator.id()], ZMQ_SUBSCRIBE, "", 0);
 
   aggregator_joined_.notify_all();
   return true;
@@ -246,11 +288,12 @@ void ErisClient::ClientState::coordinator_subscribe(
 
   coord_updater_ = std::make_unique<std::thread>([this]() {
     FragmentInfo aggregator;
-    zmq_msg_t msg;
-
-    zmq_msg_init(&msg);
 
     while (coord_subscribed_) {
+      zmq_msg_t msg;
+
+      zmq_msg_init(&msg);
+
       int size = zmq_msg_recv(&msg, coord_sub, 0);
       if (size > 0) {
         std::lock_guard<std::mutex> lk(mu_);

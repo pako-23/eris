@@ -45,6 +45,7 @@ protected:
     bool configure(const ErisClient *client, const InitialState &state);
 
     bool submit_weights(const std::vector<double> &parameters, uint32_t round);
+    std::vector<double> receive_weights(uint32_t *round);
 
     inline void unlock(void) { mu_.unlock(); }
     inline void lock(void) { mu_.lock(); }

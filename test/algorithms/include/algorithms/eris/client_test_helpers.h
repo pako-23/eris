@@ -1,6 +1,5 @@
 #pragma once
 
-#include "algorithms/eris/aggregator.grpc.pb.h"
 #include "algorithms/eris/builder.h"
 #include "algorithms/eris/client.h"
 #include "algorithms/eris/common.pb.h"
@@ -8,6 +7,7 @@
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
 #include "algorithms/eris/service.h"
+#include <bits/types/struct_sched_param.h>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -27,56 +27,101 @@ using grpc::CallbackServerContext;
 
 class ErisMockClient : public ErisClient {
 public:
-  explicit ErisMockClient(void) : ErisClient{} {}
+  explicit ErisMockClient(size_t parameters_size)
+      : ErisClient{}, parameters_size_{parameters_size} {}
 
   std::vector<double> get_parameters(void) const {
     std::default_random_engine rng(time(NULL));
     std::uniform_real_distribution<double> dist(0.0, 1.0);
-    std::vector<double> weigths(100);
+    std::vector<double> weigths(parameters_size_);
 
-    for (int i = 0; i < 100; ++i)
+    for (size_t i = 0; i < parameters_size_; ++i)
       weigths[i] = dist(rng);
 
     return weigths;
   }
   void set_parameters(const std::vector<double> &parameters) {}
   void fit(void) {}
+
+private:
+  size_t parameters_size_;
 };
 
-// class ErisMockClient : public ErisClient {
-// public:
-//   explicit ErisMockClient(void) : ErisClient{} {}
+class MockAggregator final {
+public:
+  explicit MockAggregator(void)
+      : service_{MockAggregatorBuilder{}, this}, received{0} {
 
-//   std::vector<double> get_parameters(void) {
-//     std::default_random_engine rng(time(NULL));
-//     std::uniform_real_distribution<double> dist(0.0, 1.0);
-//     std::vector<double> weigths(100);
+    thread_ = std::make_unique<std::thread>([this]() { service_.start(); });
 
-//     for (int i = 0; i < 100; ++i)
-//       weigths[i] = dist(rng);
+    std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
+        get_rpc_address(), grpc::InsecureChannelCredentials());
 
-//     return weigths;
-//   }
-//   void set_parameters(const std::vector<double> &parameters) {}
-//   void fit(void) {}
+    bool connected = channel->WaitForConnected(
+        std::chrono::system_clock::now() + std::chrono::minutes(1));
 
-//   bool join(void) { return ErisClient::join(); }
+    if (!connected)
+      throw std::runtime_error{"failed to setup mock coordinator"};
+  }
 
-//   inline const TrainingOptions &options(void) const { return options_; }
+  ~MockAggregator(void) {
+    service_.stop();
+    thread_->join();
+  }
 
-//   inline const std::vector<void *> &subscriptions(void) const {
-//     return subscriptions_;
-//   }
+  inline std::string get_rpc_address(void) const {
+    return "127.0.0.1:" + std::to_string(service_.get_rpc_port());
+  }
 
-//   inline const std::vector<std::unique_ptr<eris::Aggregator::Stub>> &
-//   submitters(void) const {
-//     return submitters_;
-//   }
+  inline std::string get_pubsub_address(void) const {
+    return "tcp://127.0.0.1:" + std::to_string(service_.get_publish_port());
+  }
 
-//   inline bool is_aggregator(void) const {
-//     return aggregator_ != nullptr && aggregator_thread_ != nullptr;
-//   }
-// };
+  inline size_t get_received(void) const { return received; }
+
+  inline void publish_update(const eris::WeightUpdate &update) {
+    service_.publish(update);
+  }
+
+private:
+  class MockAggregatorBuilder : public ErisServiceBuilder {
+  public:
+    explicit MockAggregatorBuilder(void) : ErisServiceBuilder{} {
+      add_rpc_port(0);
+      add_publish_port(0);
+    }
+  };
+
+  class MockAggregatorService : public eris::Aggregator::CallbackService {
+  public:
+    explicit MockAggregatorService(MockAggregator *aggr) noexcept
+        : aggr_{aggr} {}
+
+    grpc::ServerUnaryReactor *SubmitWeights(CallbackServerContext *ctx,
+                                            const FragmentWeights *req,
+                                            eris::Empty *res) override {
+      class Reactor : public grpc::ServerUnaryReactor {
+      public:
+        explicit Reactor(MockAggregator *aggr) {
+          ++aggr->received;
+          Finish(grpc::Status::OK);
+        }
+
+        void OnDone(void) override { delete this; }
+      };
+
+      return new Reactor(aggr_);
+    }
+
+  private:
+    MockAggregator *aggr_;
+  };
+
+  ErisService<MockAggregatorService> service_;
+  std::unique_ptr<std::thread> thread_;
+
+  std::atomic_size_t received;
+};
 
 class MockCoordinator {
 public:
