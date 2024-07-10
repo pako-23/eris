@@ -16,10 +16,10 @@ static const uint32_t aggregator_count = 5;
 static const uint32_t split_seed = 42;
 static const size_t parameters_size = 130;
 
-class ClientReceiveWeightsTest : public testing::Test, public ErisMockClient {
+class ClientReceiveWeightsTest : public testing::Test, public MockClient {
 protected:
   ClientReceiveWeightsTest(void)
-      : ErisMockClient{parameters_size}, expected_{generate_random_vector()} {
+      : MockClient{parameters_size}, expected_{generate_random_vector()} {
     splitter.configure(expected_, aggregator_count, split_seed);
 
     InitialState state;

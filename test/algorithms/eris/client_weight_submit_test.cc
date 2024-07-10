@@ -10,9 +10,9 @@
 
 static const size_t aggregator_count = 5;
 
-class ClientWeightSubmitTest : public testing::Test, public ErisMockClient {
+class ClientWeightSubmitTest : public testing::Test, public MockClient {
 protected:
-  ClientWeightSubmitTest(void) : ErisMockClient{100} {}
+  ClientWeightSubmitTest(void) : MockClient{100} {}
 
   ~ClientWeightSubmitTest(void) {}
 

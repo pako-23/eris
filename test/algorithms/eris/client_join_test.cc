@@ -17,12 +17,11 @@ static const uint32_t rounds = 10;
 static const uint32_t split_seed = 42;
 static const uint32_t splits = 10;
 
-class ClientJoinTest : public testing::Test, public ErisMockClient {
+class ClientJoinTest : public testing::Test, public MockClient {
 protected:
   ClientJoinTest(void)
-      : ErisMockClient{100},
-        coordinator_{min_clients, rounds, split_seed, splits}, rng(time(NULL)),
-        dist(0, splits - 4) {}
+      : MockClient{100}, coordinator_{min_clients, rounds, split_seed, splits},
+        rng(time(NULL)), dist(0, splits - 4) {}
   ~ClientJoinTest(void) {}
 
   void check_aggregators(ClientState &state) {

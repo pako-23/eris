@@ -7,6 +7,7 @@
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
 #include "algorithms/eris/service.h"
+#include "algorithms/eris/split.h"
 #include <bits/types/struct_sched_param.h>
 #include <cstddef>
 #include <cstdint>
@@ -15,20 +16,25 @@
 #include <grpcpp/support/server_callback.h>
 #include <grpcpp/support/status.h>
 #include <gtest/gtest.h>
+#include <limits>
 #include <memory>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 using eris::InitialState;
 using eris::JoinRequest;
 using eris::TrainingOptions;
 using grpc::CallbackServerContext;
 
-class ErisMockClient : public ErisClient {
+class MockClient : public ErisClient {
 public:
-  explicit ErisMockClient(size_t parameters_size)
-      : ErisClient{}, parameters_size_{parameters_size} {}
+  explicit MockClient(size_t parameters_size,
+                      std::vector<std::vector<double>> *expected = nullptr)
+      : ErisClient{}, parameters_size_{parameters_size}, fit_calls_{0},
+        evaluate_calls_{0}, set_parameters_calls_{0}, expected_{expected} {}
 
   std::vector<double> get_parameters(void) const {
     std::default_random_engine rng(time(NULL));
@@ -40,17 +46,44 @@ public:
 
     return weigths;
   }
-  void set_parameters(const std::vector<double> &parameters) {}
-  void fit(void) {}
+  void set_parameters(const std::vector<double> &parameters) {
+    ++set_parameters_calls_;
+    if (!expected_)
+      return;
+
+    EXPECT_EQ(parameters.size(),
+              (*expected_)[set_parameters_calls_ - 1].size());
+
+    for (size_t i = 0; i < (*expected_)[set_parameters_calls_ - 1].size(); ++i)
+      EXPECT_NEAR((*expected_)[set_parameters_calls_ - 1][i], parameters[i],
+                  5 * std::numeric_limits<double>::epsilon());
+  }
+
+  void fit(void) { ++fit_calls_; }
+
+  void evaluate(void) { ++evaluate_calls_; };
+
+  inline uint32_t get_fit_calls(void) const { return fit_calls_; }
+  inline uint32_t get_evaluate_calls(void) const { return evaluate_calls_; }
+  inline uint32_t get_set_parameters_calls(void) const {
+    return set_parameters_calls_;
+  }
 
 private:
   size_t parameters_size_;
+
+  uint32_t fit_calls_;
+  uint32_t evaluate_calls_;
+  uint32_t set_parameters_calls_;
+
+  std::vector<std::vector<double>> *expected_;
 };
 
 class MockAggregator final {
 public:
   explicit MockAggregator(void)
-      : service_{MockAggregatorBuilder{}, this}, received{0} {
+      : service_{MockAggregatorBuilder{}, this}, received{0},
+        min_clients_{std::nullopt}, round_{0}, weights_{nullptr} {
 
     thread_ = std::make_unique<std::thread>([this]() { service_.start(); });
 
@@ -73,11 +106,19 @@ public:
     return "127.0.0.1:" + std::to_string(service_.get_rpc_port());
   }
 
+  inline void set_publish_weights(std::vector<WeightUpdate> *weights) {
+    weights_ = weights;
+  }
+
   inline std::string get_pubsub_address(void) const {
     return "tcp://127.0.0.1:" + std::to_string(service_.get_publish_port());
   }
 
   inline size_t get_received(void) const { return received; }
+
+  inline void set_min_clients(uint32_t min_clients) {
+    min_clients_ = min_clients;
+  }
 
   inline void publish_update(const eris::WeightUpdate &update) {
     service_.publish(update);
@@ -103,7 +144,11 @@ private:
       class Reactor : public grpc::ServerUnaryReactor {
       public:
         explicit Reactor(MockAggregator *aggr) {
-          ++aggr->received;
+          uint32_t received = ++aggr->received;
+          if (aggr->min_clients_.has_value() &&
+              received % aggr->min_clients_.value() == 0)
+            aggr->service_.publish((*(aggr->weights_))[aggr->round_++]);
+
           Finish(grpc::Status::OK);
         }
 
@@ -121,6 +166,9 @@ private:
   std::unique_ptr<std::thread> thread_;
 
   std::atomic_size_t received;
+  std::optional<uint32_t> min_clients_;
+  uint32_t round_;
+  std::vector<WeightUpdate> *weights_;
 };
 
 class MockCoordinator {
@@ -173,6 +221,7 @@ public:
     info.set_submit_address(submit_address);
     info.set_publish_address(publish_address);
 
+    service_.publish(info);
     aggregators_[id] = std::make_optional<FragmentInfo>(info);
   }
 

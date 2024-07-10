@@ -30,6 +30,27 @@ bool ErisClient::start(void) {
   if (rpc_address_.empty() || subscribe_address_.empty())
     return false;
 
+  bool joined = false;
+  if (aggr_address_.empty())
+    joined = state_.join(this, rpc_address_, subscribe_address_);
+  else
+    joined = state_.join(this, rpc_address_, subscribe_address_, &aggr_address_,
+                         &aggr_rpc_port_, &aggr_publish_port_);
+
+  if (!joined)
+    return false;
+
+  uint32_t round = 0;
+
+  while (round != state_.get_options().rounds()) {
+    fit();
+
+    state_.submit_weights(get_parameters(), round);
+    set_parameters(state_.receive_weights(&round));
+    evaluate();
+    ++round;
+  }
+
   return true;
 }
 
