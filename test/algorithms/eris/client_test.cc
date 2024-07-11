@@ -39,7 +39,7 @@ protected:
 
   void generate_parameters(void) {
     std::default_random_engine rng(time(NULL));
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    std::uniform_real_distribution<float> dist(0.0, 1.0);
 
     expected_parameters.resize(rounds);
 
@@ -70,7 +70,7 @@ protected:
     }
   }
 
-  std::vector<std::vector<double>> expected_parameters;
+  std::vector<std::vector<float>> expected_parameters;
   std::vector<std::vector<WeightUpdate>> publish_weights;
   std::array<MockClient, client_count> clients;
   std::array<MockAggregator, splits> aggregators;
@@ -80,24 +80,24 @@ protected:
 
 TEST_F(ErisClientConfigTest, JoinMissingRPCAddress) {
   EXPECT_TRUE(client.set_coordinator_subscription("tcp://127.0.0.0:5000"));
-  EXPECT_FALSE(client.start());
+  EXPECT_FALSE(client.train());
 }
 
 TEST_F(ErisClientConfigTest, JoinMissingPublishAddress) {
   EXPECT_TRUE(client.set_coordinator_rpc("127.0.0.0:5000"));
-  EXPECT_FALSE(client.start());
+  EXPECT_FALSE(client.train());
 }
 
 TEST_F(ErisClientConfigTest, SetInvalidRPCAddress) {
   EXPECT_TRUE(client.set_coordinator_subscription("tcp://127.0.0.1:1231"));
   EXPECT_FALSE(client.set_coordinator_rpc("invalid address"));
-  EXPECT_FALSE(client.start());
+  EXPECT_FALSE(client.train());
 }
 
 TEST_F(ErisClientConfigTest, SetInvalidPublishAddress) {
   EXPECT_TRUE(client.set_coordinator_rpc("127.0.0.1:1231"));
   EXPECT_FALSE(client.set_coordinator_subscription("invalid address"));
-  EXPECT_FALSE(client.start());
+  EXPECT_FALSE(client.train());
 }
 
 TEST_F(ErisClientConfigTest, SetValidAggregatorConfig) {
@@ -117,7 +117,7 @@ TEST_F(ErisClientTest, FailClientJoin) {
   EXPECT_TRUE(clients[0].set_coordinator_rpc(coordinator.get_rpc_address()));
   EXPECT_TRUE(clients[0].set_coordinator_subscription(
       coordinator.get_pubsub_address()));
-  EXPECT_FALSE(clients[0].start());
+  EXPECT_FALSE(clients[0].train());
 }
 
 TEST_F(ErisClientTest, FailAggregatorJoin) {
@@ -126,7 +126,7 @@ TEST_F(ErisClientTest, FailAggregatorJoin) {
   EXPECT_TRUE(clients[0].set_coordinator_subscription(
       coordinator.get_pubsub_address()));
   EXPECT_TRUE(clients[0].set_aggregator_config("127.0.0.1", 1231, 120));
-  EXPECT_FALSE(clients[0].start());
+  EXPECT_FALSE(clients[0].train());
 }
 
 TEST_F(ErisClientTest, Training) {
@@ -144,7 +144,7 @@ TEST_F(ErisClientTest, Training) {
   for (size_t i = 0; i < clients.size(); ++i)
     threads.emplace_back(
         [](MockClient *client) {
-          EXPECT_TRUE(client->start());
+          EXPECT_TRUE(client->train());
           EXPECT_EQ(client->get_fit_calls(), rounds);
           EXPECT_EQ(client->get_set_parameters_calls(), rounds);
           EXPECT_EQ(client->get_evaluate_calls(), rounds);

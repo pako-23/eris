@@ -35,6 +35,7 @@ grpc::ServerUnaryReactor *ErisAggregator::AggregatorImpl::SubmitWeights(
 
       std::lock_guard lk(ctx->mu_);
       if (req->round() != ctx->round_) {
+
         Finish(Status(StatusCode::INVALID_ARGUMENT, "Wrong round number"));
         return;
       }
@@ -47,7 +48,7 @@ grpc::ServerUnaryReactor *ErisAggregator::AggregatorImpl::SubmitWeights(
 
         update.set_round(ctx->round_);
         update.set_contributors(ctx->contributors_);
-        for (const double val : ctx->weights_)
+        for (const float val : ctx->weights_)
           update.add_weight(val);
 
         ctx->aggregator_->service_.publish(update);

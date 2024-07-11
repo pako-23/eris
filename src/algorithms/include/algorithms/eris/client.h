@@ -23,7 +23,7 @@ public:
   explicit ErisClient(void);
 
   virtual ~ErisClient(void) = default;
-  bool start(void) override;
+  bool train(void) override;
 
   bool set_coordinator_rpc(const std::string &address);
   bool set_coordinator_subscription(const std::string &address);
@@ -36,16 +36,16 @@ protected:
     explicit ClientState(void);
     ~ClientState(void);
 
-    bool join(const ErisClient *client, const std::string &rpc_address,
+    bool join(ErisClient *client, const std::string &rpc_address,
               const std::string &subscribe_address,
               const std::string *listen_address = nullptr,
               const uint16_t *rpc_port = nullptr,
               const uint16_t *publish_port = nullptr);
 
-    bool configure(const ErisClient *client, const InitialState &state);
+    bool configure(ErisClient *client, const InitialState &state);
 
-    bool submit_weights(const std::vector<double> &parameters, uint32_t round);
-    std::vector<double> receive_weights(uint32_t *round);
+    bool submit_weights(const std::vector<float> &parameters, uint32_t round);
+    std::vector<float> receive_weights(uint32_t *round);
 
     inline void unlock(void) { mu_.unlock(); }
     inline void lock(void) { mu_.lock(); }

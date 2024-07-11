@@ -1,5 +1,4 @@
 include(logging)
-include(pybind11)
 
 find_package(gRPC REQUIRED)
 
@@ -20,9 +19,7 @@ target_include_directories(algorithms_obj PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/include
   ${LOGGING_INCLUDE_DIR}
-  ${Python_INCLUDE_DIRS}
-  ${libzmq_SOURCE_DIR}/include
-  ${pybind11_INCLUDE_DIR})
+  ${libzmq_SOURCE_DIR}/include)
 set_target_properties(algorithms_obj PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(algorithms_obj PUBLIC

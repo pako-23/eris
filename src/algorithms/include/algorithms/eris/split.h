@@ -24,7 +24,7 @@ public:
    * splitting.
    * @param seed The seed of the randomic splitting function.
    */
-  void configure(const std::vector<double> &parameters, uint32_t splits,
+  void configure(const std::vector<float> &parameters, uint32_t splits,
                  uint32_t seed) noexcept;
 
   /**
@@ -43,7 +43,7 @@ public:
    * aggregators.
    * @return The new weights of the model.
    */
-  std::vector<double>
+  std::vector<float>
   reassemble(const std::vector<WeightUpdate> &updates) const noexcept;
 
   /**
@@ -56,7 +56,7 @@ public:
    * @param round The current training round.
    * @return The list of weights that should be shared with the aggregators.
    */
-  std::vector<FragmentWeights> split(const std::vector<double> &parameters,
+  std::vector<FragmentWeights> split(const std::vector<float> &parameters,
                                      uint32_t round) noexcept;
 
 private:

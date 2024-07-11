@@ -11,11 +11,11 @@ service Aggregator {
 
 message FragmentWeights {
     uint32 round = 1;
-    repeated double weight = 2;
+    repeated float weight = 2;
 }
 
 message WeightUpdate {
     uint32 round = 1;
     uint32 contributors = 2;
-    repeated double weight = 3;
+    repeated float weight = 3;
 }

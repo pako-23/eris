@@ -45,10 +45,10 @@ protected:
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
 
-  std::vector<double> generate_random_vector(void) {
-    std::vector<double> vec(parameters_size);
+  std::vector<float> generate_random_vector(void) {
+    std::vector<float> vec(parameters_size);
     std::default_random_engine rng(time(NULL));
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    std::uniform_real_distribution<float> dist(0.0, 1.0);
 
     for (size_t i = 0; i < vec.size(); ++i)
       vec[i] = dist(rng);
@@ -77,7 +77,7 @@ protected:
 
   std::array<MockAggregator, aggregator_count> aggregators_;
   std::array<ClientState, 8> states_;
-  std::vector<double> expected_;
+  std::vector<float> expected_;
   RandomSplit splitter;
 };
 
@@ -89,13 +89,13 @@ TEST_F(ClientReceiveWeightsTest, ReceiveWeights) {
     threads.emplace_back(
         [this](ClientState *state) {
           uint32_t round = 0;
-          std::vector<double> updates = state->receive_weights(&round);
+          std::vector<float> updates = state->receive_weights(&round);
 
           EXPECT_EQ(updates.size(), expected_.size());
 
           for (size_t i = 0; i < updates.size(); ++i)
             EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<double>::epsilon())
+                        5 * std::numeric_limits<float>::epsilon())
                 << "Elements are different at index " << i;
           EXPECT_EQ(round, 0);
         },
@@ -118,13 +118,13 @@ TEST_F(ClientReceiveWeightsTest, ReceiveOlderWeights) {
     threads.emplace_back(
         [this](ClientState *state) {
           uint32_t round = 1;
-          std::vector<double> updates = state->receive_weights(&round);
+          std::vector<float> updates = state->receive_weights(&round);
 
           EXPECT_EQ(updates.size(), expected_.size());
 
           for (size_t i = 0; i < updates.size(); ++i)
             EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<double>::epsilon())
+                        5 * std::numeric_limits<float>::epsilon())
                 << "Elements are different at index " << i;
           EXPECT_EQ(round, 1);
         },
@@ -153,13 +153,13 @@ TEST_F(ClientReceiveWeightsTest, ReceiveNewerWeights) {
     threads.emplace_back(
         [this](ClientState *state) {
           uint32_t round = 0;
-          std::vector<double> updates = state->receive_weights(&round);
+          std::vector<float> updates = state->receive_weights(&round);
 
           EXPECT_EQ(updates.size(), expected_.size());
 
           for (size_t i = 0; i < updates.size(); ++i)
             EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<double>::epsilon())
+                        5 * std::numeric_limits<float>::epsilon())
                 << "Elements are different at index " << i;
 
           EXPECT_EQ(round, 1);
@@ -195,13 +195,13 @@ TEST_F(ClientReceiveWeightsTest, ReceiveNewerWeightsMultipleTimes) {
     threads.emplace_back(
         [this](ClientState *state) {
           uint32_t round = 0;
-          std::vector<double> updates = state->receive_weights(&round);
+          std::vector<float> updates = state->receive_weights(&round);
 
           EXPECT_EQ(updates.size(), expected_.size());
 
           for (size_t i = 0; i < updates.size(); ++i)
             EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<double>::epsilon())
+                        5 * std::numeric_limits<float>::epsilon())
                 << "Elements are different at index " << i;
 
           EXPECT_EQ(round, 2);

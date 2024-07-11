@@ -9,8 +9,8 @@ class SplitTest : public testing::Test {
 protected:
   SplitTest(void) : rng(time(NULL)), real{0.0, 1.0}, integer{1, 100} {}
 
-  std::vector<double> test_parameters(size_t size) {
-    std::vector<double> parameters;
+  std::vector<float> test_parameters(size_t size) {
+    std::vector<float> parameters;
 
     parameters.reserve(size);
     for (size_t i = 0; i < size; ++i)
@@ -20,14 +20,14 @@ protected:
   }
 
   std::default_random_engine rng;
-  std::uniform_real_distribution<double> real;
+  std::uniform_real_distribution<float> real;
   std::uniform_int_distribution<uint32_t> integer;
 };
 
 TEST_F(SplitTest, GetFragmentSizeDivisible) {
   const uint32_t splits = integer(rng);
   const uint32_t fragment_size = integer(rng);
-  std::vector<double> parameters = test_parameters(splits * fragment_size);
+  std::vector<float> parameters = test_parameters(splits * fragment_size);
   RandomSplit splitter;
 
   splitter.configure(parameters, splits, 42);
@@ -39,7 +39,7 @@ TEST_F(SplitTest, GetFragmentSizeDivisible) {
 TEST_F(SplitTest, GetFragmentSizeNonDivisible) {
   const uint32_t splits = 10;
   const uint32_t fragment_size = integer(rng) + 3;
-  std::vector<double> parameters = test_parameters(splits * fragment_size + 3);
+  std::vector<float> parameters = test_parameters(splits * fragment_size + 3);
   RandomSplit splitter;
 
   splitter.configure(parameters, splits, 42);
@@ -53,7 +53,7 @@ TEST_F(SplitTest, GetFragmentSizeNonDivisible) {
 TEST_F(SplitTest, GetFragmentSizeNonDivisibleByOne) {
   const uint32_t splits = 10;
   const uint32_t fragment_size = integer(rng) + 1;
-  std::vector<double> parameters = test_parameters(splits * fragment_size + 1);
+  std::vector<float> parameters = test_parameters(splits * fragment_size + 1);
   RandomSplit splitter;
 
   splitter.configure(parameters, splits, 42);
@@ -67,7 +67,7 @@ TEST_F(SplitTest, Split) {
   const uint32_t splits = integer(rng) + 2;
   const uint32_t fragment_size = integer(rng);
   const uint32_t round = integer(rng);
-  std::vector<double> parameters = test_parameters(splits * fragment_size);
+  std::vector<float> parameters = test_parameters(splits * fragment_size);
 
   RandomSplit splitter;
 
@@ -96,7 +96,7 @@ TEST_F(SplitTest, SplitSameSeed) {
   const uint32_t splits = integer(rng) + 2;
   const uint32_t fragment_size = integer(rng);
   const uint32_t round = integer(rng);
-  std::vector<double> parameters = test_parameters(splits * fragment_size);
+  std::vector<float> parameters = test_parameters(splits * fragment_size);
 
   RandomSplit first_splitter;
 
@@ -120,7 +120,7 @@ TEST_F(SplitTest, SplitDifferentSeed) {
   const uint32_t splits = integer(rng) + 2;
   const uint32_t fragment_size = integer(rng);
   const uint32_t round = integer(rng);
-  std::vector<double> parameters = test_parameters(splits * fragment_size);
+  std::vector<float> parameters = test_parameters(splits * fragment_size);
 
   RandomSplit first_splitter;
 
@@ -149,7 +149,7 @@ TEST_F(SplitTest, Reassemble) {
   const uint32_t fragment_size = 1; // integer(rng);
   const uint32_t contributors = integer(rng);
   const uint32_t round = integer(rng);
-  std::vector<double> parameters = test_parameters(splits * fragment_size);
+  std::vector<float> parameters = test_parameters(splits * fragment_size);
 
   RandomSplit splitter;
 
@@ -165,10 +165,10 @@ TEST_F(SplitTest, Reassemble) {
       updates[i].add_weight(contributors * fragments[i].weight(j));
   }
 
-  std::vector<double> reassembled = splitter.reassemble(updates);
+  std::vector<float> reassembled = splitter.reassemble(updates);
 
   EXPECT_EQ(parameters.size(), reassembled.size());
   for (size_t i = 0; i < parameters.size(); ++i)
     EXPECT_NEAR(parameters[i], reassembled[i],
-                5 * std::numeric_limits<double>::epsilon());
+                5 * std::numeric_limits<float>::epsilon());
 }

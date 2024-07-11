@@ -106,7 +106,7 @@ private:
 
   private:
     uint32_t round_; /**< The current round of the training */
-    std::vector<double>
+    std::vector<float>
         weights_; /**< The accumulated weights shared by the clients */
     uint32_t contributors_; /**< The number of contributing clients */
     std::mutex

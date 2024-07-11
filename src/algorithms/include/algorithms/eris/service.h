@@ -7,7 +7,6 @@
 #include <grpcpp/impl/service_type.h>
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
-#include <iostream>
 #include <string>
 #include <type_traits>
 

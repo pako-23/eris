@@ -21,8 +21,8 @@ static const size_t fragment_size = 10;
 static const uint32_t fragment_id = 1;
 
 static void test_submit(const std::string &aggregator, uint32_t round,
-                        std::vector<double>::const_iterator begin,
-                        std::vector<double>::const_iterator end,
+                        std::vector<float>::const_iterator begin,
+                        std::vector<float>::const_iterator end,
                         std::function<void(Status)> check) {
   FragmentWeights req;
   eris::Empty res;
@@ -106,7 +106,7 @@ protected:
 
   void generate_weights(void) {
     std::default_random_engine rng(time(NULL));
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    std::uniform_real_distribution<float> dist(0.0, 1.0);
 
     weights.clear();
     weights.reserve(min_clients);
@@ -114,7 +114,7 @@ protected:
     expected.resize(fragment_size, 0.0);
 
     for (uint32_t i = 0; i < min_clients; ++i) {
-      std::vector<double> client_weights;
+      std::vector<float> client_weights;
       client_weights.reserve(fragment_size);
 
       for (size_t j = 0; j < fragment_size; ++j) {
@@ -146,8 +146,8 @@ protected:
   std::unique_ptr<std::thread> server_thread_;
   void *ctx[subscribers];
   void *subscriber[subscribers];
-  std::vector<std::vector<double>> weights;
-  std::vector<double> expected;
+  std::vector<std::vector<float>> weights;
+  std::vector<float> expected;
 };
 
 TEST_F(ErisAggregatorTest, Initialization) {
@@ -178,7 +178,7 @@ TEST_F(ErisAggregatorTest, WeightSubmission) {
 
           for (int i = 0; i < update.weight_size(); ++i)
             EXPECT_NEAR(update.weight(i), expected[i],
-                        5 * std::numeric_limits<double>::epsilon());
+                        5 * std::numeric_limits<float>::epsilon());
           zmq_msg_close(&msg);
 
           zmq_msg_init(&msg);
@@ -277,7 +277,7 @@ TEST_F(ErisAggregatorTest, MultipleRounds) {
 
             for (int i = 0; i < update.weight_size(); ++i)
               EXPECT_NEAR(update.weight(i), expected[i],
-                          5 * std::numeric_limits<double>::epsilon());
+                          5 * std::numeric_limits<float>::epsilon());
             zmq_msg_close(&msg);
           }
 

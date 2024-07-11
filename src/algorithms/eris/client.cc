@@ -4,17 +4,22 @@
 #include "algorithms/eris/builder.h"
 #include "algorithms/eris/coordinator.grpc.pb.h"
 #include "algorithms/eris/coordinator.pb.h"
+#include "spdlog/spdlog.h"
 #include "util/networking.h"
 #include "zmq.h"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
+#include <grpcpp/support/channel_arguments.h>
 #include <grpcpp/support/status.h>
+#include <grpcpp/support/stub_options.h>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -26,9 +31,16 @@ ErisClient::ErisClient(void)
     : rpc_address_{}, subscribe_address_{}, aggr_address_{}, aggr_rpc_port_{0},
       state_{} {}
 
-bool ErisClient::start(void) {
-  if (rpc_address_.empty() || subscribe_address_.empty())
+bool ErisClient::train(void) {
+  if (rpc_address_.empty()) {
+    spdlog::error("missing coordinator RPC address");
     return false;
+  }
+
+  if (subscribe_address_.empty()) {
+    spdlog::error("missing coordinator publish address");
+    return false;
+  }
 
   bool joined = false;
   if (aggr_address_.empty())
@@ -37,17 +49,24 @@ bool ErisClient::start(void) {
     joined = state_.join(this, rpc_address_, subscribe_address_, &aggr_address_,
                          &aggr_rpc_port_, &aggr_publish_port_);
 
-  if (!joined)
+  if (!joined) {
+    spdlog::error("failed to join the training");
     return false;
+  }
 
   uint32_t round = 0;
 
   while (round != state_.get_options().rounds()) {
     fit();
 
-    state_.submit_weights(get_parameters(), round);
+    if (!state_.submit_weights(get_parameters(), round)) {
+      spdlog::error("failed to submit weights to the aggregators");
+      return false;
+    }
+
     set_parameters(state_.receive_weights(&round));
     evaluate();
+    spdlog::info("finished with round {0}", round);
     ++round;
   }
 
@@ -55,16 +74,21 @@ bool ErisClient::start(void) {
 }
 
 bool ErisClient::set_coordinator_rpc(const std::string &address) {
-  if (!valid_aggregator_submit(address))
+  if (!valid_aggregator_submit(address)) {
+    spdlog::error("the provided coordinator RPC address is not valid");
     return false;
+  }
 
   rpc_address_ = address;
   return true;
 }
 
 bool ErisClient::set_coordinator_subscription(const std::string &address) {
-  if (!valid_aggregator_publish(address))
+  if (!valid_aggregator_publish(address)) {
+    spdlog::error("the provided coordinator subscription address is not valid");
     return false;
+  }
+
   subscribe_address_ = address;
   return true;
 }
@@ -74,8 +98,10 @@ bool ErisClient::set_aggregator_config(const std::string &address,
                                        uint16_t publish_port) {
 
   if (!valid_ipv4(address) || address == "0.0.0.0" || submit_port == 0 ||
-      publish_port == 0 || submit_port == publish_port)
+      publish_port == 0 || submit_port == publish_port) {
+    spdlog::error("the provided aggregator configuration is not valid");
     return false;
+  }
 
   aggr_address_ = address;
   aggr_rpc_port_ = submit_port;
@@ -113,7 +139,7 @@ ErisClient::ClientState::~ClientState(void) {
   zmq_ctx_destroy(zmq_ctx);
 }
 
-bool ErisClient::ClientState::join(const ErisClient *client,
+bool ErisClient::ClientState::join(ErisClient *client,
                                    const std::string &rpc_address,
                                    const std::string &subscribe_address,
                                    const std::string *listen_address,
@@ -170,7 +196,7 @@ bool ErisClient::ClientState::join(const ErisClient *client,
   return success;
 }
 
-bool ErisClient::ClientState::configure(const ErisClient *client,
+bool ErisClient::ClientState::configure(ErisClient *client,
                                         const InitialState &state) {
   {
     std::lock_guard<std::mutex> state_lk(mu_);
@@ -190,42 +216,65 @@ bool ErisClient::ClientState::configure(const ErisClient *client,
 }
 
 bool ErisClient::ClientState::submit_weights(
-    const std::vector<double> &parameters, uint32_t round) {
+    const std::vector<float> &parameters, uint32_t round) {
   auto fragments = splitter.split(parameters, round);
+  const int max_retries = 3;
   std::vector<eris::Empty> res(fragments.size());
-  std::vector<grpc::ClientContext> ctx(fragments.size());
+  std::vector<bool> done(fragments.size(), false);
 
   std::mutex mu;
   std::condition_variable cv;
   bool success = true;
   std::atomic_size_t finished = 0;
+  std::atomic_size_t failed = 0;
 
-  for (size_t i = 0; i < fragments.size(); ++i) {
-    std::unique_lock<std::mutex> lk(mu_);
+  for (int attempt = 0; attempt < max_retries; ++attempt) {
+    std::vector<grpc::ClientContext> ctx(fragments.size());
 
-    if (!submitters_[i])
-      aggregator_joined_.wait(
-          lk, [this, &i]() { return submitters_[i] != nullptr; });
+    for (size_t i = 0; i < fragments.size(); ++i) {
+      if (done[i])
+        continue;
 
-    submitters_[i]->async()->SubmitWeights(
-        &ctx[i], &fragments[i], &res[i],
-        [&finished, &mu, &cv, &success](grpc::Status s) {
-          ++finished;
-          if (!s.ok()) {
-            std::lock_guard<std::mutex> lk(mu);
-            success = false;
-          }
-          cv.notify_one();
-        });
+      std::unique_lock<std::mutex> lk(mu_);
+      if (!submitters_[i])
+        aggregator_joined_.wait(
+            lk, [this, &i]() { return submitters_[i] != nullptr; });
+
+      submitters_[i]->async()->SubmitWeights(
+          &ctx[i], &fragments[i], &res[i],
+          [&finished, i, &done, &failed, &mu, &cv, &success](grpc::Status s) {
+            if (!s.ok() && s.error_code() == grpc::INVALID_ARGUMENT) {
+              std::lock_guard<std::mutex> lk(mu);
+              success = false;
+              done[i] = true;
+              ++finished;
+            } else if (!s.ok())
+              ++failed;
+            else {
+              done[i] = true;
+              ++finished;
+            }
+
+            cv.notify_one();
+          });
+    }
+
+    std::unique_lock<std::mutex> lk(mu);
+    cv.wait(lk, [&failed, &finished, &fragments] {
+      return finished + failed == fragments.size();
+    });
+
+    if (failed == 0)
+      return success;
+
+    failed = 0;
+    std::this_thread::sleep_for(std::chrono::microseconds(500));
   }
 
-  std::unique_lock<std::mutex> lk(mu);
-  cv.wait(lk, [&finished, &fragments] { return finished == fragments.size(); });
-
-  return success;
+  return false;
 }
 
-std::vector<double> ErisClient::ClientState::receive_weights(uint32_t *round) {
+std::vector<float> ErisClient::ClientState::receive_weights(uint32_t *round) {
   std::vector<WeightUpdate> weights(options_.splits());
 
   std::vector<bool> done(options_.splits(), false);
@@ -275,7 +324,6 @@ bool ErisClient::ClientState::register_aggregator(
     return false;
 
   zmq_setsockopt(subscriptions_[aggregator.id()], ZMQ_SUBSCRIBE, "", 0);
-
   aggregator_joined_.notify_all();
   return true;
 }

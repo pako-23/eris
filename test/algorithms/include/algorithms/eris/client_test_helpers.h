@@ -32,21 +32,22 @@ using grpc::CallbackServerContext;
 class MockClient : public ErisClient {
 public:
   explicit MockClient(size_t parameters_size,
-                      std::vector<std::vector<double>> *expected = nullptr)
+                      std::vector<std::vector<float>> *expected = nullptr)
       : ErisClient{}, parameters_size_{parameters_size}, fit_calls_{0},
         evaluate_calls_{0}, set_parameters_calls_{0}, expected_{expected} {}
 
-  std::vector<double> get_parameters(void) const {
+  std::vector<float> get_parameters(void) {
     std::default_random_engine rng(time(NULL));
-    std::uniform_real_distribution<double> dist(0.0, 1.0);
-    std::vector<double> weigths(parameters_size_);
+    std::uniform_real_distribution<float> dist(0.0, 1.0);
+    std::vector<float> weigths(parameters_size_);
 
     for (size_t i = 0; i < parameters_size_; ++i)
       weigths[i] = dist(rng);
 
     return weigths;
   }
-  void set_parameters(const std::vector<double> &parameters) {
+
+  void set_parameters(const std::vector<float> &parameters) {
     ++set_parameters_calls_;
     if (!expected_)
       return;
@@ -56,7 +57,7 @@ public:
 
     for (size_t i = 0; i < (*expected_)[set_parameters_calls_ - 1].size(); ++i)
       EXPECT_NEAR((*expected_)[set_parameters_calls_ - 1][i], parameters[i],
-                  5 * std::numeric_limits<double>::epsilon());
+                  5 * std::numeric_limits<float>::epsilon());
   }
 
   void fit(void) { ++fit_calls_; }
@@ -76,7 +77,7 @@ private:
   uint32_t evaluate_calls_;
   uint32_t set_parameters_calls_;
 
-  std::vector<std::vector<double>> *expected_;
+  std::vector<std::vector<float>> *expected_;
 };
 
 class MockAggregator final {

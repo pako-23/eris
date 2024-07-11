@@ -1,15 +1,8 @@
 # Eris
-To build the base Docker image, run the following command:
+To build the Python package run the following command
+
 ```shell
-docker build -t eris/eris .
+./setup.py bdist_wheel
 ```
-To run the examples, move to the examples folder you are interested in
-and run the following command
-```shell
-docker-compose up
-```
-For example, to run `examples/simple` execute the following commands
-```shell
-cd examples/simple
-docker-compose up
-```
+
+Some example runs are provided in the `examples/` directory.

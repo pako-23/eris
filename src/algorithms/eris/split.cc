@@ -1,10 +1,9 @@
 #include "algorithms/eris/split.h"
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <random>
 
-void RandomSplit::configure(const std::vector<double> &parameters,
+void RandomSplit::configure(const std::vector<float> &parameters,
                             uint32_t splits, uint32_t seed) noexcept {
   aggregator_mapping_.reserve(parameters.size());
   nsplits_ = splits;
@@ -26,7 +25,7 @@ size_t RandomSplit::get_fragment_size(uint32_t fragment_id) const noexcept {
 }
 
 std::vector<FragmentWeights>
-RandomSplit::split(const std::vector<double> &parameters,
+RandomSplit::split(const std::vector<float> &parameters,
                    uint32_t round) noexcept {
   std::vector<FragmentWeights> fragments;
   fragments.resize(nsplits_);
@@ -40,9 +39,9 @@ RandomSplit::split(const std::vector<double> &parameters,
   return fragments;
 }
 
-std::vector<double> RandomSplit::reassemble(
+std::vector<float> RandomSplit::reassemble(
     const std::vector<WeightUpdate> &updates) const noexcept {
-  std::vector<double> parameters(aggregator_mapping_.size());
+  std::vector<float> parameters(aggregator_mapping_.size());
   std::vector<int> assigned(updates.size(), 0);
 
   for (size_t i = 0; i < aggregator_mapping_.size(); ++i) {

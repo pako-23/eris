@@ -1,6 +1,7 @@
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
 #include "grpcpp/support/server_callback.h"
+#include "spdlog/spdlog.h"
 #include "util/networking.h"
 #include <cstddef>
 #include <cstring>
@@ -73,6 +74,10 @@ grpc::ServerUnaryReactor *ErisCoordinator::CoordinatorImpl::Join(
               ctx->coordinator_->service_.publish(info);
               res->set_assigned_fragment(i);
               ctx->aggregators_[i] = info;
+
+              spdlog::info("new aggregator joined for fragment {0}. RPC "
+                           "address: {1}, Publish address: {2}",
+                           i, req->submit_address(), req->publish_address());
 
               break;
             }
