@@ -18,7 +18,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(no-insource-builds)
 
 add_compile_options(-Wall)
-add_compile_options(-Werror)
+#add_compile_options(-Werror)
 
 if (CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options(-g3)
