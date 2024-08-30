@@ -35,6 +35,7 @@ include(coverage)
 include(doxygen)
 
 include(FetchContent)
+set(FETCHCONTENT_QUIET OFF)
 
 add_subdirectory(src)
 

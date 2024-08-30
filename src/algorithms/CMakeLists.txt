@@ -1,8 +1,10 @@
 include(logging)
 
-find_package(gRPC REQUIRED)
 
- FetchContent_Declare(
+
+#find_package(gRPC REQUIRED)
+
+FetchContent_Declare(
   libzmq
   GIT_REPOSITORY https://github.com/zeromq/libzmq.git
   GIT_TAG        v4.3.5)
