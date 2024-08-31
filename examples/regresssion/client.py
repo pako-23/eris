@@ -101,8 +101,6 @@ def start_node(aggr_rpc_port=None, aggr_publish_port=None):
     if aggr_rpc_port is not None and aggr_publish_port is not None:
         client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
 
-    time.sleep(1)
-
     if client.train():
         print("Client finished the training successfully")
         return 0

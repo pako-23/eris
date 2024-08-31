@@ -29,7 +29,9 @@
 
 ErisClient::ErisClient(void)
     : rpc_address_{}, subscribe_address_{}, aggr_address_{}, aggr_rpc_port_{0},
-      state_{} {}
+      state_{} {
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%P] [%n] [%l]  %v");
+}
 
 bool ErisClient::train(void) {
   if (rpc_address_.empty()) {
@@ -53,6 +55,8 @@ bool ErisClient::train(void) {
     spdlog::error("failed to join the training");
     return false;
   }
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
 
   uint32_t round = 0;
 
