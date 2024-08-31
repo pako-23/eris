@@ -297,12 +297,17 @@ std::vector<float> ErisClient::ClientState::receive_weights(uint32_t *round) {
 
     int size = zmq_msg_recv(&msg, subscriptions_[i], 0);
     if (size <= 0) {
+      if (query_fragment(submitters_[i], &weights[i]))
+        goto handle_weight;
+
+      spdlog::error("failed to receive weights from aggregator {0}", i);
       zmq_msg_close(&msg);
       continue;
     }
     weights[i].ParseFromArray(zmq_msg_data(&msg), size);
     zmq_msg_close(&msg);
 
+  handle_weight:
     if (weights[i].round() == *round) {
       done[i] = true;
       ++i;
@@ -380,4 +385,34 @@ void ErisClient::ClientState::coordinator_subscribe(
       }
     }
   });
+}
+
+bool ErisClient::ClientState::query_fragment(
+    std::unique_ptr<eris::Aggregator::Stub> &aggr,
+    WeightUpdate *update) noexcept {
+  grpc::ClientContext ctx;
+  Empty req;
+  std::mutex mu;
+  bool done = false;
+  bool success = true;
+  std::condition_variable cv;
+
+  aggr->async()->GetUpdate(&ctx, &req, update,
+                           [&success, &done, &mu, &cv](grpc::Status s) {
+                             if (!s.ok()) {
+                               std::lock_guard<std::mutex> lk(mu);
+                               done = true;
+                               success = false;
+                               cv.notify_one();
+                               return;
+                             }
+                             std::lock_guard<std::mutex> lk(mu);
+                             done = true;
+                             cv.notify_one();
+                           });
+
+  std::unique_lock<std::mutex> lk(mu);
+  cv.wait(lk, [&done] { return done; });
+
+  return success && update->contributors() >= options_.min_clients();
 }

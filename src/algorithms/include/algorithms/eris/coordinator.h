@@ -19,6 +19,8 @@
 #include <mutex>
 #include <vector>
 
+using eris::Aggregators;
+using eris::Empty;
 using eris::FragmentInfo;
 using eris::InitialState;
 using eris::JoinRequest;
@@ -34,6 +36,8 @@ using grpc::Server;
  * interface, oand the events publishing happens via a ZeroMQ interface.
  */
 class ErisCoordinator final : public Coordinator {
+  typedef std::vector<FragmentInfo> AggregatorList;
+
 public:
   /**
    * It constructs an ErisCoordinator object with the provided configurations.
@@ -113,10 +117,14 @@ private:
                                    const JoinRequest *req,
                                    InitialState *res) override;
 
+    grpc::ServerUnaryReactor *GetAggregators(CallbackServerContext *ctx,
+                                             const Empty *req,
+                                             Aggregators *res) override;
+
   private:
-    const TrainingOptions options_;         /**< The training configurations */
-    std::vector<FragmentInfo> aggregators_; /**< The mapping from fragment ID to
-                                               assigned aggregator */
+    const TrainingOptions options_; /**< The training configurations */
+    AggregatorList aggregators_;    /**< The mapping from fragment ID to
+                                                assigned aggregator */
     std::mutex mu_; /**< A mutex providing mutual exclusion on aggregators_ */
     ErisCoordinator *coordinator_; /**< The registering ErisCoordinator */
   };

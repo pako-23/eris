@@ -6,6 +6,7 @@ import "algorithms/eris/common.proto";
 
 service Coordinator {
     rpc Join (JoinRequest) returns (InitialState) {}
+    rpc GetAggregators (Empty) returns (Aggregators) {}
 }
 
 
@@ -25,4 +26,8 @@ message InitialState {
     TrainingOptions options = 1;
     optional uint32 assigned_fragment = 2;
     repeated FragmentInfo aggregators = 3;
+}
+
+message Aggregators {
+    repeated FragmentInfo aggregators = 1;
 }

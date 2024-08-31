@@ -9,6 +9,7 @@
 #include "erisfl/client.h"
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -75,6 +76,8 @@ protected:
                           const uint16_t *rpc_port,
                           const uint16_t *publish_port) noexcept;
     void coordinator_subscribe(const std::string &subscribe_address) noexcept;
+    bool query_fragment(std::unique_ptr<eris::Aggregator::Stub> &aggr,
+                        WeightUpdate *update) noexcept;
 
     void *zmq_ctx;
     void *coord_sub;

@@ -6,6 +6,7 @@ import "algorithms/eris/common.proto";
 
 service Aggregator {
     rpc SubmitWeights (FragmentWeights) returns (Empty) {}
+    rpc GetUpdate (Empty) returns (WeightUpdate) {}
 }
 
 

@@ -84,7 +84,7 @@ grpc::ServerUnaryReactor *ErisCoordinator::CoordinatorImpl::Join(
           }
         }
 
-        for (size_t i = 0; i < ctx->aggregators_.size(); ++i)
+        for (AggregatorList::size_type i = 0; i < ctx->aggregators_.size(); ++i)
           if (!ctx->aggregators_[i].submit_address().empty())
             *res->add_aggregators() = ctx->aggregators_[i];
       }
@@ -97,4 +97,27 @@ grpc::ServerUnaryReactor *ErisCoordinator::CoordinatorImpl::Join(
   };
 
   return new Reactor(this, req, res);
+}
+
+grpc::ServerUnaryReactor *ErisCoordinator::CoordinatorImpl::GetAggregators(
+    CallbackServerContext *ctx, const Empty *req, Aggregators *res) {
+
+  class Reactor : public grpc::ServerUnaryReactor {
+  public:
+    explicit Reactor(CoordinatorImpl *ctx, Aggregators *res) {
+      {
+        std::lock_guard<std::mutex> lk(ctx->mu_);
+
+        for (AggregatorList::size_type i = 0; i < ctx->aggregators_.size(); ++i)
+          if (!ctx->aggregators_[i].submit_address().empty())
+            *res->add_aggregators() = ctx->aggregators_[i];
+      }
+
+      Finish(Status::OK);
+    }
+
+    void OnDone(void) override { delete this; }
+  };
+
+  return new Reactor(this, res);
 }

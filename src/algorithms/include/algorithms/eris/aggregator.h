@@ -12,6 +12,7 @@
 #include <mutex>
 #include <vector>
 
+using eris::Empty;
 using eris::FragmentWeights;
 using eris::WeightUpdate;
 using grpc::CallbackServerContext;
@@ -102,9 +103,16 @@ private:
      */
     grpc::ServerUnaryReactor *SubmitWeights(CallbackServerContext *ctx,
                                             const FragmentWeights *req,
-                                            eris::Empty *res) override;
+                                            Empty *res) override;
+
+    grpc::ServerUnaryReactor *GetUpdate(CallbackServerContext *ctx,
+                                        const Empty *req,
+                                        WeightUpdate *res) override;
 
   private:
+    std::mutex prev_mu_;
+    WeightUpdate prev_update_;
+
     uint32_t round_; /**< The current round of the training */
     std::vector<float>
         weights_; /**< The accumulated weights shared by the clients */
