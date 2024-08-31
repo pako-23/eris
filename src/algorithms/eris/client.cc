@@ -59,10 +59,8 @@ bool ErisClient::train(void) {
   while (round != state_.get_options().rounds()) {
     fit();
 
-    if (!state_.submit_weights(get_parameters(), round)) {
-      spdlog::error("failed to submit weights to the aggregators");
+    if (!state_.submit_weights(get_parameters(), round))
       return false;
-    }
 
     set_parameters(state_.receive_weights(&round));
     evaluate();
@@ -96,7 +94,6 @@ bool ErisClient::set_coordinator_subscription(const std::string &address) {
 bool ErisClient::set_aggregator_config(const std::string &address,
                                        uint16_t submit_port,
                                        uint16_t publish_port) {
-
   if (!valid_ipv4(address) || address == "0.0.0.0" || submit_port == 0 ||
       publish_port == 0 || submit_port == publish_port) {
     spdlog::error("the provided aggregator configuration is not valid");
@@ -145,7 +142,6 @@ bool ErisClient::ClientState::join(ErisClient *client,
                                    const std::string *listen_address,
                                    const uint16_t *rpc_port,
                                    const uint16_t *publish_port) {
-
   std::shared_ptr<grpc::Channel> channel =
       grpc::CreateChannel(rpc_address, grpc::InsecureChannelCredentials());
   std::unique_ptr<eris::Coordinator::Stub> stub =
@@ -267,9 +263,18 @@ bool ErisClient::ClientState::submit_weights(
     if (failed == 0)
       return success;
 
+    for (std::vector<bool>::size_type i = 0; i < done.size(); ++i)
+      if (!done[i])
+        spdlog::warn("failed to submit weights for fragment {0} at attempt {1}",
+                     i, attempt);
+
     failed = 0;
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(attempt * std::chrono::milliseconds(500));
   }
+
+  for (std::vector<bool>::size_type i = 0; i < done.size(); ++i)
+    if (!done[i])
+      spdlog::error("failed to submit weights for fragment {0}", i);
 
   return false;
 }
@@ -322,8 +327,11 @@ bool ErisClient::ClientState::register_aggregator(
       zmq_connect(subscriptions_[aggregator.id()],
                   aggregator.publish_address().c_str()) != 0)
     return false;
+  int zmq_timeout = 5000;
 
   zmq_setsockopt(subscriptions_[aggregator.id()], ZMQ_SUBSCRIBE, "", 0);
+  zmq_setsockopt(subscriptions_[aggregator.id()], ZMQ_RCVTIMEO, &zmq_timeout,
+                 sizeof(zmq_timeout));
   aggregator_joined_.notify_all();
   return true;
 }
