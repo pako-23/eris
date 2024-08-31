@@ -17,9 +17,7 @@ using grpc::Status;
 using grpc::StatusCode;
 
 ErisCoordinator::ErisCoordinator(const ErisCoordinatorBuilder &builder)
-    : service_{builder, this, builder.get_options()} {
-    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%P] [%n] [%l]  %v");
-}
+    : service_{builder, this, builder.get_options()} {}
 
 void ErisCoordinator::start(void) { service_.start(); }
 
