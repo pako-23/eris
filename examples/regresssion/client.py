@@ -51,7 +51,7 @@ class LinearRegression(nn.Module):
         criterion=nn.MSELoss,
         optimizer=optim.SGD,
         lr=0.001,
-        epochs=100,
+        epochs=10,
     ):
         super().__init__()
         self.validation_data = None
@@ -100,6 +100,8 @@ def start_node(aggr_rpc_port=None, aggr_publish_port=None):
 
     if aggr_rpc_port is not None and aggr_publish_port is not None:
         client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
+        
+    time.sleep(1)
 
     if client.train():
         print("Client finished the training successfully")
@@ -121,7 +123,7 @@ def main():
             p = Process(target=start_node)
         p.start()
         processes.append(p)
-        time.sleep(0.2)
+        # time.sleep(0.2)
 
     for p in processes:
         p.join()
