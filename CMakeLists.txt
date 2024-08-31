@@ -20,7 +20,7 @@ include(no-insource-builds)
 add_compile_options(-Wall)
 #add_compile_options(-Werror)
 
-if (CMAKE_BUILD_TYPE STREQUAL Debug)
+if(CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options(-g3)
 
   set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -39,7 +39,7 @@ set(FETCHCONTENT_QUIET OFF)
 
 add_subdirectory(src)
 
-if (ERIS_BUILD_TESTS)
+if(ERIS_BUILD_TESTS)
   include(testing)
   add_subdirectory(test)
 endif()
