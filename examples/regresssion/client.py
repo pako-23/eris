@@ -5,7 +5,7 @@ from eris import ErisClient
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, TensorDataset
-from multiprocessing import Process
+import sys
 import time
 
 
@@ -100,34 +100,28 @@ def start_node(aggr_rpc_port=None, aggr_publish_port=None):
 
     if aggr_rpc_port is not None and aggr_publish_port is not None:
         client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
-        
+
     time.sleep(1)
 
     if client.train():
         print("Client finished the training successfully")
+        return 0
+
+    return 1
 
 
 def main():
-    processes = []
-
-    for i in range(10):
-        if i < 5:
-            p = Process(
-                target=start_node,
-                args=(
-                    50052 + i,
-                    5556 + i,
-                ),
-            )
-        else:
-            p = Process(target=start_node)
-        p.start()
-        processes.append(p)
-        # time.sleep(0.2)
-
-    for p in processes:
-        p.join()
+    if len(sys.argv) == 1:
+        return start_node()
+    elif len(sys.argv) == 3:
+        return start_node(int(sys.argv[1]), int(sys.argv[2]))
+    else:
+        print(
+            f"Usage: {sys.argv[0]} [<aggregator RPC port> <aggregator publish port>]",
+            file=sys.stderr,
+        )
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

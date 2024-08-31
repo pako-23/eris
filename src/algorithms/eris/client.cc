@@ -268,7 +268,7 @@ bool ErisClient::ClientState::submit_weights(
       return success;
 
     failed = 0;
-    std::this_thread::sleep_for(std::chrono::microseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
   return false;
