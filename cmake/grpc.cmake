@@ -50,7 +50,8 @@ FetchContent_Declare(
             "third_party/boringssl-with-bazel"
             "third_party/re2"
             "third_party/abseil-cpp"
-	    "third_party/protobuf")
+	    "third_party/protobuf"
+	    "third_party/zlib")
 set(gRPC_ABSL_BUILD_TESTING OFF)
 set(gRPC_BUILD_TESTS OFF)
 set(gRPC_BUILD_CODEGEN ON)
