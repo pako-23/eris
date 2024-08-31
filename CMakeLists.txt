@@ -19,9 +19,10 @@ include(no-insource-builds)
 
 add_compile_options(-Wall)
 #add_compile_options(-Werror)
+add_compile_options(-g3)
 
 if(CMAKE_BUILD_TYPE STREQUAL Debug)
-  add_compile_options(-g3)
+#  add_compile_options(-g3)
 
   set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
   set(ERIS_BUILD_TESTS ON)
