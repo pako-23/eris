@@ -224,7 +224,7 @@ bool ErisClient::ClientState::submit_weights(
   std::atomic_size_t finished = 0;
   std::atomic_size_t failed = 0;
 
-  for (int attempt = 0; attempt < max_retries; ++attempt) {
+  for (int attempt = 1; attempt <= max_retries; ++attempt) {
     std::vector<grpc::ClientContext> ctx(fragments.size());
 
     for (size_t i = 0; i < fragments.size(); ++i) {
@@ -269,7 +269,7 @@ bool ErisClient::ClientState::submit_weights(
                      i, attempt);
 
     failed = 0;
-    std::this_thread::sleep_for(attempt * std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(attempt * std::chrono::seconds(1));
   }
 
   for (std::vector<bool>::size_type i = 0; i < done.size(); ++i)
