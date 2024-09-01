@@ -6,7 +6,7 @@ from torch.utils.data import TensorDataset
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
@@ -18,7 +18,7 @@ import shutil
 
 
 ########################################################################################
-# MNIST
+# MNIST - IMAGE CLASSIFICATION
 ########################################################################################
 def download_mnist():
     print("\nDownloading MNIST dataset...")
@@ -47,7 +47,7 @@ def download_mnist():
 
 
 ########################################################################################
-# CIFAR-10
+# CIFAR-10 - IMAGE CLASSIFICATION
 ########################################################################################
 def download_cifar10():
     print("\nDownloading CIFAR-10 dataset...")
@@ -76,7 +76,7 @@ def download_cifar10():
 
 
 ########################################################################################
-# AIRLINE PASSENGERS
+# AIRLINE PASSENGERS - TIME SERIES
 ########################################################################################
 # Function to create a dataset where X is the number of passengers at t, t-1, ..., t-n and Y is the passengers at t+1
 def create_dataset(data, window_size=1):
@@ -91,6 +91,10 @@ def download_airline():
     # Load the Air Passenger dataset
     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
     data = pd.read_csv(url, parse_dates=['Month'], index_col='Month')
+    
+    # Scale the data
+    scaler = StandardScaler()
+    data['Passengers'] = scaler.fit_transform(data['Passengers'].values.reshape(-1, 1))
 
     # Define the window size
     window_size = 30
@@ -116,7 +120,7 @@ def download_airline():
 
 
 ########################################################################################
-# ADULT
+# ADULT - TABULAR CLASSIFICATION
 ########################################################################################
 def download_adult():
     print("\nDownloading Adult dataset...")
