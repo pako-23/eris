@@ -253,6 +253,7 @@ bool ErisClient::ClientState::submit_weights(
               ++finished;
             }
 
+            std::lock_guard<std::mutex> lk(mu);
             cv.notify_one();
           });
     }

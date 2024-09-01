@@ -62,7 +62,7 @@ public:
     rpc_port_ = port;
 
     // Sleep for 200 milliseconds to prevent the slow joiner syndrome
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
   }
 
   /**
