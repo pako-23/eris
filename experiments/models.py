@@ -25,6 +25,11 @@ config = {
         'task_type': 'classification',
         'num_classes': 2,
         'input_dim': 105,
+    },
+    'LSST': {
+        'task_type': 'classification',
+        'num_classes': 14,
+        'input_dim': 36,
     }
 }
 

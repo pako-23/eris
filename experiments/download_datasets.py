@@ -79,35 +79,75 @@ def download_cifar10():
 # AIRLINE PASSENGERS - TIME SERIES
 ########################################################################################
 # Function to create a dataset where X is the number of passengers at t, t-1, ..., t-n and Y is the passengers at t+1
-def create_dataset(data, window_size=1):
-    X, Y = [], []
-    for i in range(len(data) - window_size):
-        X.append(data[i:(i + window_size)])
-        Y.append(data[i + window_size])
-    return torch.tensor(X, dtype=torch.float32), torch.tensor(Y, dtype=torch.float32)
+# def create_dataset(data, window_size=1):
+#     X, Y = [], []
+#     for i in range(len(data) - window_size):
+#         X.append(data[i:(i + window_size)])
+#         Y.append(data[i + window_size])
+#     return torch.tensor(X, dtype=torch.float32), torch.tensor(Y, dtype=torch.float32)
+
+# def download_airline():
+#     print("\nDownloading Airline Passengers dataset...")
+#     # Load the Air Passenger dataset
+#     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
+#     data = pd.read_csv(url, parse_dates=['Month'], index_col='Month')
+    
+#     # Scale the data
+#     scaler = StandardScaler()
+#     data['Passengers'] = scaler.fit_transform(data['Passengers'].values.reshape(-1, 1))
+
+#     # Define the window size
+#     window_size = 30
+
+#     # Create the dataset
+#     X, Y = create_dataset(data['Passengers'].values, window_size)
+
+#     # Split the data into training and test sets
+#     X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, shuffle=False)
+
+#     # Create TensorDataset for training and testing
+#     train_dataset = TensorDataset(X_train, Y_train)
+#     test_dataset = TensorDataset(X_test, Y_test)
+
+#     # Save the dataset as torch tensor
+#     if not os.path.exists('datasets'):
+#         os.makedirs('datasets')
+    
+#     torch.save(train_dataset, 'datasets/airline_train.pt')
+#     torch.save(test_dataset, 'datasets/airline_test.pt')
+#     print("Airline Passengers dataset saved correctly as csv file.")
+
+
+def create_window(data, seq_length):
+    x, y = [], []
+    for i in range(len(data)-seq_length):
+        _x = data[i:(i+seq_length)]
+        _y = data[i+seq_length]
+        x.append(_x)
+        y.append(_y)
+
+    return np.array(x),np.array(y)
 
 def download_airline():
     print("\nDownloading Airline Passengers dataset...")
     # Load the Air Passenger dataset
     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
-    data = pd.read_csv(url, parse_dates=['Month'], index_col='Month')
+    data = pd.read_csv(url)
+    data = data.iloc[:,1:2].values
     
     # Scale the data
-    scaler = StandardScaler()
-    data['Passengers'] = scaler.fit_transform(data['Passengers'].values.reshape(-1, 1))
+    sc = StandardScaler()
+    training_data = sc.fit_transform(data)
 
-    # Define the window size
+    # Create windows
     window_size = 30
+    x, y = create_window(training_data, window_size)
 
-    # Create the dataset
-    X, Y = create_dataset(data['Passengers'].values, window_size)
-
-    # Split the data into training and test sets
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, shuffle=False)
+    X_train, X_test, Y_train, Y_test = train_test_split(x, y, test_size=0.20, shuffle=False)
 
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(X_train, Y_train)
-    test_dataset = TensorDataset(X_test, Y_test)
+    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
+    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
 
     # Save the dataset as torch tensor
     if not os.path.exists('datasets'):
