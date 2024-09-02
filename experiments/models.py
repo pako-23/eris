@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 config = {
@@ -67,10 +68,7 @@ class LinearModel(nn.Module):
         input_dim = config[dataset_name]['input_dim']
         num_classes = config[dataset_name]['num_classes']
         
-        if dataset_name == 'airline':
-            self.criterion = nn.MSELoss()    
-        else:
-            self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
                 
         if self.task_type == 'regression':
             self.output_layer = nn.Linear(input_dim, 1)  # Single output for regression
@@ -83,10 +81,6 @@ class LinearModel(nn.Module):
 
     def forward(self, x):
         x = self.output_layer(x)
-        
-        if self.task_type == 'classification':
-            # Multiclass classification (multiple output nodes)
-            x = torch.softmax(x, dim=1)
         
         return x
 
@@ -120,10 +114,7 @@ class MLP(nn.Module):
         input_dim = config[dataset_name]['input_dim']
         output_dim = config[dataset_name]['num_classes']
         
-        if dataset_name == 'airline':
-            self.criterion = nn.MSELoss()    
-        else:
-            self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
         
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.relu = nn.ReLU()
@@ -144,10 +135,6 @@ class MLP(nn.Module):
         x = self.fc2(x)
         x = self.relu(x)
         x = self.fc3(x)
-        
-        if self.task_type == 'classification':
-            # Multiclass classification (multiple output nodes)
-            x = torch.softmax(x, dim=1)
         
         return x
 
@@ -204,9 +191,6 @@ class CNN(nn.Module):
         
         x = nn.ReLU()(self.fc1(x))
         x = self.fc2(x)
-        
-        # Apply softmax for multiclass classification
-        x = torch.softmax(x, dim=1)
         
         return x
 
@@ -267,11 +251,9 @@ class LeNet5Flexible(nn.Module):
         x = F.relu(self.fc2(x))  # Second Fully Connected Layer
         x = self.fc3(x)  # Output Layer
         
-        # Apply softmax for classification
-        return torch.softmax(x, dim=1)
+        return x
 
 
-import torch.nn.functional as F
 
 class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
@@ -327,25 +309,89 @@ class ResNet9(nn.Module):
         x = self.fc(x)
         
         return x
+    
+
 
 #########################################################################################
 # Transformer model
 #########################################################################################
-class TransformerModel(nn.Module):
-    def __init__(self, input_dim, num_heads, num_layers, hidden_dim, output_dim):
-        super(TransformerModel, self).__init__()
-        self.embedding = nn.Linear(input_dim, hidden_dim)
-        self.pos_encoder = nn.Parameter(torch.zeros(1, 100, hidden_dim))  # Positional encoding
-        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.fc = nn.Linear(hidden_dim, output_dim)
+# class TransformerModelFlexible(nn.Module):
+#     def __init__(self, dataset_name, num_heads=2, num_layers=2, hidden_dim=64):
+#         """
+#         Initializes a flexible Transformer model for classification or regression tasks.
 
-    def forward(self, x):
-        x = self.embedding(x) + self.pos_encoder[:, :x.size(1), :]
-        x = self.transformer(x)
-        x = x.mean(dim=1)  # Global average pooling
-        x = self.fc(x)
-        return x
+#         Args:
+#             dataset_name (str): The name of the dataset, used to configure the model.
+#         """
+#         super(TransformerModelFlexible, self).__init__()
+
+#         input_dim = config[dataset_name]['input_dim']
+#         output_dim = config[dataset_name]['num_classes']
+
+#         self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
+#         self.task_type = config[dataset_name]['task_type']
+
+#         # Transformer Components
+#         self.embedding = nn.Linear(input_dim, hidden_dim)
+#         self.pos_encoder = nn.Parameter(torch.zeros(1, 100, hidden_dim))  # Positional encoding
+#         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
+#         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+#         # self.fc = nn.Linear(hidden_dim, output_dim)
+        
+#         if self.task_type == 'regression':
+#             self.fc = nn.Linear(hidden_dim, 1)  # Single output for regression
+#         elif self.task_type == 'classification':
+#             if output_dim is None:
+#                 raise ValueError("output_dim must be specified for classification tasks.")
+#             self.fc = nn.Linear(hidden_dim, output_dim)  # Output layer for classification
+#         else:
+#             raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
+
+#     def forward(self, x):
+#         x = self.embedding(x) + self.pos_encoder[:, :x.size(1), :]
+#         x = self.transformer(x)
+#         x = x.mean(dim=1)  # Global average pooling
+#         x = self.fc(x)
+        
+#         return x
+
+
+# # transformer model with 'correct' input dimension
+# class TransformerModelFlexible(nn.Module):
+#     def __init__(self, dataset_name, num_heads=2, num_layers=2, hidden_dim=64):
+#         super(TransformerModelFlexible, self).__init__()
+
+#         input_dim = 1  # Since your time series has 1 feature
+#         # sequence_length = 30  # Fixed sequence length for the time series data
+#         output_dim = config[dataset_name]['num_classes']
+
+#         self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
+#         self.task_type = config[dataset_name]['task_type']
+#         self.sequence_length = config[dataset_name]['input_dim']
+
+#         # Transformer Components
+#         self.embedding = nn.Linear(input_dim, hidden_dim)  # Input_dim=1 -> hidden_dim=64
+#         self.pos_encoder = nn.Parameter(torch.zeros(1, self.sequence_length, hidden_dim))  # Positional encoding for sequence length 30
+#         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
+#         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        
+#         if self.task_type == 'regression':
+#             self.fc = nn.Linear(hidden_dim, 1)  # Single output for regression
+#         elif self.task_type == 'classification':
+#             if output_dim is None:
+#                 raise ValueError("output_dim must be specified for classification tasks.")
+#             self.fc = nn.Linear(hidden_dim, output_dim)  # Output layer for classification
+#         else:
+#             raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
+
+#     def forward(self, x):
+#         x = self.embedding(x)  # Shape: (batch_size, sequence_length, hidden_dim)
+#         x = x + self.pos_encoder[:, :x.size(1), :]  # Add positional encoding
+#         x = self.transformer(x)  # Shape: (batch_size, sequence_length, hidden_dim)
+#         x = x.mean(dim=1)  # Global average pooling to get (batch_size, hidden_dim)
+#         x = self.fc(x)  # Shape: (batch_size, output_dim) for classification or (batch_size, 1) for regression
+        
+#         return x
 
 # Example usage:
 # model = TransformerModel(input_dim=10, num_heads=2, num_layers=2, hidden_dim=64, output_dim=1)
@@ -356,16 +402,28 @@ class TransformerModel(nn.Module):
 # Long Short-Term Memory (LSTM) model
 #########################################################################################
 class MultiLayerLSTM(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, output_dim):
+    def __init__(self, dataset_name, hidden_dim=64, num_layers=1):
         super(MultiLayerLSTM, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
+        
+        input_dim = 1  # Since your time series has 1 feature
+        output_dim = config[dataset_name]['num_classes']
+
+        self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
+        self.task_type = config[dataset_name]['task_type']
 
         # LSTM Layer
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
 
-        # Fully connected layer
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        if self.task_type == 'regression':
+            self.fc = nn.Linear(hidden_dim, 1)  # Single output for regression
+        elif self.task_type == 'classification':
+            if output_dim is None:
+                raise ValueError("output_dim must be specified for classification tasks.")
+            self.fc = nn.Linear(hidden_dim, output_dim)  # Output layer for classification
+        else:
+            raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
 
     def forward(self, x):
         # Set initial hidden and cell states
@@ -378,13 +436,6 @@ class MultiLayerLSTM(nn.Module):
         # Decode the hidden state of the last time step
         out = self.fc(out[:, -1, :])
         return out
-
-# Example usage:
-# model = MultiLayerLSTM(input_dim=10, hidden_dim=64, num_layers=2, output_dim=1)  # Adjust dimensions as necessary
-
-
-
-
 
 
 
