@@ -28,8 +28,26 @@ config = {
     },
     'LSST': {
         'task_type': 'classification',
-        'num_classes': 14,
-        'input_dim': 36,
+        'num_classes': 12,
+        'LinearModel': {
+            'input_dim': 36 * 6
+        },
+        'MLP': {
+            'input_dim': 36,
+        },
+        'CNN': {
+            'input_channels': 1
+        },
+        'LeNet5Flexible': {
+            'input_channels': 1
+        },
+        'ResNet9': {
+            'input_channels': 1
+        },
+        'TransformerModelFlexible': {
+            'input_dim': 6,
+        },
+
     }
 }
 
@@ -320,86 +338,54 @@ class ResNet9(nn.Module):
 #########################################################################################
 # Transformer model
 #########################################################################################
-# class TransformerModelFlexible(nn.Module):
-#     def __init__(self, dataset_name, num_heads=2, num_layers=2, hidden_dim=64):
-#         """
-#         Initializes a flexible Transformer model for classification or regression tasks.
+class TransformerModelFlexible(nn.Module):
+    def __init__(self, dataset_name, num_heads=2, num_layers=2, hidden_dim=64):
+        """
+        Initializes a flexible Transformer model for classification or regression tasks.
 
-#         Args:
-#             dataset_name (str): The name of the dataset, used to configure the model.
-#         """
-#         super(TransformerModelFlexible, self).__init__()
+        Args:
+            dataset_name (str): The name of the dataset, used to configure the model.
+            num_heads (int): The number of attention heads in the Transformer model.
+            num_layers (int): The number of Transformer layers.
+            hidden_dim (int): The hidden dimension of the Transformer model.
+        """
+        super(TransformerModelFlexible, self).__init__()
 
-#         input_dim = config[dataset_name]['input_dim']
-#         output_dim = config[dataset_name]['num_classes']
-
-#         self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
-#         self.task_type = config[dataset_name]['task_type']
-
-#         # Transformer Components
-#         self.embedding = nn.Linear(input_dim, hidden_dim)
-#         self.pos_encoder = nn.Parameter(torch.zeros(1, 100, hidden_dim))  # Positional encoding
-#         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
-#         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-#         # self.fc = nn.Linear(hidden_dim, output_dim)
+        input_dim = config[dataset_name]['input_dim']  # Since your time series has 1 feature
+        output_dim = config[dataset_name]['num_classes']
         
-#         if self.task_type == 'regression':
-#             self.fc = nn.Linear(hidden_dim, 1)  # Single output for regression
-#         elif self.task_type == 'classification':
-#             if output_dim is None:
-#                 raise ValueError("output_dim must be specified for classification tasks.")
-#             self.fc = nn.Linear(hidden_dim, output_dim)  # Output layer for classification
-#         else:
-#             raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
+        self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
+        self.task_type = config[dataset_name]['task_type']
+        self.sequence_length = config[dataset_name]['input_dim']
 
-#     def forward(self, x):
-#         x = self.embedding(x) + self.pos_encoder[:, :x.size(1), :]
-#         x = self.transformer(x)
-#         x = x.mean(dim=1)  # Global average pooling
-#         x = self.fc(x)
+        # Transformer Components
+        self.embedding = nn.Linear(input_dim, hidden_dim)  # Input_dim=1 -> hidden_dim=64
+        self.pos_encoder = nn.Parameter(torch.zeros(1, self.sequence_length, hidden_dim))  # Positional encoding for sequence length 30
+        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         
-#         return x
+        if self.task_type == 'regression':
+            self.fc = nn.Linear(hidden_dim, 1)  # Single output for regression
+        elif self.task_type == 'classification':
+            if output_dim is None:
+                raise ValueError("output_dim must be specified for classification tasks.")
+            self.fc = nn.Linear(hidden_dim, output_dim)  # Output layer for classification
+        else:
+            raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
 
-
-# # transformer model with 'correct' input dimension
-# class TransformerModelFlexible(nn.Module):
-#     def __init__(self, dataset_name, num_heads=2, num_layers=2, hidden_dim=64):
-#         super(TransformerModelFlexible, self).__init__()
-
-#         input_dim = 1  # Since your time series has 1 feature
-#         # sequence_length = 30  # Fixed sequence length for the time series data
-#         output_dim = config[dataset_name]['num_classes']
-
-#         self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
-#         self.task_type = config[dataset_name]['task_type']
-#         self.sequence_length = config[dataset_name]['input_dim']
-
-#         # Transformer Components
-#         self.embedding = nn.Linear(input_dim, hidden_dim)  # Input_dim=1 -> hidden_dim=64
-#         self.pos_encoder = nn.Parameter(torch.zeros(1, self.sequence_length, hidden_dim))  # Positional encoding for sequence length 30
-#         encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
-#         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+    def forward(self, x):
+        x = self.embedding(x)  # Shape: (batch_size, sequence_length, hidden_dim)
+        x = x + self.pos_encoder[:, :x.size(1), :]  # Add positional encoding
+        x = self.transformer(x)  # Shape: (batch_size, sequence_length, hidden_dim)
+        x = x.mean(dim=1)  # Global average pooling to get (batch_size, hidden_dim)
+        x = self.fc(x)  # Shape: (batch_size, output_dim) for classification or (batch_size, 1) for regression
         
-#         if self.task_type == 'regression':
-#             self.fc = nn.Linear(hidden_dim, 1)  # Single output for regression
-#         elif self.task_type == 'classification':
-#             if output_dim is None:
-#                 raise ValueError("output_dim must be specified for classification tasks.")
-#             self.fc = nn.Linear(hidden_dim, output_dim)  # Output layer for classification
-#         else:
-#             raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
+        return x
 
-#     def forward(self, x):
-#         x = self.embedding(x)  # Shape: (batch_size, sequence_length, hidden_dim)
-#         x = x + self.pos_encoder[:, :x.size(1), :]  # Add positional encoding
-#         x = self.transformer(x)  # Shape: (batch_size, sequence_length, hidden_dim)
-#         x = x.mean(dim=1)  # Global average pooling to get (batch_size, hidden_dim)
-#         x = self.fc(x)  # Shape: (batch_size, output_dim) for classification or (batch_size, 1) for regression
-        
-#         return x
 
 # Example usage:
-# model = TransformerModel(input_dim=10, num_heads=2, num_layers=2, hidden_dim=64, output_dim=1)
+# model = TransformerModelFlexible(dataset_name=dataset, num_heads=2, num_layers=2, hidden_dim=64).to(DEVICE)
+
 
 
 

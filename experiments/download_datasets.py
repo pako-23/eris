@@ -11,6 +11,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
+from tslearn.datasets import UCR_UEA_datasets
 import os
 import numpy as np
 import shutil
@@ -117,7 +119,6 @@ def download_cifar10():
 #     torch.save(test_dataset, 'datasets/airline_test.pt')
 #     print("Airline Passengers dataset saved correctly as csv file.")
 
-
 def create_window(data, seq_length):
     x, y = [], []
     for i in range(len(data)-seq_length):
@@ -156,9 +157,6 @@ def download_airline():
     torch.save(train_dataset, 'datasets/airline_train.pt')
     torch.save(test_dataset, 'datasets/airline_test.pt')
     print("Airline Passengers dataset saved correctly as csv file.")
-
-
-
 
 
 
@@ -227,3 +225,53 @@ def download_adult():
     torch.save(train_dataset, 'datasets/adult_train.pt')
     torch.save(test_dataset, 'datasets/adult_test.pt')
     print("Adult dataset saved correctly as torch tensor.")
+    
+    
+
+######################################################################################## 
+# LSST - TIME SERIES
+########################################################################################
+def download_lsst():
+    print("\nDownloading LSST dataset...")
+    # Load the dataset from UCR Time Series Classification Archive
+    ucr_loader = UCR_UEA_datasets()
+
+    # Load a specific dataset
+    X_train, y_train, X_test, y_test = ucr_loader.load_dataset("LSST") 
+    
+    # Remove the labels (92 and 95) from the dataset - few samples, errors when splitting
+    mask = y_test != '92'
+    X_test = X_test[mask]
+    y_test = y_test[mask]
+    mask = y_train != '92'
+    X_train = X_train[mask]
+    y_train = y_train[mask]
+
+    mask = y_test != '95'
+    X_test = X_test[mask]
+    y_test = y_test[mask]
+    mask = y_train != '95'
+    X_train = X_train[mask]
+    y_train = y_train[mask]
+    
+    # Encode the string labels
+    label_encoder = LabelEncoder()
+
+    # Assuming y_train, y_val, y_test are originally string labels
+    y_train = label_encoder.fit_transform(y_train)
+    y_test = label_encoder.transform(y_test)
+
+    # Create TensorDataset for training and testing
+    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32))
+    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test, dtype=torch.float32))
+
+    # Save the dataset as torch tensor
+    if not os.path.exists('datasets'):
+        os.makedirs('datasets')
+    torch.save(train_dataset, 'datasets/lsst_train.pt')
+    torch.save(test_dataset, 'datasets/lsst_test.pt')
+    print("LSST dataset saved correctly as torch tensor.")
+
+    
+
+

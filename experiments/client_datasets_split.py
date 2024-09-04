@@ -19,7 +19,7 @@ warnings.filterwarnings('ignore')
 # Get input arguments
 args = argparse.ArgumentParser(description='Split the dataset into N clients')
 args.add_argument('--n_clients', type=int, default=5, help='Number of clients to create')
-args.add_argument('--dataset', type=str, default='mnist', help='Dataset to split', choices=['mnist', 'cifar10', 'airline', 'adult'])
+args.add_argument('--dataset', type=str, default='mnist', help='Dataset to split', choices=['mnist', 'cifar10', 'airline', 'adult', 'lsst'])
 args.add_argument('--seed', type=int, default=1, help='Random seed')
 args = args.parse_args()
 
@@ -68,6 +68,15 @@ elif args.dataset == 'adult':
     # Load adult dataset
     X_train = torch.load('datasets/adult_train.pt')
     X_test = torch.load('datasets/adult_test.pt')
+
+elif args.dataset == 'lsst':
+    # if not exists, download lsst dataset
+    if not os.path.exists('datasets/lsst_train.pt'):
+        download_datasets.download_lsst()
+
+    # Load lsst dataset
+    X_train = torch.load('datasets/lsst_train.pt')
+    X_test = torch.load('datasets/lsst_test.pt')
     
     
     
