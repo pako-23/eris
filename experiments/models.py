@@ -24,7 +24,24 @@ config = {
     'adult': {
         'task_type': 'classification',
         'num_classes': 2,
-        'input_dim': 105,
+        'LinearModel': {
+            'input_dim': 105
+        },
+        'MLP': {
+            'input_dim': 105,
+        },
+        'CNN': {
+            'input_channels': 1
+        },
+        'LeNet5Flexible': {
+            'input_channels': 1
+        },
+        'ResNet9': {
+            'input_channels': 1
+        },
+        'TransformerModelFlexible': {
+            'input_dim': 1,  
+        }      
     },
     'LSST': {
         'task_type': 'classification',
@@ -33,7 +50,7 @@ config = {
             'input_dim': 36 * 6
         },
         'MLP': {
-            'input_dim': 36,
+            'input_dim': 36 * 6,
         },
         'CNN': {
             'input_channels': 1
