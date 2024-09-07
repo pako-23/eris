@@ -540,8 +540,14 @@ class MultiLayerLSTM(nn.Module):
 # Scalable networks
 #########################################################################################
 class ScalableMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers, output_dim):
+    def __init__(self, dataset_name, hidden_dim=64, num_layers=2):
         super(ScalableMLP, self).__init__()
+        
+        output_dim = config[dataset_name]['num_classes']
+        input_dim = config[dataset_name]['MLP']['input_dim']
+        self.criterion = nn.CrossEntropyLoss()
+        self.task_type = 'classification'
+        
         layers = []
         layers.append(nn.Linear(input_dim, hidden_dim))
         layers.append(nn.ReLU())
@@ -560,10 +566,15 @@ class ScalableMLP(nn.Module):
 # model_large = ScalableMLP(input_dim=10, hidden_dim=256, num_layers=10, output_dim=1)  # A larger MLP
 
 class ScalableCNN(nn.Module):
-    def __init__(self, input_channels, num_classes, base_filters=16, num_conv_layers=2):
+    def __init__(self, dataset_name, base_filters=16, num_conv_layers=2):
         super(ScalableCNN, self).__init__()
+        
+        self.num_classes = config[dataset_name]['num_classes']    
+        in_channels = config[dataset_name]['CNN']['input_channels']
+        self.criterion = nn.CrossEntropyLoss()
+        self.task_type = 'classification'
+        
         layers = []
-        in_channels = input_channels
         for i in range(num_conv_layers):
             out_channels = base_filters * (2 ** i)
             layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1))
@@ -572,12 +583,19 @@ class ScalableCNN(nn.Module):
             in_channels = out_channels
 
         self.conv_layers = nn.Sequential(*layers)
-        self.fc1 = nn.Linear(out_channels * 8 * 8, 128)
-        self.fc2 = nn.Linear(128, num_classes)
+        # self.fc1 = nn.Linear(out_channels * 8 * 8, 128)
+        # self.fc2 = nn.Linear(128, num_classes)
+        self.fc1 = None
+        self.fc2 = None
 
     def forward(self, x):
         x = self.conv_layers(x)
         x = x.view(x.size(0), -1)
+        if self.fc1 is None:
+            self.fc1 = nn.Linear(x.size(1), 128)
+            self.fc2 = nn.Linear(128, self.num_classes)
+            self.fc1.to(x.device)
+            self.fc2.to(x.device)
         x = nn.ReLU()(self.fc1(x))
         x = self.fc2(x)
         return x
