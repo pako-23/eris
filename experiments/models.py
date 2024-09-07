@@ -25,6 +25,10 @@ config = {
         'TransformerModelFlexible': {
             'input_dim': 1,
             'sequence_length': 28 * 28 
+        },
+        'MultiLayerLSTM': {
+            'input_dim': 1,
+            'sequence_length': 28 * 28 
         }
     },
     'cifar10': {
@@ -48,6 +52,10 @@ config = {
         'TransformerModelFlexible': {
             'input_dim': 1,
             'sequence_length': 32 * 32 * 3,  
+        },
+        'MultiLayerLSTM': {
+            'input_dim': 1,
+            'sequence_length': 32 * 32 * 3
         }
     },
     'airline': {
@@ -71,6 +79,10 @@ config = {
         'TransformerModelFlexible': {  
            'input_dim': 1,
            'sequence_length': 30
+        },
+        'MultiLayerLSTM': {
+            'input_dim': 1,
+            'sequence_length': 30
         }
     },
     'adult': {
@@ -94,7 +106,11 @@ config = {
         'TransformerModelFlexible': {
             'input_dim': 1, 
             'sequence_length': 105
-        }      
+        },
+        'MultiLayerLSTM': {
+            'input_dim': 1,
+            'sequence_length': 105
+        }    
     },
     'LSST': {
         'task_type': 'classification',
@@ -118,7 +134,10 @@ config = {
             'input_dim': 6,
             'sequence_length': 36
         },
-
+        'MultiLayerLSTM': {
+            'input_dim': 6,
+            'sequence_length': 36
+        }
     }
 }
 
@@ -479,16 +498,16 @@ class TransformerModelFlexible(nn.Module):
 # Long Short-Term Memory (LSTM) model
 #########################################################################################
 class MultiLayerLSTM(nn.Module):
-    def __init__(self, dataset_name, hidden_dim=64, num_layers=1):
+    def __init__(self, dataset_name, hidden_dim=64, num_layers=2):
         super(MultiLayerLSTM, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
         
-        input_dim = 1  # Since your time series has 1 feature
-        output_dim = config[dataset_name]['num_classes']
-
-        self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
         self.task_type = config[dataset_name]['task_type']
+        output_dim = config[dataset_name]['num_classes']
+        input_dim = config[dataset_name]['MultiLayerLSTM']['input_dim']
+
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
 
         # LSTM Layer
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
