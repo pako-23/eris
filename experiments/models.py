@@ -7,19 +7,71 @@ config = {
     'mnist': {
         'task_type': 'classification',
         'num_classes': 10,
-        'input_dim': 28 * 28,
-        'input_channels': 1
+        'LinearModel': {
+            'input_dim': 28 * 28
+        },
+        'MLP': {
+            'input_dim': 28 * 28,
+        },
+        'CNN': {
+            'input_channels': 1
+        },
+        'LeNet5Flexible': {
+            'input_channels': 1
+        },
+        'ResNet9': {
+            'input_channels': 1
+        },
+        'TransformerModelFlexible': {
+            'input_dim': 1,
+            'sequence_length': 28 * 28 
+        }
     },
     'cifar10': {
         'task_type': 'classification',
         'num_classes': 10,
-        'input_dim': 32 * 32 * 3,
-        'input_channels': 3
+        'LinearModel': {
+            'input_dim': 32 * 32 * 3
+        },
+        'MLP': {
+            'input_dim': 32 * 32 * 3,
+        },
+        'CNN': {
+            'input_channels': 3
+        },
+        'LeNet5Flexible': {
+            'input_channels': 3
+        },
+        'ResNet9': {
+            'input_channels': 3
+        },
+        'TransformerModelFlexible': {
+            'input_dim': 1,
+            'sequence_length': 32 * 32 * 3,  
+        }
     },
     'airline': {
         'task_type': 'regression',
         'num_classes': None,
-        'input_dim': 30,
+        'LinearModel': {
+            'input_dim': 30
+        },
+        'MLP': {
+            'input_dim': 30,
+        },
+        'CNN': {
+            'input_channels': 1
+        },
+        'LeNet5Flexible': {
+            'input_channels': 1
+        },
+        'ResNet9': {
+            'input_channels': 1
+        },
+        'TransformerModelFlexible': {  
+           'input_dim': 1,
+           'sequence_length': 30
+        }
     },
     'adult': {
         'task_type': 'classification',
@@ -40,7 +92,8 @@ config = {
             'input_channels': 1
         },
         'TransformerModelFlexible': {
-            'input_dim': 1,  
+            'input_dim': 1, 
+            'sequence_length': 105
         }      
     },
     'LSST': {
@@ -63,6 +116,7 @@ config = {
         },
         'TransformerModelFlexible': {
             'input_dim': 6,
+            'sequence_length': 36
         },
 
     }
@@ -98,16 +152,14 @@ class LinearModel(nn.Module):
         Initializes the LinearModel.
 
         Args:
-            input_dim (int): The number of input features.
-            task_type (str): The type of task ('regression' or 'classification').
-            num_classes (int, optional): The number of classes for classification. Required if task_type is 'classification'.
+            dataset_name (str): The name of the dataset, used to configure the model.
         """
         super(LinearModel, self).__init__()
         
         self.task_type = config[dataset_name]['task_type']
-        input_dim = config[dataset_name]['input_dim']
         num_classes = config[dataset_name]['num_classes']
-        
+        input_dim = config[dataset_name]['LinearModel']['input_dim']
+
         self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
                 
         if self.task_type == 'regression':
@@ -142,17 +194,14 @@ class MLP(nn.Module):
         Initializes the MLP model.
 
         Args:
-            input_dim (int): The number of input features.
-            hidden_dim (int): The number of neurons in the hidden layers.
-            task_type (str): The type of task ('regression' or 'classification').
-            output_dim (int, optional): The number of output neurons. For regression, this is typically 1.
-                                        For classification, this corresponds to the number of classes.
+            dataset_name (str): The name of the dataset, used to configure the model.
+            hidden_dim (int): The number of hidden units in the MLP.
         """
         super(MLP, self).__init__()
         
         self.task_type = config[dataset_name]['task_type']
-        input_dim = config[dataset_name]['input_dim']
         output_dim = config[dataset_name]['num_classes']
+        input_dim = config[dataset_name]['MLP']['input_dim']
         
         self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
         
@@ -193,16 +242,15 @@ class CNN(nn.Module):
         Initializes the CNN model for classification tasks.
 
         Args:
-            input_channels (int): The number of input channels (e.g., 3 for RGB images).
-            num_classes (int): The number of output classes for classification.
+            dataset_name (str): The name of the dataset, used to configure the
         """
         super(CNN, self).__init__()
         
-        input_channels = config[dataset_name]['input_channels']
+        self.task_type = config[dataset_name]['task_type']
         num_classes = config[dataset_name]['num_classes']
+        input_channels = config[dataset_name]['CNN']['input_channels']
         
-        self.criterion = nn.CrossEntropyLoss()
-        self.task_type = 'classification'
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
                 
         self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
@@ -224,7 +272,14 @@ class CNN(nn.Module):
         if self.fc1 is None:
             num_features = x.size(1)
             self.fc1 = nn.Linear(num_features, 128)
-            self.fc2 = nn.Linear(128, self.num_classes)
+            if self.task_type == 'regression':
+                self.fc2 = nn.Linear(128, 1)
+            elif self.task_type == 'classification':
+                if self.num_classes is None:
+                    raise ValueError("num_classes must be specified for classification tasks.")
+                self.fc2 = nn.Linear(128, self.num_classes)
+            else:
+                raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
             # Move to the same device as the input
             self.fc1.to(x.device)
             self.fc2.to(x.device)
@@ -238,7 +293,7 @@ class CNN(nn.Module):
 # model = CNN(input_channels=3, num_classes=10)  # For example, 3 channels (RGB) and 10 classes (e.g., CIFAR-10)
 
 
-
+# LENET 5
 class LeNet5Flexible(nn.Module):
     def __init__(self, dataset_name):
         """
@@ -249,11 +304,11 @@ class LeNet5Flexible(nn.Module):
         """
         super(LeNet5Flexible, self).__init__()
         
-        input_channels = config[dataset_name]['input_channels']
+        self.task_type = config[dataset_name]['task_type']
         num_classes = config[dataset_name]['num_classes']
+        input_channels = config[dataset_name]['LeNet5Flexible']['input_channels']
         
-        self.criterion = nn.CrossEntropyLoss()
-        self.task_type = 'classification'
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
         
         # LeNet-5 Inspired Convolutional Layers
         self.conv1 = nn.Conv2d(input_channels, 6, kernel_size=5, stride=1, padding=2)  # LeNet-5 uses 6 filters
@@ -280,7 +335,14 @@ class LeNet5Flexible(nn.Module):
             num_features = x.size(1)
             self.fc1 = nn.Linear(num_features, 120)  # LeNet-5 uses 120 neurons
             self.fc2 = nn.Linear(120, 84)  # LeNet-5 uses 84 neurons
-            self.fc3 = nn.Linear(84, self.num_classes)
+            if self.task_type == 'regression':
+                self.fc3 = nn.Linear(84, 1)
+            elif self.task_type == 'classification':
+                if self.num_classes is None:
+                    raise ValueError("num_classes must be specified for classification tasks.")
+                self.fc3 = nn.Linear(84, self.num_classes)
+            else:
+                raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
             
             # Move fully connected layers to the same device as input
             self.fc1.to(x.device)
@@ -294,7 +356,7 @@ class LeNet5Flexible(nn.Module):
         return x
 
 
-
+# RESNET9
 class BasicBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super(BasicBlock, self).__init__()
@@ -321,11 +383,11 @@ class ResNet9(nn.Module):
     def __init__(self, dataset_name):
         super(ResNet9, self).__init__()
         
-        input_channels = config[dataset_name]['input_channels']
+        self.task_type = config[dataset_name]['task_type']
         num_classes = config[dataset_name]['num_classes']
+        input_channels = config[dataset_name]['ResNet9']['input_channels']
         
-        self.criterion = nn.CrossEntropyLoss()
-        self.task_type = 'classification'
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
         
         self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
@@ -335,7 +397,14 @@ class ResNet9(nn.Module):
         self.layer3 = BasicBlock(256, 512, stride=2)
         
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512, num_classes)
+        if self.task_type == 'regression':
+            self.fc = nn.Linear(512, 1)
+        elif self.task_type == 'classification':
+            if num_classes is None:
+                raise ValueError("num_classes must be specified for classification tasks.")
+            self.fc = nn.Linear(512, num_classes)
+        else:
+            raise ValueError("Invalid task_type. Choose either 'regression' or 'classification'.")
     
     def forward(self, x):
         x = F.relu(self.bn1(self.conv1(x)))
@@ -368,12 +437,12 @@ class TransformerModelFlexible(nn.Module):
         """
         super(TransformerModelFlexible, self).__init__()
 
-        input_dim = config[dataset_name]['input_dim']  # Since your time series has 1 feature
-        output_dim = config[dataset_name]['num_classes']
-        
-        self.criterion = nn.CrossEntropyLoss() if config[dataset_name]['task_type'] == 'classification' else nn.MSELoss()
         self.task_type = config[dataset_name]['task_type']
-        self.sequence_length = config[dataset_name]['input_dim']
+        output_dim = config[dataset_name]['num_classes']
+        input_dim = config[dataset_name]['TransformerModelFlexible']['input_dim']
+        self.sequence_length = config[dataset_name]['TransformerModelFlexible']['sequence_length']
+
+        self.criterion = nn.MSELoss() if self.task_type == 'regression' else nn.CrossEntropyLoss()
 
         # Transformer Components
         self.embedding = nn.Linear(input_dim, hidden_dim)  # Input_dim=1 -> hidden_dim=64
