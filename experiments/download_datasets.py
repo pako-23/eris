@@ -6,11 +6,13 @@ from torch.utils.data import TensorDataset
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
+from tslearn.datasets import UCR_UEA_datasets
 import os
 import numpy as np
 import shutil
@@ -18,7 +20,7 @@ import shutil
 
 
 ########################################################################################
-# MNIST
+# MNIST - IMAGE CLASSIFICATION
 ########################################################################################
 def download_mnist():
     print("\nDownloading MNIST dataset...")
@@ -47,7 +49,7 @@ def download_mnist():
 
 
 ########################################################################################
-# CIFAR-10
+# CIFAR-10 - IMAGE CLASSIFICATION
 ########################################################################################
 def download_cifar10():
     print("\nDownloading CIFAR-10 dataset...")
@@ -76,34 +78,77 @@ def download_cifar10():
 
 
 ########################################################################################
-# AIRLINE PASSENGERS
+# AIRLINE PASSENGERS - TIME SERIES
 ########################################################################################
 # Function to create a dataset where X is the number of passengers at t, t-1, ..., t-n and Y is the passengers at t+1
-def create_dataset(data, window_size=1):
-    X, Y = [], []
-    for i in range(len(data) - window_size):
-        X.append(data[i:(i + window_size)])
-        Y.append(data[i + window_size])
-    return torch.tensor(X, dtype=torch.float32), torch.tensor(Y, dtype=torch.float32)
+# def create_dataset(data, window_size=1):
+#     X, Y = [], []
+#     for i in range(len(data) - window_size):
+#         X.append(data[i:(i + window_size)])
+#         Y.append(data[i + window_size])
+#     return torch.tensor(X, dtype=torch.float32), torch.tensor(Y, dtype=torch.float32)
+
+# def download_airline():
+#     print("\nDownloading Airline Passengers dataset...")
+#     # Load the Air Passenger dataset
+#     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
+#     data = pd.read_csv(url, parse_dates=['Month'], index_col='Month')
+    
+#     # Scale the data
+#     scaler = StandardScaler()
+#     data['Passengers'] = scaler.fit_transform(data['Passengers'].values.reshape(-1, 1))
+
+#     # Define the window size
+#     window_size = 30
+
+#     # Create the dataset
+#     X, Y = create_dataset(data['Passengers'].values, window_size)
+
+#     # Split the data into training and test sets
+#     X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, shuffle=False)
+
+#     # Create TensorDataset for training and testing
+#     train_dataset = TensorDataset(X_train, Y_train)
+#     test_dataset = TensorDataset(X_test, Y_test)
+
+#     # Save the dataset as torch tensor
+#     if not os.path.exists('datasets'):
+#         os.makedirs('datasets')
+    
+#     torch.save(train_dataset, 'datasets/airline_train.pt')
+#     torch.save(test_dataset, 'datasets/airline_test.pt')
+#     print("Airline Passengers dataset saved correctly as csv file.")
+
+def create_window(data, seq_length):
+    x, y = [], []
+    for i in range(len(data)-seq_length):
+        _x = data[i:(i+seq_length)]
+        _y = data[i+seq_length]
+        x.append(_x)
+        y.append(_y)
+
+    return np.array(x),np.array(y)
 
 def download_airline():
     print("\nDownloading Airline Passengers dataset...")
     # Load the Air Passenger dataset
     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
-    data = pd.read_csv(url, parse_dates=['Month'], index_col='Month')
+    data = pd.read_csv(url)
+    data = data.iloc[:,1:2].values
+    
+    # Scale the data
+    sc = StandardScaler()
+    training_data = sc.fit_transform(data)
 
-    # Define the window size
+    # Create windows
     window_size = 30
+    x, y = create_window(training_data, window_size)
 
-    # Create the dataset
-    X, Y = create_dataset(data['Passengers'].values, window_size)
-
-    # Split the data into training and test sets
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, shuffle=False)
+    X_train, X_test, Y_train, Y_test = train_test_split(x, y, test_size=0.20, shuffle=False)
 
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(X_train, Y_train)
-    test_dataset = TensorDataset(X_test, Y_test)
+    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
+    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
 
     # Save the dataset as torch tensor
     if not os.path.exists('datasets'):
@@ -116,7 +161,7 @@ def download_airline():
 
 
 ########################################################################################
-# ADULT
+# ADULT - TABULAR CLASSIFICATION
 ########################################################################################
 def download_adult():
     print("\nDownloading Adult dataset...")
@@ -180,3 +225,53 @@ def download_adult():
     torch.save(train_dataset, 'datasets/adult_train.pt')
     torch.save(test_dataset, 'datasets/adult_test.pt')
     print("Adult dataset saved correctly as torch tensor.")
+    
+    
+
+######################################################################################## 
+# LSST - TIME SERIES
+########################################################################################
+def download_lsst():
+    print("\nDownloading LSST dataset...")
+    # Load the dataset from UCR Time Series Classification Archive
+    ucr_loader = UCR_UEA_datasets()
+
+    # Load a specific dataset
+    X_train, y_train, X_test, y_test = ucr_loader.load_dataset("LSST") 
+    
+    # Remove the labels (92 and 95) from the dataset - few samples, errors when splitting
+    mask = y_test != '92'
+    X_test = X_test[mask]
+    y_test = y_test[mask]
+    mask = y_train != '92'
+    X_train = X_train[mask]
+    y_train = y_train[mask]
+
+    mask = y_test != '95'
+    X_test = X_test[mask]
+    y_test = y_test[mask]
+    mask = y_train != '95'
+    X_train = X_train[mask]
+    y_train = y_train[mask]
+    
+    # Encode the string labels
+    label_encoder = LabelEncoder()
+
+    # Assuming y_train, y_val, y_test are originally string labels
+    y_train = label_encoder.fit_transform(y_train)
+    y_test = label_encoder.transform(y_test)
+
+    # Create TensorDataset for training and testing
+    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32))
+    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test, dtype=torch.float32))
+
+    # Save the dataset as torch tensor
+    if not os.path.exists('datasets'):
+        os.makedirs('datasets')
+    torch.save(train_dataset, 'datasets/lsst_train.pt')
+    torch.save(test_dataset, 'datasets/lsst_test.pt')
+    print("LSST dataset saved correctly as torch tensor.")
+
+    
+
+
