@@ -167,3 +167,4 @@ cython_debug/
 build/
 build-dev/
 compile_commands.json
+TAGS

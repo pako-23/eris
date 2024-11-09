@@ -1,3 +1,4 @@
+#include "algorithms/eris/aggregator.pb.h"
 #include "algorithms/eris/split.h"
 #include <cstddef>
 #include <cstdint>
@@ -30,7 +31,7 @@ TEST_F(SplitTest, GetFragmentSizeDivisible) {
   std::vector<float> parameters = test_parameters(splits * fragment_size);
   RandomSplit splitter;
 
-  splitter.configure(parameters, splits, 42);
+  splitter.configure(parameters.size(), splits, 42);
 
   for (uint32_t i = 0; i < splits; ++i)
     ASSERT_EQ(splitter.get_fragment_size(i), fragment_size);
@@ -42,7 +43,7 @@ TEST_F(SplitTest, GetFragmentSizeNonDivisible) {
   std::vector<float> parameters = test_parameters(splits * fragment_size + 3);
   RandomSplit splitter;
 
-  splitter.configure(parameters, splits, 42);
+  splitter.configure(parameters.size(), splits, 42);
 
   for (uint32_t i = 0; i < 3; ++i)
     ASSERT_EQ(splitter.get_fragment_size(i), fragment_size + 1);
@@ -56,7 +57,7 @@ TEST_F(SplitTest, GetFragmentSizeNonDivisibleByOne) {
   std::vector<float> parameters = test_parameters(splits * fragment_size + 1);
   RandomSplit splitter;
 
-  splitter.configure(parameters, splits, 42);
+  splitter.configure(parameters.size(), splits, 42);
 
   ASSERT_EQ(splitter.get_fragment_size(0), fragment_size + 1);
   for (uint32_t i = 1; i < splits; ++i)
@@ -71,8 +72,9 @@ TEST_F(SplitTest, Split) {
 
   RandomSplit splitter;
 
-  splitter.configure(parameters, splits, 42);
-  std::vector<FragmentWeights> fragments = splitter.split(parameters, round);
+  splitter.configure(parameters.size(), splits, 42);
+  std::vector<eris::WeightSubmissionRequest> fragments =
+      splitter.split(parameters, round);
 
   size_t total_size = 0;
   for (const auto &fragment : fragments) {
@@ -100,14 +102,14 @@ TEST_F(SplitTest, SplitSameSeed) {
 
   RandomSplit first_splitter;
 
-  first_splitter.configure(parameters, splits, 42);
-  std::vector<FragmentWeights> first_fragments =
+  first_splitter.configure(parameters.size(), splits, 42);
+  std::vector<eris::WeightSubmissionRequest> first_fragments =
       first_splitter.split(parameters, round);
 
   RandomSplit second_splitter;
 
-  second_splitter.configure(parameters, splits, 42);
-  std::vector<FragmentWeights> second_fragments =
+  second_splitter.configure(parameters.size(), splits, 42);
+  std::vector<eris::WeightSubmissionRequest> second_fragments =
       second_splitter.split(parameters, round);
 
   EXPECT_EQ(first_fragments.size(), second_fragments.size());
@@ -124,14 +126,14 @@ TEST_F(SplitTest, SplitDifferentSeed) {
 
   RandomSplit first_splitter;
 
-  first_splitter.configure(parameters, splits, 42);
-  std::vector<FragmentWeights> first_fragments =
+  first_splitter.configure(parameters.size(), splits, 42);
+  std::vector<eris::WeightSubmissionRequest> first_fragments =
       first_splitter.split(parameters, round);
 
   RandomSplit second_splitter;
 
-  second_splitter.configure(parameters, splits, 100);
-  std::vector<FragmentWeights> second_fragments =
+  second_splitter.configure(parameters.size(), splits, 100);
+  std::vector<eris::WeightSubmissionRequest> second_fragments =
       second_splitter.split(parameters, round);
 
   EXPECT_EQ(first_fragments.size(), second_fragments.size());
@@ -153,10 +155,11 @@ TEST_F(SplitTest, Reassemble) {
 
   RandomSplit splitter;
 
-  splitter.configure(parameters, splits, 42);
-  std::vector<FragmentWeights> fragments = splitter.split(parameters, round);
+  splitter.configure(parameters.size(), splits, 42);
+  std::vector<eris::WeightSubmissionRequest> fragments =
+      splitter.split(parameters, round);
 
-  std::vector<WeightUpdate> updates(fragments.size());
+  std::vector<eris::WeightUpdate> updates(fragments.size());
   for (size_t i = 0; i < updates.size(); ++i) {
     updates[i].set_round(round);
     updates[i].set_contributors(contributors);
@@ -171,4 +174,11 @@ TEST_F(SplitTest, Reassemble) {
   for (size_t i = 0; i < parameters.size(); ++i)
     EXPECT_NEAR(parameters[i], reassembled[i],
                 5 * std::numeric_limits<float>::epsilon());
+}
+
+int main(int argc, char **argv) {
+  testing::InitGoogleTest(&argc, argv);
+  int ret = RUN_ALL_TESTS();
+  google::protobuf::ShutdownProtobufLibrary();
+  return ret;
 }

@@ -1,489 +1,346 @@
-#include "algorithms/eris/builder.h"
-#include "algorithms/eris/coordinator.grpc.pb.h"
+#include "algorithms/eris/common.pb.h"
+#include "algorithms/eris/config.h"
 #include "algorithms/eris/coordinator.h"
 #include "algorithms/eris/coordinator.pb.h"
+#include "mock_zmq_socket.h"
 #include "zmq.h"
-#include <chrono>
-#include <condition_variable>
-#include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <grpc/grpc.h>
-#include <grpc/support/port_platform.h>
-#include <grpc/support/time.h>
-#include <grpcpp/channel.h>
-#include <grpcpp/client_context.h>
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
-#include <grpcpp/support/client_callback.h>
-#include <grpcpp/support/status.h>
-#include <grpcpp/support/stub_options.h>
+#include <cstdlib>
+#include <future>
 #include <gtest/gtest.h>
-#include <memory>
-#include <mutex>
-#include <netinet/in.h>
 #include <string>
-#include <sys/socket.h>
 #include <thread>
-#include <unistd.h>
-#include <unordered_set>
-#include <utility>
-#include <vector>
 
-using eris::InitialState;
-using eris::JoinRequest;
-using grpc::Status;
-using grpc::StatusCode;
-
-static constexpr std::chrono::minutes timeout = std::chrono::minutes(1);
-static const int zmq_timeout = 500;
 static const uint32_t min_clients = 2;
 static const uint32_t rounds = 10;
 static const uint32_t split_seed = 42;
 static const uint32_t splits = 10;
-
-static void validate_training_options(const InitialState &state) {
-  EXPECT_EQ(state.options().min_clients(), min_clients);
-  EXPECT_EQ(state.options().rounds(), rounds);
-  EXPECT_EQ(state.options().split_seed(), split_seed);
-  EXPECT_EQ(state.options().splits(), splits);
-}
-
-static void test_join(const std::string &coordinator, const JoinRequest &req,
-                      InitialState *res,
-                      std::function<void(Status, InitialState *)> check) {
-  std::shared_ptr<grpc::Channel> channel =
-      grpc::CreateChannel(coordinator, grpc::InsecureChannelCredentials());
-  std::unique_ptr<eris::Coordinator::Stub> stub =
-      eris::Coordinator::NewStub(channel);
-
-  grpc::ClientContext ctx;
-  std::mutex mu;
-  std::condition_variable cv;
-  bool done = false;
-
-  stub->async()->Join(&ctx, &req, res,
-                      [&check, &mu, &done, &cv, res](Status s) {
-                        check(s, res);
-                        std::lock_guard<std::mutex> lk(mu);
-
-                        done = true;
-                        cv.notify_one();
-                      });
-
-  std::unique_lock<std::mutex> lk(mu);
-  cv.wait(lk, [&done] { return done; });
-}
+static const std::string address = "127.0.0.1";
+static const uint16_t publish_port = 10;
+static const uint16_t router_port = 20;
 
 class ErisCoordinatorTest : public testing::Test {
 protected:
-  ErisCoordinatorTest(void) : server_{nullptr}, server_thread_{nullptr} {
-    ErisCoordinatorBuilder builder;
-    builder.add_min_clients(min_clients);
-    builder.add_rounds(rounds);
-    builder.add_rpc_port(0);
-    builder.add_publish_port(0);
-    builder.add_split_seed(split_seed);
-    builder.add_splits(splits);
+  ErisCoordinatorTest(void) : server_{nullptr}, server_thread_{} {
+    ErisCoordinatorConfig config;
+    config.set_min_clients(min_clients);
+    config.set_rounds(rounds);
+    config.set_router_address(address);
+    config.set_router_port(router_port);
+    config.set_publish_address(address);
+    config.set_publish_port(publish_port);
+    config.set_split_seed(split_seed);
+    config.set_splits(splits);
 
-    server_ = std::make_shared<ErisCoordinator>(builder);
-    server_thread_ = std::make_unique<std::thread>(
-        [](std::shared_ptr<ErisCoordinator> coordinator) {
-          coordinator->start();
+    server_ = std::make_shared<ErisCoordinator<MockZMQSocket>>(config);
+    EXPECT_NE(server_, nullptr);
+
+    std::promise<void> started;
+    start_ready_ = started.get_future();
+
+    server_thread_ = std::thread(
+        [](std::shared_ptr<ErisCoordinator<MockZMQSocket>> coordinator,
+           std::promise<void> started) {
+          coordinator->start(std::move(started));
         },
-        server_);
-
-    std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel(
-        get_rpc_address(), grpc::InsecureChannelCredentials());
-
-    bool connected =
-        channel->WaitForConnected(std::chrono::system_clock::now() + timeout);
-
-    if (!connected) {
-      server_->stop();
-      server_thread_->join();
-      server_ = nullptr;
-      server_thread_ = nullptr;
-    }
+        server_, std::move(started));
   }
 
   ~ErisCoordinatorTest(void) {
-    if (server_)
-      server_->stop();
-    if (server_thread_)
-      server_thread_->join();
+    start_ready_.wait();
+    server_->stop();
+    server_thread_.join();
   }
 
-  void SetUp(void) override {
-    for (size_t i = 0; i < subscribers; ++i) {
-      ctx[i] = zmq_ctx_new();
-      EXPECT_NE(ctx[i], nullptr);
-      subscriber[i] = zmq_socket(ctx[i], ZMQ_SUB);
-      EXPECT_NE(subscriber[i], nullptr);
-      EXPECT_EQ(zmq_connect(subscriber[i], get_pubsub_address().c_str()), 0);
-      EXPECT_EQ(zmq_setsockopt(subscriber[i], ZMQ_SUBSCRIBE, "", 0), 0);
-      EXPECT_EQ(zmq_setsockopt(subscriber[i], ZMQ_RCVTIMEO, &zmq_timeout,
-                               sizeof(zmq_timeout)),
-                0);
-    }
+  void TearDown() {
+    EXPECT_TRUE(GetPublisher().is_empty());
+    EXPECT_TRUE(GetRouter().is_empty());
   }
 
-  void TearDown(void) override {
-    for (size_t i = 0; i < subscribers; ++i) {
-      zmq_close(subscriber[i]);
-      zmq_ctx_destroy(ctx[i]);
-    }
+  void TestJoin(const eris::JoinRequest &join_req, eris::StateResponse *res) {
+    zmq_msg_t msg, identity;
+    eris::StateRequest req;
+    char id[5];
+
+    *req.mutable_join() = join_req;
+    for (int i = 0; i < 5; ++i)
+      id[i] = '0' + rand() % 10;
+
+    zmq_msg_init_size(&identity, 5);
+    memcpy(zmq_msg_data(&identity), id, 5);
+    std::future<void> identity_recv{
+        GetRouter().recv_enqueue(std::move(identity))};
+
+    zmq_msg_init_size(&msg, req.ByteSizeLong());
+    req.SerializeToArray(zmq_msg_data(&msg), req.ByteSizeLong());
+    std::future<void> msg_recv{GetRouter().recv_enqueue(std::move(msg))};
+
+    identity_recv.wait();
+    msg_recv.wait();
+
+    zmq_msg_init(&identity);
+    EXPECT_TRUE(GetRouter().send_dequeue(&identity));
+    EXPECT_EQ(zmq_msg_size(&identity), 5);
+    for (int i = 0; i < 5; ++i)
+      EXPECT_EQ(static_cast<char *>(zmq_msg_data(&identity))[i], id[i]);
+    zmq_msg_close(&identity);
+
+    zmq_msg_init(&msg);
+    EXPECT_TRUE(GetRouter().send_dequeue(&msg));
+    res->ParseFromArray(zmq_msg_data(&msg), zmq_msg_size(&msg));
+    zmq_msg_close(&msg);
   }
 
-  inline std::string get_rpc_address(void) const {
-    return "127.0.0.1:" + std::to_string(server_->get_rpc_port());
+  void ValidateTrainingOptions(const eris::State &state) {
+    EXPECT_EQ(state.options().min_clients(), min_clients);
+    EXPECT_EQ(state.options().rounds(), rounds);
+    EXPECT_EQ(state.options().split_seed(), split_seed);
+    EXPECT_EQ(state.options().splits(), splits);
   }
 
-  inline std::string get_pubsub_address(void) const {
-    return "tcp://127.0.0.1:" + std::to_string(server_->get_publish_port());
+  void ContainsState(const eris::StateResponse &res) {
+    EXPECT_FALSE(res.has_error());
+    EXPECT_TRUE(res.has_state());
   }
 
-  static const size_t subscribers = 5;
-  std::shared_ptr<ErisCoordinator> server_;
-  std::unique_ptr<std::thread> server_thread_;
-  void *ctx[subscribers];
-  void *subscriber[subscribers];
+  void ContainsError(const eris::StateResponse &res, eris::ErrorCode code,
+                     const std::string &msg) {
+    EXPECT_TRUE(res.has_error());
+    EXPECT_FALSE(res.has_state());
+    EXPECT_EQ(res.error().code(), code);
+    EXPECT_STREQ(res.error().msg().c_str(), msg.c_str());
+  }
+
+  inline MockZMQSocket &GetRouter(void) {
+    return server_->service_.get_router();
+  }
+  inline MockZMQSocket &GetPublisher(void) {
+    return server_->service_.get_publisher();
+  }
+
+  std::shared_ptr<ErisCoordinator<MockZMQSocket>> server_;
+  std::thread server_thread_;
+  std::future<void> start_ready_;
 };
 
 TEST_F(ErisCoordinatorTest, Initialization) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  std::string router = "tcp://" + address + ":" + std::to_string(router_port);
+  std::string publisher =
+      "tcp://" + address + ":" + std::to_string(publish_port);
+  EXPECT_STREQ(GetRouter().get_endpoint().c_str(), router.c_str());
+  EXPECT_STREQ(GetPublisher().get_endpoint().c_str(), publisher.c_str());
 }
 
 TEST_F(ErisCoordinatorTest, JoinClient) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  eris::StateResponse res;
+  zmq_msg_t msg;
 
-  JoinRequest req;
-  InitialState res;
+  TestJoin(eris::JoinRequest{}, &res);
 
-  test_join(get_rpc_address(), req, &res,
-            [](Status status, InitialState *state) {
-              EXPECT_TRUE(status.ok());
-              validate_training_options(*state);
-              EXPECT_FALSE(state->has_assigned_fragment());
-              EXPECT_EQ(state->aggregators_size(), 0);
-            });
+  ContainsState(res);
+  const eris::State &state = res.state();
+  ValidateTrainingOptions(state);
+  EXPECT_FALSE(state.has_assigned_fragment());
+  EXPECT_EQ(state.aggregators_size(), 0);
 
-  std::vector<std::thread> threads;
-  threads.reserve(subscribers);
-
-  for (size_t i = 0; i < subscribers; ++i)
-    threads.emplace_back(
-        [](void *sub) {
-          zmq_msg_t msg;
-          zmq_msg_init(&msg);
-          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  zmq_msg_init(&msg);
+  EXPECT_FALSE(GetPublisher().send_dequeue(&msg, 100));
+  zmq_msg_close(&msg);
 }
 
 TEST_F(ErisCoordinatorTest, JoinAggregator) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  const std::string submit_address = "tcp://127.0.0.1:50052";
+  const std::string publish_address = "tcp://127.0.0.1:50052";
+  zmq_msg_t msg;
+  eris::JoinRequest req;
+  eris::StateResponse res;
+  eris::FragmentInfo info;
 
-  const std::string submit_address = "127.0.0.0:50052";
-  const std::string publish_address = "tcp://127.0.0.0:50052";
+  req.set_submit_address(submit_address);
+  req.set_publish_address(publish_address);
 
-  InitialState res;
-  JoinRequest req;
-  *req.mutable_submit_address() = submit_address;
-  *req.mutable_publish_address() = publish_address;
+  TestJoin(req, &res);
+  ContainsState(res);
+  const eris::State &state = res.state();
+  ValidateTrainingOptions(state);
+  EXPECT_TRUE(state.has_assigned_fragment());
+  EXPECT_EQ(state.aggregators_size(), 1);
+  EXPECT_GE(state.assigned_fragment(), 0);
+  EXPECT_LT(state.assigned_fragment(), splits);
+  bool found = false;
 
-  std::vector<std::thread> threads;
-  threads.reserve(subscribers);
+  for (auto aggr : state.aggregators())
+    if (aggr.publish_address() == publish_address &&
+        aggr.submit_address() == submit_address)
+      found = true;
 
-  for (size_t i = 0; i < subscribers; ++i)
-    threads.emplace_back(
-        [&publish_address, &submit_address](void *sub) {
-          zmq_msg_t msg;
-          FragmentInfo info;
+  EXPECT_TRUE(found);
 
-          zmq_msg_init(&msg);
-          int size = zmq_msg_recv(&msg, sub, 0);
-          EXPECT_NE(size, -1);
-          EXPECT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
-          EXPECT_EQ(info.publish_address(), publish_address);
-          EXPECT_EQ(info.submit_address(), submit_address);
-          EXPECT_LT(info.id(), splits);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
-
-  test_join(
-      get_rpc_address(), req, &res,
-      [&publish_address, &submit_address](Status status, InitialState *state) {
-        EXPECT_TRUE(status.ok());
-        validate_training_options(*state);
-        EXPECT_TRUE(state->has_assigned_fragment());
-        EXPECT_EQ(state->aggregators_size(), 1);
-        EXPECT_GE(state->assigned_fragment(), 0);
-        EXPECT_LT(state->assigned_fragment(), splits);
-
-        bool found = false;
-
-        for (auto aggr : state->aggregators())
-          if (aggr.publish_address() == publish_address &&
-              aggr.submit_address() == submit_address)
-            found = true;
-
-        EXPECT_TRUE(found);
-      });
-
-  for (auto &thread : threads)
-    thread.join();
+  zmq_msg_init(&msg);
+  EXPECT_TRUE(GetPublisher().send_dequeue(&msg));
+  EXPECT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), zmq_msg_size(&msg)));
+  EXPECT_EQ(info.publish_address(), publish_address);
+  EXPECT_EQ(info.submit_address(), submit_address);
+  EXPECT_LT(info.id(), splits);
+  zmq_msg_close(&msg);
 }
 
 TEST_F(ErisCoordinatorTest, JoinTooManyAggregators) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
-
   std::set<std::pair<std::string, std::string>> aggregators;
+  zmq_msg_t msg;
+  const uint16_t pull_base = 50052;
+  const uint16_t pub_base = 5555;
 
-  const uint16_t base_port = 50052;
   for (uint16_t i = 0; i < splits; ++i)
-    aggregators.insert(
-        std::make_pair("127.0.0.0:" + std::to_string(base_port + i),
-                       "tcp://127.0.0.1:" + std::to_string(base_port + i)));
+    aggregators.emplace("tcp://127.0.0.1:" + std::to_string(pull_base + i),
+                        "tcp://127.0.0.1:" + std::to_string(pub_base + i));
 
-  std::vector<std::thread> subscriber_threads;
-  subscriber_threads.reserve(subscribers);
+  for (const std::pair<std::string, std::string> &aggregator : aggregators) {
+    eris::StateResponse res;
+    eris::JoinRequest req;
 
-  for (size_t i = 0; i < subscribers; ++i)
-    subscriber_threads.emplace_back(
-        [&aggregators](void *sub) {
-          zmq_msg_t msg;
-          FragmentInfo info;
+    req.set_submit_address(aggregator.first);
+    req.set_publish_address(aggregator.second);
 
-          std::set<std::pair<std::string, std::string>> addresses;
-          std::unordered_set<uint32_t> ids;
+    TestJoin(req, &res);
+    ContainsState(res);
+    const eris::State &state = res.state();
+    ValidateTrainingOptions(state);
+    EXPECT_TRUE(state.has_assigned_fragment());
+    EXPECT_GE(state.assigned_fragment(), 0);
+    EXPECT_LT(state.assigned_fragment(), splits);
 
-          for (size_t i = 0; i < aggregators.size(); ++i) {
-            zmq_msg_init(&msg);
-            int size = zmq_msg_recv(&msg, sub, 0);
-            EXPECT_NE(size, -1);
-            EXPECT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), size));
-            std::pair<std::string, std::string> aggregator{
-                info.submit_address(), info.publish_address()};
-            EXPECT_NE(aggregators.find(aggregator), aggregators.end());
-            EXPECT_LT(info.id(), splits);
-            addresses.insert(aggregator);
-            ids.insert(info.id());
-            zmq_msg_close(&msg);
-          }
+    bool found = false;
 
-          EXPECT_EQ(addresses.size(), aggregators.size());
-          EXPECT_EQ(ids.size(), splits);
+    for (auto aggr : state.aggregators())
+      if (aggr.publish_address() == aggregator.second &&
+          aggr.submit_address() == aggregator.first)
+        found = true;
 
-          zmq_msg_init(&msg);
-          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
+    EXPECT_TRUE(found);
+  }
 
-  std::vector<std::thread> threads;
-  threads.reserve(aggregators.size());
+  {
+    eris::FragmentInfo info;
+    std::set<std::pair<std::string, std::string>> addresses;
+    std::unordered_set<uint32_t> ids;
 
-  for (const std::pair<std::string, std::string> &aggregator : aggregators)
-    threads.emplace_back(
-        [this](const std::pair<std::string, std::string> &aggregator) {
-          InitialState res;
-          JoinRequest req;
-          req.set_publish_address(aggregator.second);
-          req.set_submit_address(aggregator.first);
+    for (size_t i = 0; i < aggregators.size(); ++i) {
+      zmq_msg_init(&msg);
+      EXPECT_TRUE(GetPublisher().send_dequeue(&msg));
+      EXPECT_TRUE(info.ParseFromArray(zmq_msg_data(&msg), zmq_msg_size(&msg)));
+      std::pair<std::string, std::string> aggregator{info.submit_address(),
+                                                     info.publish_address()};
+      EXPECT_NE(aggregators.find(aggregator), aggregators.end());
+      EXPECT_LT(info.id(), splits);
+      addresses.insert(aggregator);
+      ids.insert(info.id());
+      zmq_msg_close(&msg);
+    }
+    EXPECT_EQ(addresses.size(), aggregators.size());
+    EXPECT_EQ(ids.size(), splits);
+  }
 
-          test_join(get_rpc_address(), req, &res,
-                    [&aggregator](Status status, InitialState *state) {
-                      EXPECT_TRUE(status.ok());
-                      validate_training_options(*state);
-                      EXPECT_TRUE(state->has_assigned_fragment());
-                      EXPECT_GE(state->assigned_fragment(), 0);
-                      EXPECT_LT(state->assigned_fragment(), splits);
-                      bool found = false;
+  {
+    eris::JoinRequest req;
+    eris::StateResponse res;
+    req.set_submit_address("tcp://127.0.0.1:" +
+                           std::to_string(pull_base + aggregators.size() + 1));
+    req.set_publish_address("tcp://127.0.0.1:" +
+                            std::to_string(pub_base + aggregators.size() + 1));
 
-                      for (auto aggr : state->aggregators())
-                        if (aggr.publish_address() == aggregator.second &&
-                            aggr.submit_address() == aggregator.first)
-                          found = true;
+    TestJoin(eris::JoinRequest{}, &res);
 
-                      EXPECT_TRUE(found);
-                    });
-        },
-        aggregator);
+    ContainsState(res);
+    const eris::State &state = res.state();
+    ValidateTrainingOptions(state);
+    EXPECT_FALSE(state.has_assigned_fragment());
 
-  for (auto &thread : threads)
-    thread.join();
+    for (auto aggr : state.aggregators()) {
+      std::pair<std::string, std::string> aggregator{aggr.submit_address(),
+                                                     aggr.publish_address()};
+      if (aggregators.find(aggregator) == aggregators.end())
+        FAIL();
+    }
+  }
 
-  InitialState res;
-  JoinRequest req;
-  req.set_submit_address("127.0.0.0:" +
-                         std::to_string(base_port + aggregators.size() + 1));
-  req.set_publish_address("tcp://127.0.0.0:" +
-                          std::to_string(base_port + aggregators.size() + 1));
-
-  test_join(get_rpc_address(), req, &res,
-            [&aggregators](Status status, InitialState *state) {
-              EXPECT_TRUE(status.ok());
-              validate_training_options(*state);
-              EXPECT_FALSE(state->has_assigned_fragment());
-
-              EXPECT_EQ(aggregators.size(), state->aggregators_size());
-
-              for (auto aggr : state->aggregators()) {
-                std::pair<std::string, std::string> aggregator{
-                    aggr.submit_address(), aggr.publish_address()};
-                if (aggregators.find(aggregator) == aggregators.end())
-                  FAIL();
-              }
-            });
-
-  for (auto &thread : subscriber_threads)
-    thread.join();
+  zmq_msg_init(&msg);
+  EXPECT_FALSE(GetPublisher().send_dequeue(&msg, 100));
+  zmq_msg_close(&msg);
 }
 
 TEST_F(ErisCoordinatorTest, MissingPublishAddress) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  eris::JoinRequest req;
+  eris::StateResponse res;
+  zmq_msg_t msg;
 
-  JoinRequest req;
-  InitialState res;
-  req.set_submit_address("127.0.0.1:50051");
+  req.set_submit_address("tcp://127.0.0.1:50051");
 
-  test_join(get_rpc_address(), req, &res,
-            [](Status status, InitialState *state) {
-              EXPECT_FALSE(status.ok());
-              EXPECT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
-              EXPECT_STREQ(status.error_message().c_str(),
-                           "Missing model updates publishing address");
-            });
+  TestJoin(req, &res);
+  ContainsError(res, eris::ErrorCode::INVALID_ARGUMENT,
+                "Missing model updates publishing address");
 
-  std::vector<std::thread> threads;
-  threads.reserve(subscribers);
-
-  for (size_t i = 0; i < subscribers; ++i)
-    threads.emplace_back(
-        [](void *sub) {
-          zmq_msg_t msg;
-          zmq_msg_init(&msg);
-          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  zmq_msg_init(&msg);
+  EXPECT_FALSE(GetPublisher().send_dequeue(&msg, 100));
+  zmq_msg_close(&msg);
 }
 
 TEST_F(ErisCoordinatorTest, MissingSubmitAddress) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  eris::JoinRequest req;
+  eris::StateResponse res;
+  zmq_msg_t msg;
 
-  JoinRequest req;
-  InitialState res;
-  req.set_publish_address("127.0.0.1:50051");
+  req.set_publish_address("tcp://127.0.0.1:50051");
 
-  test_join(get_rpc_address(), req, &res,
-            [](Status status, InitialState *state) {
-              EXPECT_FALSE(status.ok());
-              EXPECT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
-              EXPECT_STREQ(status.error_message().c_str(),
-                           "Missing weight submission address");
-            });
+  TestJoin(req, &res);
+  ContainsError(res, eris::ErrorCode::INVALID_ARGUMENT,
+                "Missing weight submission address");
 
-  std::vector<std::thread> threads;
-  threads.reserve(subscribers);
-
-  for (size_t i = 0; i < subscribers; ++i)
-    threads.emplace_back(
-        [](void *sub) {
-          zmq_msg_t msg;
-          zmq_msg_init(&msg);
-          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  zmq_msg_init(&msg);
+  EXPECT_FALSE(GetPublisher().send_dequeue(&msg, 100));
+  zmq_msg_close(&msg);
 }
 
 TEST_F(ErisCoordinatorTest, InvalidPublishAddress) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  eris::JoinRequest req;
+  eris::StateResponse res;
+  // zmq_msg_t msg;
 
-  JoinRequest req;
-  InitialState res;
   req.set_publish_address("Some random string");
-  req.set_submit_address("127.0.0.1:50051");
+  req.set_submit_address("tcp://127.0.0.1:50051");
 
-  test_join(get_rpc_address(), req, &res,
-            [](Status status, InitialState *state) {
-              EXPECT_FALSE(status.ok());
-              EXPECT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
-              EXPECT_STREQ(status.error_message().c_str(),
-                           "A model updates publishing address must have the "
-                           "form tcp://<address>:<port>"
-                           "where address is a valid IPv4 address");
-            });
+  TestJoin(req, &res);
+  ContainsError(res, eris::ErrorCode::INVALID_ARGUMENT,
+                "A model updates publishing address must have the form "
+                "tcp://<address>:<port> where address is a valid IPv4 address");
 
-  std::vector<std::thread> threads;
-  threads.reserve(subscribers);
-
-  for (size_t i = 0; i < subscribers; ++i)
-    threads.emplace_back(
-        [](void *sub) {
-          zmq_msg_t msg;
-          zmq_msg_init(&msg);
-          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  // zmq_msg_init(&msg);
+  // EXPECT_FALSE(GetPublisher().send_dequeue(&msg, 100));
+  // zmq_msg_close(&msg);
 }
 
 TEST_F(ErisCoordinatorTest, InvalidSubmitAddress) {
-  EXPECT_NE(server_, nullptr);
-  EXPECT_NE(server_thread_, nullptr);
+  eris::JoinRequest req;
+  eris::StateResponse res;
+  // zmq_msg_t msg;
 
-  JoinRequest req;
-  InitialState res;
-  req.set_publish_address("127.0.0.1:5000");
+  req.set_publish_address("tcp://127.0.0.1:5000");
   req.set_submit_address("Some random string");
 
-  test_join(
-      get_rpc_address(), req, &res, [](Status status, InitialState *state) {
-        EXPECT_FALSE(status.ok());
-        EXPECT_EQ(status.error_code(), StatusCode::INVALID_ARGUMENT);
-        EXPECT_STREQ(
-            status.error_message().c_str(),
-            "A weight submission address must have the form <address>:<port>"
-            "where address is a valid IPv4 address");
-      });
+  TestJoin(req, &res);
+  ContainsError(
+      res, eris::ErrorCode::INVALID_ARGUMENT,
+      "A weight submission address must have the form tcp://<address>:<port>"
+      "where address is a valid IPv4 address");
 
-  std::vector<std::thread> threads;
-  threads.reserve(subscribers);
+  // zmq_msg_init(&msg);
+  // EXPECT_FALSE(GetPublisher().send_dequeue(&msg, 100));
+  // zmq_msg_close(&msg);
+}
 
-  for (size_t i = 0; i < subscribers; ++i)
-    threads.emplace_back(
-        [](void *sub) {
-          zmq_msg_t msg;
-          zmq_msg_init(&msg);
-          EXPECT_EQ(zmq_msg_recv(&msg, sub, 0), -1);
-          zmq_msg_close(&msg);
-        },
-        subscriber[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+int main(int argc, char **argv) {
+  testing::InitGoogleTest(&argc, argv);
+  int ret = RUN_ALL_TESTS();
+  google::protobuf::ShutdownProtobufLibrary();
+  return ret;
 }

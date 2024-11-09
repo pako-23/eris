@@ -2,10 +2,20 @@ syntax = "proto3";
 
 package eris;
 
-message Empty {}
 
 message FragmentInfo {
     uint32 id = 1;
     string submit_address = 2;
     string publish_address = 3;
+}
+
+
+enum ErrorCode {
+    INVALID_ARGUMENT = 0;
+}
+
+
+message Error {
+    ErrorCode code = 1;
+    string msg = 2;
 }

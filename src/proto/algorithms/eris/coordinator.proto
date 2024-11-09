@@ -4,16 +4,11 @@ package eris;
 
 import "algorithms/eris/common.proto";
 
-service Coordinator {
-    rpc Join (JoinRequest) returns (InitialState) {}
-    rpc GetAggregators (Empty) returns (Aggregators) {}
+
+message StateRequest {
+    optional JoinRequest join = 1;
 }
 
-
-message JoinRequest {
-    optional string submit_address = 1;
-    optional string publish_address = 2;
-}
 
 message TrainingOptions {
     uint32 min_clients = 1;
@@ -22,12 +17,24 @@ message TrainingOptions {
     uint32 rounds = 4;
 }
 
-message InitialState {
-    TrainingOptions options = 1;
-    optional uint32 assigned_fragment = 2;
-    repeated FragmentInfo aggregators = 3;
+
+message State {
+    repeated FragmentInfo aggregators = 1;
+    optional TrainingOptions options = 2;
+    optional uint32 assigned_fragment = 3;
 }
 
-message Aggregators {
-    repeated FragmentInfo aggregators = 1;
+
+message JoinRequest {
+    optional string submit_address = 1;
+    optional string publish_address = 2;
+}
+
+
+
+message StateResponse {
+    oneof value {
+	Error error = 1;
+	State state = 2;
+    }
 }

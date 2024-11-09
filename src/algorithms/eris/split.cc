@@ -1,11 +1,12 @@
 #include "algorithms/eris/split.h"
+#include "algorithms/eris/aggregator.pb.h"
 #include <cstddef>
 #include <cstdint>
 #include <random>
 
-void RandomSplit::configure(const std::vector<float> &parameters,
-                            uint32_t splits, uint32_t seed) noexcept {
-  aggregator_mapping_.reserve(parameters.size());
+void RandomSplit::configure(size_t parameters, uint32_t splits,
+                            uint32_t seed) noexcept {
+  aggregator_mapping_.reserve(parameters);
   nsplits_ = splits;
 
   for (uint32_t i = 0; i < nsplits_; ++i)
@@ -24,10 +25,10 @@ size_t RandomSplit::get_fragment_size(uint32_t fragment_id) const noexcept {
   return aggregator_mapping_.capacity() / nsplits_;
 }
 
-std::vector<FragmentWeights>
+std::vector<eris::WeightSubmissionRequest>
 RandomSplit::split(const std::vector<float> &parameters,
                    uint32_t round) noexcept {
-  std::vector<FragmentWeights> fragments;
+  std::vector<eris::WeightSubmissionRequest> fragments;
   fragments.resize(nsplits_);
 
   for (uint32_t i = 0; i < fragments.size(); ++i)
@@ -40,13 +41,13 @@ RandomSplit::split(const std::vector<float> &parameters,
 }
 
 std::vector<float> RandomSplit::reassemble(
-    const std::vector<WeightUpdate> &updates) const noexcept {
+    const std::vector<eris::WeightUpdate> &updates) const noexcept {
   std::vector<float> parameters(aggregator_mapping_.size());
   std::vector<int> assigned(updates.size(), 0);
 
   for (size_t i = 0; i < aggregator_mapping_.size(); ++i) {
     uint32_t fragment_id = aggregator_mapping_[i];
-    const WeightUpdate &update = updates[fragment_id];
+    const eris::WeightUpdate &update = updates[fragment_id];
     parameters[i] =
         update.weight(assigned[fragment_id]) / update.contributors();
     ++assigned[fragment_id];

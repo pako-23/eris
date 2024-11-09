@@ -5,9 +5,6 @@
 #include <cstdint>
 #include <vector>
 
-using eris::FragmentWeights;
-using eris::WeightUpdate;
-
 /**
  * The RandomSplit is a strategy to fragment the model weights in a
  * randomic-like way.
@@ -19,13 +16,12 @@ public:
    * of the shape of parameters into splits fragments using seed as seed of
    * the random splitting function.
    *
-   * @param parameters The model weights.
+   * @param parameters The number of weights in the model.
    * @param splits The number of fragments that should be produced by the
    * splitting.
    * @param seed The seed of the randomic splitting function.
    */
-  void configure(const std::vector<float> &parameters, uint32_t splits,
-                 uint32_t seed) noexcept;
+  void configure(size_t parameters, uint32_t splits, uint32_t seed) noexcept;
 
   /**
    * It returns the size of a fragment with a given identifier.
@@ -44,7 +40,7 @@ public:
    * @return The new weights of the model.
    */
   std::vector<float>
-  reassemble(const std::vector<WeightUpdate> &updates) const noexcept;
+  reassemble(const std::vector<eris::WeightUpdate> &updates) const noexcept;
 
   /**
    * It splits the given model weights into a list of weights that can be
@@ -56,8 +52,8 @@ public:
    * @param round The current training round.
    * @return The list of weights that should be shared with the aggregators.
    */
-  std::vector<FragmentWeights> split(const std::vector<float> &parameters,
-                                     uint32_t round) noexcept;
+  std::vector<eris::WeightSubmissionRequest>
+  split(const std::vector<float> &parameters, uint32_t round) noexcept;
 
 private:
   std::vector<uint32_t>

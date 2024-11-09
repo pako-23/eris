@@ -1,148 +1,152 @@
 #pragma once
 
-#include "algorithms/eris/builder.h"
+#include "algorithms/eris/common.pb.h"
+#include "algorithms/eris/config.h"
 #include "spdlog/spdlog.h"
+#include "util/networking.h"
 #include "zmq.h"
-#include <grpcpp/impl/codegen/config_protobuf.h>
-#include <grpcpp/impl/service_type.h>
-#include <grpcpp/server.h>
-#include <grpcpp/server_builder.h>
-#include <string>
-#include <type_traits>
-
-using grpc::Server;
-using grpc::protobuf::Message;
+#include <cmath>
+#include <functional>
+#include <future>
+#include <optional>
+#include <stdexcept>
 
 /**
  * The ErisService class implements the communication services needed by the
- * eris federated training algorithm. In particular, it starts a gRPC server to
- * handle incoming requests, and a ZeroMQ socket to publish events.
+ * eris federated training algorithm. In particular, it starts a ZeroMQ router
+ * socket to handle incoming requests, and a ZeroMQ socket to publish events.
  */
-template <class T> class ErisService {
-  static_assert(std::is_base_of<grpc::Service, T>::value,
-                "The type should ineherit from grpc::Service");
-
+template <class Socket = ZMQSocket> class ErisService final {
 public:
   /**
-   * It constructs an ErisService object with the provided configurations, and
-   * gRPC service arguments. Upon construction, the process will start listening
-   * on the provided publish address and gRPC address.
+   * It constructs an ErisService object with the provided configurations. Upon
+   * construction, the process will start listening on the provided addresses.
    *
-   * @param builder The builder class carrying all the configurations to build
-   * an ErisService.
-   * @param args The arguments that should be used to build gRPC service that
-   * will handle incoming gRPC requests.
+   * @param config The configuration used to build the ErisService.
    */
-  template <class... Args>
-  explicit ErisService(const ErisServiceBuilder &builder, Args &&...args)
-      : server_{nullptr}, service_{args...}, started_{false},
-        listening_address_{builder.get_rpc_listen_address()} {
-    grpc::ServerBuilder srv_builder;
-    int port;
-    char endpoint[255];
-    size_t endpointlen = sizeof(endpoint);
+  explicit ErisService(const ErisServiceConfig *config)
+      : publisher_{ZMQ_PUB}, router_{ZMQ_ROUTER}, running_{false} {
+    if (!publisher_.bind(config->get_publisher().get_endpoint()))
+      throw std::invalid_argument{"failed to bind publisher address"};
 
-    zmq_ctx = zmq_ctx_new();
-    if (!zmq_ctx)
-      throw std::bad_alloc();
+    if (!router_.bind(config->get_router().get_endpoint()))
+      throw std::invalid_argument{"failed to bind router address"};
 
-    publisher = zmq_socket(zmq_ctx, ZMQ_PUB);
-    if (!publisher)
-      throw std::bad_alloc();
-
-    zmq_bind(publisher, builder.get_pubsub_listen_address().c_str());
-    zmq_getsockopt(publisher, ZMQ_LAST_ENDPOINT, &endpoint, &endpointlen);
-    publish_port_ = atoi(strchr(strchr(endpoint, ':') + 1, ':') + 1);
-
-    srv_builder.AddListeningPort(builder.get_rpc_listen_address(),
-                                 grpc::InsecureServerCredentials(), &port);
-    srv_builder.RegisterService(&service_);
-
-    server_ = srv_builder.BuildAndStart();
-    rpc_port_ = port;
-
-    // Sleep for 200 milliseconds to prevent the slow joiner syndrome
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    const int timeout = 100;
+    router_.setsockopt(ZMQ_RCVTIMEO, &timeout, sizeof(timeout));
   }
 
   /**
    * Deletes an instance of an ErisService object.
    */
   ~ErisService(void) noexcept {
-    if (started_)
+    if (running_)
       stop();
-    zmq_close(publisher);
-    zmq_ctx_destroy(zmq_ctx);
   }
 
   /**
-   * Stars the ErisService. In practice, it will start serving RPC
-   * requests.
-   */
-  void start(void) noexcept {
-    started_ = true;
-    char endpoint[255];
-    size_t endpointlen = sizeof(endpoint);
-
-    zmq_getsockopt(publisher, ZMQ_LAST_ENDPOINT, &endpoint, &endpointlen);
-
-    spdlog::info("listening RPC requests on {0}:{1} and publishing on {2}",
-                 listening_address_.substr(0, listening_address_.find(':')),
-                 rpc_port_, endpoint);
-    server_->Wait();
-  }
-
-  /**
-   * Stops the ErisService. In practice, it will stop serving RPC
-   * requests.
-   */
-  void stop(void) noexcept {
-    server_->Shutdown();
-    started_ = false;
-  }
-
-  /**
-   * It returns the port on which the ErisService publishes events.
+   * Starts the service process. In practice, it will start handling
+   * client requests and publishing events.
    *
-   * @return The port on which the service publishes events.
+   * @param cb A callback to handle the incoming requests.
+   * @param started An optional promise which will complete once the
+   * service process starts listening for connections from the clients.
    */
-  inline uint16_t get_publish_port(void) const noexcept {
-    return publish_port_;
+  void
+  start(std::function<void(zmq_msg_t *, zmq_msg_t *)> cb,
+        std::optional<std::promise<void>> started = std::nullopt) noexcept {
+    zmq_msg_t identity;
+    zmq_msg_t msg;
+
+    running_ = true;
+
+    spdlog::info(
+        "eris service started handling requests on {} and publishing on {}",
+        router_.get_endpoint(), publisher_.get_endpoint());
+
+    if (started)
+      started->set_value();
+
+    zmq_msg_init(&identity);
+    zmq_msg_init(&msg);
+
+    while (running_) {
+      if (!router_.recv_msg(&identity, 0))
+        continue;
+
+      if (!router_.recv_msg(&msg, 0)) {
+        zmq_msg_close(&identity);
+        zmq_msg_init(&identity);
+        spdlog::error("failed to recieve client's message");
+        continue;
+      }
+
+      cb(&identity, &msg);
+
+      zmq_msg_close(&msg);
+      zmq_msg_close(&identity);
+      zmq_msg_init(&identity);
+      zmq_msg_init(&msg);
+    }
   }
 
   /**
-   * It returns the port on which the ErisService serves gRPC requests.
-   *
-   * @return The port on which the service serves gRPC requests.
+   * Stops the service process. In practice, it will stop handling
+   * client requests and publishing events.
    */
-  inline uint16_t get_rpc_port(void) const noexcept { return rpc_port_; }
+  void stop(void) {
+    spdlog::info("gracefully shutting down the eris service");
+    running_ = false;
+  }
 
   /**
-   * It publishes a message over the ZeroMQ socket.
+   * Sends a message over the ZeroMQ router socket to the socket with the given
+   * identity.
    *
-   * @param message The message that should be published over the ZeroMQ socket.
-   * It serializes the message with Protobuf.
-   * @return It returns true if the message was correctly published; otherwise,
-   * it returns false.
+   * @param identity The identifier of  the receiver socket.
+   * @param message The message to send.
+   * @return It returns true if it manages to successfully send the given
+   * message; otherwise it returns false.
    */
-  bool publish(const Message &message) noexcept {
+  bool route_msg(zmq_msg_t *identity,
+                 const google::protobuf::Message &message) noexcept {
+    return router_.send_msg(identity, ZMQ_SNDMORE) &&
+           send_msg(router_, message);
+  }
+
+  /**
+   * Sends a message over the ZeroMQ publisher socket.
+   *
+   * @param message The message to send.
+   * @return It returns true if it manages to successfully send the given
+   * message; otherwise it returns false.
+   */
+  bool publish_event(const google::protobuf::Message &message) noexcept {
+    return send_msg(publisher_, message);
+  }
+
+  inline Socket &get_publisher(void) { return publisher_; }
+  inline Socket &get_router(void) { return router_; }
+
+private:
+  /**
+   * Sends a message over a given ZeroMQ socket.
+   *
+   * @param sock The socket the message should be sent over.
+   * @param message The message to send.
+   * @return It returns true if it manages to successfully send the given
+   * message; otherwise it returns false.
+   */
+  bool send_msg(Socket &sock,
+                const google::protobuf::Message &message) noexcept {
     zmq_msg_t msg;
 
     zmq_msg_init_size(&msg, message.ByteSizeLong());
     message.SerializeToArray(zmq_msg_data(&msg), message.ByteSizeLong());
-    bool ret = zmq_msg_send(&msg, publisher, 0) > 0;
-    zmq_msg_close(&msg);
-
-    return ret;
+    return sock.send_msg(&msg, 0);
   }
 
-private:
-  std::unique_ptr<Server> server_;      /**< The gRPC server */
-  void *zmq_ctx;                        /**< The ZeroMQ socket context */
-  void *publisher;                      /**< The ZeroMQ publisher socket */
-  uint16_t rpc_port_;                   /**< The gRPC listening port */
-  uint16_t publish_port_;               /**< The ZeroMQ listening port */
-  T service_;                           /**< The gRPC registered service */
-  bool started_;                        /**< If the service is started or no */
-  const std::string listening_address_; /**< The gRPC listening address */
+  Socket publisher_;         /**< The ZeroMQ publisher socket */
+  Socket router_;            /**< The ZeroMQ router socket */
+  std::atomic_bool running_; /**< Whether the process is running */
 };

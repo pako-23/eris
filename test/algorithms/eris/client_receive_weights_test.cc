@@ -1,51 +1,35 @@
 #include "algorithms/eris/aggregator.pb.h"
-#include "algorithms/eris/client_test_helpers.h"
-#include "algorithms/eris/split.h"
-#include <array>
-#include <chrono>
+#include "mock_client.h"
+#include "mock_zmq_socket.h"
+#include "zmq.h"
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <grpcpp/server_context.h>
+#include <cstdlib>
+#include <future>
 #include <gtest/gtest.h>
-#include <limits>
+#include <memory>
 #include <random>
-#include <thread>
-#include <vector>
+#include <sys/types.h>
 
-static const uint32_t aggregator_count = 5;
+static const uint32_t splits = 5;
 static const uint32_t split_seed = 42;
-static const size_t parameters_size = 130;
+static const uint32_t fragment_size = 10;
+static constexpr size_t parameters_size = splits * fragment_size;
 
-class ClientReceiveWeightsTest : public testing::Test, public MockClient {
+class ClientReceiveWeightsTest : public testing::Test {
 protected:
-  ClientReceiveWeightsTest(void)
-      : MockClient{parameters_size}, expected_{generate_random_vector()} {
-    splitter.configure(expected_, aggregator_count, split_seed);
+  ClientReceiveWeightsTest(void) : client_{} {
+    client_.get_splitter().configure(parameters_size, splits, split_seed);
+    client_.get_options().set_splits(splits);
+    client_.get_options().set_split_seed(split_seed);
 
-    InitialState state;
-
-    state.mutable_options()->set_rounds(10);
-    state.mutable_options()->set_splits(aggregators_.size());
-    state.mutable_options()->set_split_seed(split_seed);
-    state.mutable_options()->set_min_clients(states_.size());
-
-    for (size_t i = 0; i < aggregators_.size(); ++i) {
-      FragmentInfo info;
-
-      info.set_id(i);
-      info.set_submit_address(aggregators_[i].get_rpc_address());
-      info.set_publish_address(aggregators_[i].get_pubsub_address());
-
-      *state.add_aggregators() = info;
-    }
-
-    for (size_t i = 0; i < states_.size(); ++i)
-      states_[i].configure(this, state);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    client_.get_publish_sockets().resize(splits);
+    for (auto &sock : client_.get_publish_sockets())
+      sock = std::make_unique<MockZMQSocket>(ZMQ_SUB);
   }
 
-  std::vector<float> generate_random_vector(void) {
+  std::vector<float> GenerateRandomVector(void) {
     std::vector<float> vec(parameters_size);
     std::default_random_engine rng(time(NULL));
     std::uniform_real_distribution<float> dist(0.0, 1.0);
@@ -56,183 +40,176 @@ protected:
     return vec;
   }
 
-  std::vector<eris::WeightUpdate> generate_updates(uint32_t round) {
-    std::vector<eris::FragmentWeights> updates =
-        splitter.split(expected_, round);
-    std::vector<eris::WeightUpdate> result(updates.size());
+  std::vector<eris::WeightUpdate>
+  GenerateUpdates(const std::vector<float> &parameters, uint32_t round) {
+    std::vector<eris::WeightSubmissionRequest> requests =
+        client_.get_splitter().split(parameters, round);
+    std::vector<eris::WeightUpdate> results;
+    results.reserve(requests.size());
 
-    for (size_t i = 0; i < updates.size(); ++i) {
+    for (size_t i = 0; i < requests.size(); ++i) {
+      eris::WeightUpdate update;
 
-      result[i].set_round(updates[i].round());
-      result[i].set_contributors(1);
+      update.set_round(round);
+      update.set_contributors(10);
+      for (int j = 0; j < requests[i].weight_size(); ++j)
+        update.add_weight(requests[i].weight(j) * 10);
 
-      for (int j = 0; j < updates[i].weight_size(); ++j)
-        result[i].add_weight(updates[i].weight(j));
+      results.emplace_back(update);
     }
 
-    return result;
+    return results;
   }
 
-  ~ClientReceiveWeightsTest(void) {}
+  ~ClientReceiveWeightsTest(void) = default;
 
-  std::array<MockAggregator, aggregator_count> aggregators_;
-  std::array<ClientState, 8> states_;
-  std::vector<float> expected_;
-  RandomSplit splitter;
+  void TearDown() {
+    EXPECT_TRUE(client_.get_dealer().is_empty());
+    EXPECT_TRUE(client_.get_subscriber().is_empty());
+  }
+
+  MockClient client_;
 };
 
 TEST_F(ClientReceiveWeightsTest, ReceiveWeights) {
-  std::vector<std::thread> threads;
-  threads.reserve(states_.size());
+  uint32_t round = 0;
+  std::vector<float> expected = GenerateRandomVector();
+  std::vector<eris::WeightUpdate> updates = GenerateUpdates(expected, round);
+  std::vector<std::shared_future<void>> received;
+  received.reserve(updates.size());
 
-  for (size_t i = 0; i < states_.size(); ++i)
-    threads.emplace_back(
-        [this](ClientState *state) {
-          uint32_t round = 0;
-          std::vector<float> updates = state->receive_weights(&round);
+  for (size_t i = 0; i < updates.size(); ++i) {
+    zmq_msg_t msg;
 
-          EXPECT_EQ(updates.size(), expected_.size());
+    zmq_msg_init_size(&msg, updates[i].ByteSizeLong());
+    updates[i].SerializeToArray(zmq_msg_data(&msg), updates[i].ByteSizeLong());
+    received.emplace_back(client_.get_publish_sockets()[i]->recv_enqueue(msg));
+  }
 
-          for (size_t i = 0; i < updates.size(); ++i)
-            EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<float>::epsilon())
-                << "Elements are different at index " << i;
-          EXPECT_EQ(round, 0);
-        },
-        &states_[i]);
+  EXPECT_TRUE(client_.mock_receive_weights(&round));
+  EXPECT_EQ(round, 0);
+  std::vector<float> weights = client_.get_parameters();
+  EXPECT_EQ(weights.size(), expected.size());
+  for (size_t i = 0; i < weights.size(); ++i)
+    EXPECT_NEAR(weights[i], expected[i],
+                5 * std::numeric_limits<float>::epsilon());
 
-  std::vector<WeightUpdate> updates = generate_updates(0);
-
-  for (size_t i = 0; i < updates.size(); ++i)
-    aggregators_[i].publish_update(updates[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  for (std::shared_future<void> &t : received)
+    t.wait();
 }
 
 TEST_F(ClientReceiveWeightsTest, ReceiveOlderWeights) {
-  std::vector<std::thread> threads;
-  threads.reserve(states_.size());
+  uint32_t round = 1;
 
-  for (size_t i = 0; i < states_.size(); ++i)
-    threads.emplace_back(
-        [this](ClientState *state) {
-          uint32_t round = 1;
-          std::vector<float> updates = state->receive_weights(&round);
+  std::vector<float> expected = GenerateRandomVector();
+  std::vector<std::vector<eris::WeightUpdate>> updates{
+      GenerateUpdates(GenerateRandomVector(), 0), GenerateUpdates(expected, 1)};
 
-          EXPECT_EQ(updates.size(), expected_.size());
+  std::vector<std::shared_future<void>> received;
+  received.reserve(splits * 2);
 
-          for (size_t i = 0; i < updates.size(); ++i)
-            EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<float>::epsilon())
-                << "Elements are different at index " << i;
-          EXPECT_EQ(round, 1);
-        },
-        &states_[i]);
+  for (size_t i = 0; i < updates.size(); ++i) {
+    for (size_t j = 0; j < updates[i].size(); ++j) {
+      zmq_msg_t msg;
 
-  std::vector<WeightUpdate> updates = generate_updates(0);
+      zmq_msg_init_size(&msg, updates[i][j].ByteSizeLong());
+      updates[i][j].SerializeToArray(zmq_msg_data(&msg),
+                                     updates[i][j].ByteSizeLong());
+      received.emplace_back(
+          client_.get_publish_sockets()[j]->recv_enqueue(msg));
+    }
+  }
 
-  for (size_t i = 0; i < updates.size(); ++i)
-    aggregators_[i].publish_update(updates[i]);
+  EXPECT_TRUE(client_.mock_receive_weights(&round));
+  EXPECT_EQ(round, 1);
+  std::vector<float> weights = client_.get_parameters();
+  EXPECT_EQ(weights.size(), expected.size());
+  for (size_t i = 0; i < weights.size(); ++i)
+    EXPECT_NEAR(weights[i], expected[i],
+                5 * std::numeric_limits<float>::epsilon());
 
-  generate_random_vector();
-  updates = generate_updates(1);
-
-  for (size_t i = 0; i < updates.size(); ++i)
-    aggregators_[i].publish_update(updates[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  for (std::shared_future<void> &t : received)
+    t.wait();
 }
 
 TEST_F(ClientReceiveWeightsTest, ReceiveNewerWeights) {
-  std::vector<std::thread> threads;
-  threads.reserve(states_.size());
+  uint32_t round = 0;
 
-  for (size_t i = 0; i < states_.size(); ++i)
-    threads.emplace_back(
-        [this](ClientState *state) {
-          uint32_t round = 0;
-          std::vector<float> updates = state->receive_weights(&round);
+  std::vector<float> expected = GenerateRandomVector();
+  std::vector<std::vector<eris::WeightUpdate>> updates{
+      GenerateUpdates(GenerateRandomVector(), 0), GenerateUpdates(expected, 1)};
 
-          EXPECT_EQ(updates.size(), expected_.size());
+  std::vector<std::shared_future<void>> received;
+  received.reserve(splits * 2 - 1);
 
-          for (size_t i = 0; i < updates.size(); ++i)
-            EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<float>::epsilon())
-                << "Elements are different at index " << i;
+  srand(time(NULL));
 
-          EXPECT_EQ(round, 1);
-        },
-        &states_[i]);
+  for (size_t i = 0; i < updates.size(); ++i) {
+    size_t missing = rand() % updates[i].size();
 
-  std::vector<WeightUpdate> updates = generate_updates(0);
+    for (size_t j = 0; j < updates[i].size(); ++j) {
+      zmq_msg_t msg;
 
-  std::default_random_engine rng(time(NULL));
-  std::uniform_int_distribution<size_t> dist(0, updates.size() - 1);
+      if (j == missing && i != updates.size() - 1)
+        continue;
 
-  size_t excluded = dist(rng);
+      zmq_msg_init_size(&msg, updates[i][j].ByteSizeLong());
+      updates[i][j].SerializeToArray(zmq_msg_data(&msg),
+                                     updates[i][j].ByteSizeLong());
+      received.emplace_back(
+          client_.get_publish_sockets()[j]->recv_enqueue(msg));
+    }
+  }
 
-  for (size_t i = 0; i < updates.size(); ++i)
-    if (i == excluded)
-      aggregators_[i].publish_update(updates[i]);
+  EXPECT_TRUE(client_.mock_receive_weights(&round));
+  EXPECT_EQ(round, 1);
+  std::vector<float> weights = client_.get_parameters();
+  EXPECT_EQ(weights.size(), expected.size());
+  for (size_t i = 0; i < weights.size(); ++i)
+    EXPECT_NEAR(weights[i], expected[i],
+                5 * std::numeric_limits<float>::epsilon());
 
-  generate_random_vector();
-  updates = generate_updates(1);
-
-  for (size_t i = 0; i < updates.size(); ++i)
-    aggregators_[i].publish_update(updates[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  for (std::shared_future<void> &t : received)
+    t.wait();
 }
 
 TEST_F(ClientReceiveWeightsTest, ReceiveNewerWeightsMultipleTimes) {
-  std::vector<std::thread> threads;
-  threads.reserve(states_.size());
+  uint32_t round = 0;
 
-  for (size_t i = 0; i < states_.size(); ++i)
-    threads.emplace_back(
-        [this](ClientState *state) {
-          uint32_t round = 0;
-          std::vector<float> updates = state->receive_weights(&round);
+  std::vector<float> expected = GenerateRandomVector();
+  std::vector<std::vector<eris::WeightUpdate>> updates{
+      GenerateUpdates(GenerateRandomVector(), 0),
+      GenerateUpdates(GenerateRandomVector(), 1), GenerateUpdates(expected, 2)};
 
-          EXPECT_EQ(updates.size(), expected_.size());
+  std::vector<std::shared_future<void>> received;
+  received.reserve(splits * 3 - 2);
+  srand(time(NULL));
 
-          for (size_t i = 0; i < updates.size(); ++i)
-            EXPECT_NEAR(updates[i], expected_[i],
-                        5 * std::numeric_limits<float>::epsilon())
-                << "Elements are different at index " << i;
+  for (size_t i = 0; i < updates.size(); ++i) {
+    size_t missing = rand() % updates[i].size();
 
-          EXPECT_EQ(round, 2);
-        },
-        &states_[i]);
+    for (size_t j = 0; j < updates[i].size(); ++j) {
+      zmq_msg_t msg;
 
-  std::vector<WeightUpdate> updates = generate_updates(0);
+      if (j == missing && i != updates.size() - 1)
+        continue;
 
-  std::default_random_engine rng(time(NULL));
-  std::uniform_int_distribution<size_t> dist(0, updates.size() - 1);
+      zmq_msg_init_size(&msg, updates[i][j].ByteSizeLong());
+      updates[i][j].SerializeToArray(zmq_msg_data(&msg),
+                                     updates[i][j].ByteSizeLong());
+      received.emplace_back(
+          client_.get_publish_sockets()[j]->recv_enqueue(msg));
+    }
+  }
 
-  size_t excluded = dist(rng);
+  EXPECT_TRUE(client_.mock_receive_weights(&round));
+  EXPECT_EQ(round, 2);
+  std::vector<float> weights = client_.get_parameters();
+  EXPECT_EQ(weights.size(), expected.size());
+  for (size_t i = 0; i < weights.size(); ++i)
+    EXPECT_NEAR(weights[i], expected[i],
+                5 * std::numeric_limits<float>::epsilon());
 
-  for (size_t i = 0; i < updates.size(); ++i)
-    if (i == excluded)
-      aggregators_[i].publish_update(updates[i]);
-
-  generate_random_vector();
-  updates = generate_updates(1);
-  excluded = dist(rng);
-
-  for (size_t i = 0; i < updates.size(); ++i)
-    if (i == excluded)
-      aggregators_[i].publish_update(updates[i]);
-
-  generate_random_vector();
-  updates = generate_updates(2);
-
-  for (size_t i = 0; i < updates.size(); ++i)
-    aggregators_[i].publish_update(updates[i]);
-
-  for (auto &thread : threads)
-    thread.join();
+  for (std::shared_future<void> &t : received)
+    t.wait();
 }

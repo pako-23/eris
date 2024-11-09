@@ -6,6 +6,5 @@ if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
     "cmake -B <destination>\n"
     "\n"
     "To remove files you accidentally created execute:\n"
-    "rm -rf CMakeFiles CMakeCache.txt\n"
-  )
+    "rm -rf CMakeFiles CMakeCache.txt\n")
 endif()

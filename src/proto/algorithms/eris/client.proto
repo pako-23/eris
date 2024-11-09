@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package eris;
-
-import "algorithms/eris/common.proto";
-
-service Client {
-    rpc AddAggregator (FragmentInfo) returns (Empty) {}
-}

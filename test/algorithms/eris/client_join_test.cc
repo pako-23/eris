@@ -1,139 +1,205 @@
-#include "algorithms/eris/client.h"
-#include "algorithms/eris/client_test_helpers.h"
-#include <array>
+#include "algorithms/eris/common.pb.h"
+#include "algorithms/eris/config.h"
+#include "algorithms/eris/coordinator.pb.h"
+#include "mock_client.h"
+#include "zmq.h"
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
-#include <grpcpp/server_context.h>
-#include <grpcpp/support/server_callback.h>
-#include <grpcpp/support/status.h>
+#include <future>
 #include <gtest/gtest.h>
-#include <mutex>
 #include <random>
+#include <string>
 
-static const size_t clients = 8;
-static const uint32_t min_clients = 5;
-static const uint32_t rounds = 10;
-static const uint32_t split_seed = 42;
-static const uint32_t splits = 10;
-
-class ClientJoinTest : public testing::Test, public MockClient {
+class ClientJoinTest : public testing::Test {
 protected:
-  ClientJoinTest(void)
-      : MockClient{100}, coordinator_{min_clients, rounds, split_seed, splits},
-        rng(time(NULL)), dist(0, splits - 4) {}
-  ~ClientJoinTest(void) {}
+  ClientJoinTest(void) : client_{}, rng_(time(NULL)), dist_(1, 100), state_{} {}
+  ~ClientJoinTest(void) = default;
 
-  void check_aggregators(ClientState &state) {
-    for (size_t i = 0; i < state.get_subscriptions().size(); ++i)
-      if (!coordinator_.get_aggregator(i)) {
-        EXPECT_EQ(state.get_subscriptions()[i], nullptr);
-        EXPECT_EQ(state.get_submitters()[i], nullptr);
+  void SetUp(void) {
+    eris::TrainingOptions options;
+    uint32_t splits = dist_(rng_);
+
+    options.set_min_clients(dist_(rng_));
+    options.set_rounds(dist_(rng_));
+    options.set_split_seed(dist_(rng_));
+    options.set_splits(splits);
+    *state_.mutable_options() = options;
+
+    for (uint32_t i = 0; i < splits - 1; ++i) {
+      eris::FragmentInfo fragment;
+      fragment.set_id(i);
+      fragment.set_submit_address("tcp://127.0.0.1:" +
+                                  std::to_string(DEFAULT_ERIS_ROUTER_PORT + i));
+      fragment.set_publish_address(
+          "tcp://127.0.0.1:" + std::to_string(DEFAULT_ERIS_PUBLISH_PORT + i));
+
+      *state_.add_aggregators() = fragment;
+    }
+    client_.set_parameters(std::vector<float>(100));
+  }
+
+  void TearDown() {
+    EXPECT_TRUE(client_.get_dealer().is_empty());
+    EXPECT_TRUE(client_.get_subscriber().is_empty());
+  }
+
+  std::future<void> AddResponse(eris::StateResponse &res) {
+    zmq_msg_t msg;
+
+    zmq_msg_init_size(&msg, res.ByteSizeLong());
+    res.SerializeToArray(zmq_msg_data(&msg), res.ByteSizeLong());
+    return client_.get_dealer().recv_enqueue(std::move(msg));
+  }
+
+  eris::StateRequest GetRequest(void) {
+    zmq_msg_t msg;
+    eris::StateRequest res;
+
+    zmq_msg_init(&msg);
+    EXPECT_TRUE(client_.get_dealer().send_dequeue(&msg));
+    EXPECT_TRUE(res.ParseFromArray(zmq_msg_data(&msg), zmq_msg_size(&msg)));
+    zmq_msg_close(&msg);
+
+    return res;
+  }
+
+  void CheckAggregators(eris::State state) {
+    for (int i = 0; i < int(state.options().splits()); ++i)
+      if (i < state.aggregators().size()) {
+        EXPECT_NE(client_.get_submit_sockets()[i], nullptr);
+        EXPECT_NE(client_.get_publish_sockets()[i], nullptr);
+        EXPECT_TRUE(client_.get_publish_sockets()[i]->subscribed());
       } else {
-        EXPECT_NE(state.get_subscriptions()[i], nullptr);
-        EXPECT_NE(state.get_submitters()[i], nullptr);
+        EXPECT_EQ(client_.get_submit_sockets()[i], nullptr);
+        EXPECT_EQ(client_.get_publish_sockets()[i], nullptr);
       }
   }
 
-  void check_join(ClientState &state) {
-    EXPECT_EQ(state.get_options().min_clients(),
-              coordinator_.get_options().min_clients());
-    EXPECT_EQ(state.get_options().rounds(),
-              coordinator_.get_options().rounds());
-    EXPECT_EQ(state.get_options().split_seed(),
-              coordinator_.get_options().split_seed());
-    EXPECT_EQ(state.get_options().splits(),
-              coordinator_.get_options().splits());
-    {
-      std::lock_guard<ClientState> lk(state);
-      EXPECT_EQ(state.get_submitters().size(), state.get_options().splits());
-      EXPECT_EQ(state.get_subscriptions().size(), state.get_options().splits());
-      check_aggregators(state);
-    }
+  void CheckJoinResponse(const eris::StateResponse &res) {
+    EXPECT_TRUE(res.has_state());
+    EXPECT_FALSE(res.has_error());
+
+    const eris::State &state = res.state();
+    EXPECT_TRUE(state.has_options());
+
+    EXPECT_EQ(state.options().min_clients(),
+              client_.get_options().min_clients());
+    EXPECT_EQ(state.options().splits(), client_.get_options().splits());
+    EXPECT_EQ(state.options().split_seed(), client_.get_options().split_seed());
+    EXPECT_EQ(state.options().rounds(), client_.get_options().rounds());
+
+    EXPECT_EQ(state.options().splits(), client_.get_submit_sockets().size());
+    EXPECT_EQ(state.options().splits(), client_.get_submit_sockets().size());
+    CheckAggregators(state);
   }
 
-  MockCoordinator coordinator_;
-  std::array<ClientState, clients> states;
-
-  std::default_random_engine rng;
-  std::uniform_int_distribution<uint32_t> dist;
+  MockClient client_;
+  std::default_random_engine rng_;
+  std::uniform_int_distribution<uint32_t> dist_;
+  eris::State state_;
 };
 
 TEST_F(ClientJoinTest, JoinClient) {
-  uint32_t size = dist(rng);
+  eris::StateResponse res;
 
-  for (uint32_t i = 0; i < size; ++i)
-    coordinator_.add_aggregator(i, "127.0.0.1:50051", "tcp://127.0.0.1:5555");
+  *res.mutable_state() = state_;
+  std::future<void> response_received = AddResponse(res);
 
-  for (size_t i = 0; i < clients; ++i) {
-    EXPECT_TRUE(states[i].join(this, coordinator_.get_rpc_address(),
-                               coordinator_.get_pubsub_address()));
-    check_join(states[i]);
-  }
+  EXPECT_TRUE(client_.mock_join());
+
+  eris::StateRequest req = GetRequest();
+  EXPECT_TRUE(req.has_join());
+  EXPECT_FALSE(req.join().has_publish_address());
+  EXPECT_FALSE(req.join().has_submit_address());
+
+  response_received.wait();
+  CheckJoinResponse(res);
+  EXPECT_FALSE(client_.is_aggregator());
 }
 
 TEST_F(ClientJoinTest, JoinClientFailed) {
-  coordinator_.set_fail_requests(true);
-  EXPECT_FALSE(states[0].join(this, coordinator_.get_rpc_address(),
-                              coordinator_.get_pubsub_address()));
+  eris::StateResponse res;
+  eris::Error error;
+
+  error.set_code(eris::ErrorCode::INVALID_ARGUMENT);
+  error.set_msg("joining is not allowed");
+  *res.mutable_error() = error;
+
+  std::future<void> response_received = AddResponse(res);
+
+  EXPECT_FALSE(client_.mock_join());
+
+  eris::StateRequest req = GetRequest();
+  EXPECT_TRUE(req.has_join());
+  EXPECT_FALSE(req.join().has_publish_address());
+  EXPECT_FALSE(req.join().has_submit_address());
+
+  response_received.wait();
+  EXPECT_FALSE(client_.is_aggregator());
 }
 
 TEST_F(ClientJoinTest, JoinAggregator) {
-  uint32_t size = dist(rng);
-  std::string aggr_address = "127.0.0.1";
-  uint16_t aggr_rpc_port = 8080;
-  uint16_t aggr_publish_port = 8081;
+  eris::StateResponse res;
 
-  for (uint32_t i = 0; i < size; ++i)
-    coordinator_.add_aggregator(i, "127.0.0.1:50051", "tcp://127.0.0.1:5555");
+  state_.set_assigned_fragment(0);
+  *res.mutable_state() = state_;
 
-  for (size_t i = 1; i < clients; ++i) {
-    EXPECT_TRUE(states[i].join(this, coordinator_.get_rpc_address(),
-                               coordinator_.get_pubsub_address()));
-    check_join(states[i]);
-  }
+  std::future<void> response_received = AddResponse(res);
+  EXPECT_TRUE(client_.set_aggregator_config("127.0.0.1", 10, 20));
+  EXPECT_TRUE(client_.mock_join());
 
-  EXPECT_TRUE(states[0].join(this, coordinator_.get_rpc_address(),
-                             coordinator_.get_pubsub_address(), &aggr_address,
-                             &aggr_rpc_port, &aggr_publish_port));
-  check_join(states[0]);
-  EXPECT_TRUE(states[0].is_aggregator());
+  eris::StateRequest req = GetRequest();
+  EXPECT_TRUE(req.has_join());
+  EXPECT_TRUE(req.join().has_publish_address());
+  EXPECT_TRUE(req.join().has_submit_address());
+  EXPECT_EQ(req.join().submit_address(), "tcp://127.0.0.1:10");
+  EXPECT_EQ(req.join().publish_address(), "tcp://127.0.0.1:20");
 
-  for (size_t i = 1; i < clients; ++i)
-    check_aggregators(states[i]);
+  response_received.wait();
+  CheckJoinResponse(res);
+  EXPECT_TRUE(client_.is_aggregator());
 }
 
 TEST_F(ClientJoinTest, JoinAggregatorNoFragmentAssigned) {
-  std::string aggr_address = "127.0.0.1";
-  uint16_t aggr_rpc_port = 8080;
-  uint16_t aggr_publish_port = 8081;
+  eris::StateResponse res;
 
-  for (uint32_t i = 0; i < coordinator_.get_options().splits(); ++i)
-    coordinator_.add_aggregator(i, "127.0.0.1:50051", "tcp://127.0.0.1:5555");
+  *res.mutable_state() = state_;
+  std::future<void> response_received = AddResponse(res);
+  EXPECT_TRUE(client_.set_aggregator_config("127.0.0.1", 10, 20));
+  EXPECT_TRUE(client_.mock_join());
 
-  for (size_t i = 1; i < clients; ++i) {
-    EXPECT_TRUE(states[i].join(this, coordinator_.get_rpc_address(),
-                               coordinator_.get_pubsub_address()));
-    check_join(states[i]);
-  }
+  eris::StateRequest req = GetRequest();
+  EXPECT_TRUE(req.has_join());
+  EXPECT_TRUE(req.join().has_publish_address());
+  EXPECT_TRUE(req.join().has_submit_address());
+  EXPECT_EQ(req.join().submit_address(), "tcp://127.0.0.1:10");
+  EXPECT_EQ(req.join().publish_address(), "tcp://127.0.0.1:20");
 
-  EXPECT_TRUE(states[0].join(this, coordinator_.get_rpc_address(),
-                             coordinator_.get_pubsub_address(), &aggr_address,
-                             &aggr_rpc_port, &aggr_publish_port));
-  check_join(states[0]);
-  EXPECT_FALSE(states[0].is_aggregator());
-
-  for (size_t i = 1; i < clients; ++i)
-    check_aggregators(states[i]);
+  response_received.wait();
+  CheckJoinResponse(res);
+  EXPECT_FALSE(client_.is_aggregator());
 }
 
 TEST_F(ClientJoinTest, JoinAggregatorFailed) {
-  std::string aggr_address = "127.0.0.1";
-  uint16_t aggr_rpc_port = 8080;
-  uint16_t aggr_publish_port = 8081;
+  eris::StateResponse res;
+  eris::Error error;
 
-  coordinator_.set_fail_requests(true);
-  EXPECT_FALSE(states[0].join(this, coordinator_.get_rpc_address(),
-                              coordinator_.get_pubsub_address(), &aggr_address,
-                              &aggr_rpc_port, &aggr_publish_port));
+  error.set_code(eris::ErrorCode::INVALID_ARGUMENT);
+  error.set_msg("joining is not allowed");
+  *res.mutable_error() = error;
+
+  std::future<void> response_received = AddResponse(res);
+  EXPECT_TRUE(client_.set_aggregator_config("127.0.0.1", 10, 20));
+  EXPECT_FALSE(client_.mock_join());
+
+  eris::StateRequest req = GetRequest();
+  EXPECT_TRUE(req.has_join());
+  EXPECT_TRUE(req.join().has_publish_address());
+  EXPECT_TRUE(req.join().has_submit_address());
+  EXPECT_EQ(req.join().submit_address(), "tcp://127.0.0.1:10");
+  EXPECT_EQ(req.join().publish_address(), "tcp://127.0.0.1:20");
+
+  response_received.wait();
+  EXPECT_FALSE(client_.is_aggregator());
 }

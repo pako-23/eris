@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from eris import ErisCoordinatorBuilder, ErisCoordinator
+from eris import ErisCoordinatorConfig, ErisCoordinator
 
 
 def main():
-    builder = ErisCoordinatorBuilder()
+    builder = ErisCoordinatorConfig()
     builder.set_rounds(5)
     builder.set_splits(5)
     builder.set_min_clients(10)

@@ -1,130 +1,143 @@
 #pragma once
 
-#include "algorithms/eris/aggregator.grpc.pb.h"
 #include "algorithms/eris/aggregator.pb.h"
-#include "algorithms/eris/builder.h"
 #include "algorithms/eris/common.pb.h"
+#include "algorithms/eris/config.h"
 #include "algorithms/eris/service.h"
+#include "zmq.h"
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <grpcpp/server.h>
-#include <grpcpp/server_context.h>
-#include <mutex>
-#include <vector>
-
-using eris::Empty;
-using eris::FragmentWeights;
-using eris::WeightUpdate;
-using grpc::CallbackServerContext;
-using grpc::Server;
+#include <future>
+#include <netdb.h>
+#include <optional>
 
 /**
  * The ErisAggregator class aggreagtes the weights submitted during the training
  * phase by the clients to obtain an updated version of the model at each round
- * of the training. A client can submit his weights via a gRPC interface, and
- * the event publishing happens via a ZeroMQ interface.
+ * of the training. A client can submit his weights over a ZeroMQ router socket
+ * interface, and the event publishing happens via a ZeroMQ publish socket.
  */
-class ErisAggregator final {
+template <class Socket = ZMQSocket> class ErisAggregator final {
 public:
   /**
    * It constructs an ErisAggregator object with the provided configurations.
-   * Upon construction, the process will start listening on the provided publish
-   * address and RPC address.
+   * Upon construction, the process will start listening on the provided
+   * addresses.
    *
-   * @param builder The builder class carrying all the configurations to build
-   * an ErisAggregator.
+   * @param config The configuration used to build the ErisAggregator.
    */
-  explicit ErisAggregator(const ErisAggregatorBuilder &builder);
+  explicit ErisAggregator(const ErisServiceConfig &config) noexcept
+      : service_{&config}, round_{0}, weights_{}, contributors_{0},
+        fragment_size_{0}, min_clients_{0} {}
 
   /**
    * Deletes an instance of an ErisAggregator object.
    */
-  ~ErisAggregator(void) = default;
+  ~ErisAggregator(void) noexcept = default;
 
   /**
-   * Starts the aggregation process. In practice, it will start serving RPC
-   * requests and publishing events about model fragment changes.
-   */
-  void start(void) noexcept;
-
-  /**
-   * Stops the aggregation process. In practice, it will stop serving RPC
-   * requests and publishing events.
-   */
-  void stop(void) noexcept;
-
-  /**
-   * It returns the port on which the aggregator is publishing events about
-   * model fragment changes.
+   * It configures the ErisAggregator. This method must be called before calling
+   * the start method.
    *
-   * @return The port on which the aggregator is publishing events about model
-   * fragment changes.
+   * @param fragment_size The size of the model fragment.
+   * @param min_clients The minimum number of clients that should contribute
+   * with their local weights before the ErisAggregator can publish a new model
+   * weight update.
    */
-  inline uint16_t get_publish_port(void) const {
-    return service_.get_publish_port();
+  void configure(uint32_t fragment_size, uint32_t min_clients) noexcept {
+    weights_.resize(fragment_size, 0.0);
+    fragment_size_ = fragment_size;
+    min_clients_ = min_clients;
   }
 
   /**
-   * It returns the port on which the aggregator is listening for RPC requests.
+   * Starts the aggregation process. In practice, it will start handling
+   * the submissions of new model weights from the clients, and publising
+   * events about new model updates.
    *
-   * @return The port on which the aggregator is listening for RPC requests.
+   * @param started An optional promise which will complete once the
+   * aggregator process starts serving requests.
    */
-  inline uint16_t get_rpc_port(void) const noexcept {
-    return service_.get_rpc_port();
+  void
+  start(std::optional<std::promise<void>> started = std::nullopt) noexcept {
+    service_.start([&](zmq_msg_t *identity,
+                       zmq_msg_t *msg) { handle_submission(identity, msg); },
+                   std::move(started));
   }
+
+  /**
+   * Stops the aggregation process. In practice, it will stop handling
+   * the submissions of new model weights from the clients, and publising events
+   * about new model updates.
+   */
+  void stop(void) { service_.stop(); }
 
 private:
   /**
-   * The AggregatorImpl class implements the Aggregator gRPC interface.
+   * Handles the submission of new model weights from a client.
+   *
+   * @param identity The identity of the client socket.
+   * @param req The msg message containing the model weights from the client.
    */
-  class AggregatorImpl : public eris::Aggregator::CallbackService {
-  public:
-    /**
-     * It constructs an AggregatorImpl object with the provided training
-     * configurations and the registering ErisAggregator.
-     *
-     * @param aggregator The ErisAggregator that registerd the Aggregator
-     * service.
-     * @param builder The builder carrying all the aggregation configurations.
-     */
-    explicit AggregatorImpl(ErisAggregator *aggregator,
-                            const ErisAggregatorBuilder &builder) noexcept;
+  void handle_submission(zmq_msg_t *identity, zmq_msg_t *msg) noexcept {
+    eris::WeightSubmissionRequest req;
+    eris::WeightSubmissionResponse res;
 
-    /**
-     * It implements the submission of a fragment of the model weights for an
-     * ErisAggregator.
-     *
-     * @param ctx The gRPC server call context.
-     * @param req The gRPC request containing the weights of model fragment
-     * coming from a requesting client.
-     * @param res It returns an empty reply. An OK status code indicates the
-     * successful submission of the weights.
-     * @return The reactor that will handle the request.
-     */
-    grpc::ServerUnaryReactor *SubmitWeights(CallbackServerContext *ctx,
-                                            const FragmentWeights *req,
-                                            Empty *res) override;
+    req.ParseFromArray(zmq_msg_data(msg), zmq_msg_size(msg));
 
-    grpc::ServerUnaryReactor *GetUpdate(CallbackServerContext *ctx,
-                                        const Empty *req,
-                                        WeightUpdate *res) override;
+    if ((size_t)req.weight_size() != fragment_size_) {
+      res.mutable_error()->set_code(eris::INVALID_ARGUMENT);
+      res.mutable_error()->set_msg("Wrong fragment size");
+      service_.route_msg(identity, res);
+      return;
+    } else if (req.round() != round_) {
+      res.mutable_error()->set_code(eris::INVALID_ARGUMENT);
+      res.mutable_error()->set_msg("Wrong round number");
+      service_.route_msg(identity, res);
+      return;
+    }
 
-  private:
-    std::mutex prev_mu_;
-    WeightUpdate prev_update_;
+    for (int i = 0; i < req.weight_size(); ++i)
+      weights_[i] += req.weight(i);
 
-    uint32_t round_; /**< The current round of the training */
-    std::vector<float>
-        weights_; /**< The accumulated weights shared by the clients */
-    uint32_t contributors_; /**< The number of contributing clients */
-    std::mutex
-        mu_; /**< A mutex providing mulital exclusion the internal state */
-    const size_t fragment_size_; /**< The size of the assigned fragment */
-    const uint32_t min_clients_; /**< The minimum number of weight contributions
-                                    required before sharing an update */
-    ErisAggregator *aggregator_; /**< The registrating ErisAggregator */
-  };
+    service_.route_msg(identity, res);
+    publish_model();
+  }
 
-  ErisService<AggregatorImpl> service_; /**< The ErisService that will listen on
-                   gRPC requests and publish events.*/
+  /**
+   * It increases the number of contributors to build a new model. If the number
+   * contributors reaches the minium number of clients required, it also
+   * publishes the new model weights.
+   */
+  void publish_model(void) noexcept {
+    eris::WeightUpdate update;
+
+    if (++contributors_ < min_clients_)
+      return;
+
+    update.set_round(round_);
+    update.set_contributors(contributors_);
+    for (const float val : weights_)
+      update.add_weight(val);
+
+    service_.publish_event(update);
+    std::fill(weights_.begin(), weights_.end(), 0.0);
+    contributors_ = 0;
+    ++round_;
+  }
+
+  friend class ErisAggregatorTest;
+
+  ErisService<Socket> service_; /**< The eris service handling the
+                                  communications */
+
+  uint32_t round_;             /**< The current round of the training */
+  std::vector<float> weights_; /**< The accumulated weights shared by the
+                                  clients */
+
+  uint32_t contributors_; /**< The number of contributing clients */
+  size_t fragment_size_;  /**< The size of the assigned fragment */
+  uint32_t min_clients_;  /**< The minimum number of weight contributions
+                                  required before sharing an update */
 };

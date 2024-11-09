@@ -1,10 +1,10 @@
-#include "algorithms/eris/builder.h"
 #include "algorithms/eris/client.h"
+#include "algorithms/eris/config.h"
 #include "algorithms/eris/coordinator.h"
 #include "erisfl/coordinator.h"
-#include <cstddef>
-#include <functional>
-#include <numeric>
+#include "util/networking.h"
+#include <cmath>
+#include <optional>
 #include <pybind11/attr.h>
 #include <pybind11/cast.h>
 #include <pybind11/detail/common.h>
@@ -12,8 +12,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
+#include <string>
 #include <sys/types.h>
-#include <vector>
 
 namespace py = pybind11;
 
@@ -21,22 +21,26 @@ class PyCoordinator : public Coordinator {
 public:
   using Coordinator::Coordinator;
 
-  void start(void) override {
-    PYBIND11_OVERRIDE_PURE(void, Coordinator, start, );
+  void
+  start(std::optional<std::promise<void>> started = std::nullopt) override {
+    PYBIND11_OVERRIDE_PURE(void, Coordinator, start, started);
   }
 
   void stop(void) override {
     PYBIND11_OVERRIDE_PURE(void, Coordinator, stop, );
   }
+
+  void start(void) { start(std::nullopt); }
 };
 
 class PyClientBase {
 public:
+  virtual ~PyClientBase(void) = default;
   virtual bool train(void) = 0;
   virtual py::list get_parameters(void) = 0;
   virtual void set_parameters(const py::list &parameters) = 0;
   virtual void fit(void) = 0;
-  virtual void evaluate(void){};
+  virtual void evaluate(void) {};
 };
 
 class PyClient : public PyClientBase {
@@ -60,7 +64,9 @@ public:
 
 class PyErisClient : public PyClientBase {
 public:
-  PyErisClient(void) : client_{this} {}
+  PyErisClient(const std::string &router_address,
+               const std::string &subscribe_address)
+      : client_{this, router_address, subscribe_address} {}
 
   bool train(void) override { return client_.train(); }
 
@@ -74,24 +80,18 @@ public:
 
   void fit(void) override { PYBIND11_OVERRIDE_PURE(void, PyErisClient, fit, ); }
 
-  bool set_coordinator_rpc(const std::string &address) {
-    return client_.set_coordinator_rpc(address);
-  }
-
-  bool set_coordinator_subscription(const std::string &address) {
-    return client_.set_coordinator_subscription(address);
-  }
-
   bool set_aggregator_config(const std::string &address, uint16_t submit_port,
                              uint16_t publish_port) {
     return client_.set_aggregator_config(address, submit_port, publish_port);
   }
 
 private:
-  class ErisClientImpl : public ErisClient {
+  class ErisClientImpl : public ErisClient<ZMQSocket> {
   public:
-    ErisClientImpl(PyErisClient *client)
-        : client_{client}, shapes_initialized{false}, total_size{0} {}
+    ErisClientImpl(PyErisClient *client, const std::string &router_address,
+                   const std::string &subscribe_address)
+        : ErisClient<ZMQSocket>{router_address, subscribe_address},
+          client_{client}, shapes_initialized{false}, total_size{0} {}
 
     std::vector<float> get_parameters(void) override {
       py::gil_scoped_acquire acquire;
@@ -167,32 +167,32 @@ private:
 PYBIND11_MODULE(eris, m) {
   m.doc() = "A federated learning framework implementing the eris algorithm";
 
-  py::class_<Coordinator, PyCoordinator>(m, "Coordinator")
+  py::class_<ErisCoordinatorConfig>(m, "ErisCoordinatorConfig")
       .def(py::init<>())
-      .def("start", &Coordinator::start)
-      .def("stop", &Coordinator::stop);
-
-  py::class_<ErisCoordinatorBuilder>(m, "ErisCoordinatorBuilder")
-      .def(py::init<>())
-      .def("set_rpc_port", &ErisCoordinatorBuilder::add_rpc_port,
+      .def("set_router_port", &ErisCoordinatorConfig::set_router_port,
            py::arg("port"))
-      .def("set_rpc_address", &ErisCoordinatorBuilder::add_rpc_listen_address,
+      .def("set_router_address", &ErisCoordinatorConfig::set_router_address,
            py::arg("address"))
-      .def("set_publish_port", &ErisCoordinatorBuilder::add_publish_port,
+      .def("set_publish_port", &ErisCoordinatorConfig::set_publish_port,
            py::arg("port"))
-      .def("set_publish_address", &ErisCoordinatorBuilder::add_publish_address,
+      .def("set_publish_address", &ErisCoordinatorConfig::set_publish_address,
            py::arg("address"))
-      .def("set_rounds", &ErisCoordinatorBuilder::add_rounds, py::arg("rounds"))
-      .def("set_splits", &ErisCoordinatorBuilder::add_splits, py::arg("splits"))
-      .def("set_min_clients", &ErisCoordinatorBuilder::add_min_clients,
+      .def("set_rounds", &ErisCoordinatorConfig::set_rounds, py::arg("rounds"))
+      .def("set_splits", &ErisCoordinatorConfig::set_splits, py::arg("splits"))
+      .def("set_min_clients", &ErisCoordinatorConfig::set_min_clients,
            py::arg("min_clients"))
-      .def("set_split_seed", &ErisCoordinatorBuilder::add_split_seed,
+      .def("set_split_seed", &ErisCoordinatorConfig::set_split_seed,
            py::arg("split_seed"));
 
-  py::class_<ErisCoordinator, Coordinator>(m, "ErisCoordinator")
-      .def(py::init<const ErisCoordinatorBuilder &>())
-      .def("start", &ErisCoordinator::start)
-      .def("stop", &ErisCoordinator::stop);
+  py::class_<Coordinator, PyCoordinator>(m, "Coordinator")
+      .def(py::init<>())
+      .def("start", (void(Coordinator::*)(void)) & PyCoordinator::start)
+      .def("stop", &Coordinator::stop);
+
+  py::class_<ErisCoordinator<ZMQSocket>, Coordinator>(m, "ErisCoordinator")
+      .def(py::init<const ErisCoordinatorConfig &>())
+      .def("start", [](ErisCoordinator<ZMQSocket> &self) { self.start(); })
+      .def("stop", &ErisCoordinator<ZMQSocket>::stop);
 
   py::class_<PyClientBase, PyClient>(m, "Client")
       .def(py::init<>())
@@ -205,7 +205,7 @@ PYBIND11_MODULE(eris, m) {
 
   py::class_<PyErisClient, PyClientBase,
              std::unique_ptr<PyErisClient, py::nodelete>>(m, "ErisClient")
-      .def(py::init<>())
+      .def(py::init<const std::string &, const std::string &>())
       .def("train", &PyErisClient::train,
            py::call_guard<py::gil_scoped_release>())
       .def("get_parameters", &PyErisClient::get_parameters,
@@ -215,10 +215,6 @@ PYBIND11_MODULE(eris, m) {
       .def("fit", &PyErisClient::fit, py::call_guard<py::gil_scoped_release>())
       .def("evaluate", &PyErisClient::evaluate,
            py::call_guard<py::gil_scoped_release>())
-      .def("set_coordinator_rpc", &PyErisClient::set_coordinator_rpc,
-           py::arg("address"))
-      .def("set_coordinator_subscription",
-           &PyErisClient::set_coordinator_subscription, py::arg("address"))
       .def("set_aggregator_config", &PyErisClient::set_aggregator_config,
            py::arg("address"), py::arg("submit_port"), py::arg("publish_port"));
 }

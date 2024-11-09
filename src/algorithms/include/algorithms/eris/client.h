@@ -1,109 +1,473 @@
 #pragma once
 
-#include "algorithms/eris/aggregator.grpc.pb.h"
 #include "algorithms/eris/aggregator.h"
-#include "algorithms/eris/builder.h"
-#include "algorithms/eris/coordinator.h"
+#include "algorithms/eris/aggregator.pb.h"
+#include "algorithms/eris/common.pb.h"
 #include "algorithms/eris/coordinator.pb.h"
 #include "algorithms/eris/split.h"
 #include "erisfl/client.h"
+#include "spdlog/spdlog.h"
+#include "util/networking.h"
+#include "zmq.h"
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <future>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
-using eris::TrainingOptions;
-
-class ErisClient : public Client {
+/**
+ * The ErisClient class implements the Client interface for the eris
+ * federated training algorithm. In particular, a client tries to register to an
+ * ErisCoordinator as a client or as an ErisAggregator. If it registers as an
+ * ErisAggregator, a different thread will be started to perform the weights
+ * aggregation steps. A client is responsible for joining the training,
+ * performing the training steps, sharing its model parameters with the
+ * aggregators, and updating the weights based on the ones published by the
+ * aggregators.
+ */
+template <class Socket = ZMQSocket> class ErisClient : public Client {
 public:
-  explicit ErisClient(void);
+  /**
+   * It constructs an ErisClient that will contact an ErisCoordinator at the
+   * given addresses. Upon construction, the process will start connect to the
+   * given addresses.
+   *
+   * @param router_address The address on which the ErisCoordinator will accept
+   * requests.
+   * @param subscribe_address The address on which the ErisCoordinator will
+   * publish updates.
+   */
+  explicit ErisClient(const std::string &router_address,
+                      const std::string &subscribe_address)
+      : dealer_{ZMQ_DEALER}, subscriber_{ZMQ_SUB}, running_{true},
+        aggr_address_{}, aggr_submit_port_{0}, aggr_publish_port_{0},
+        options_{}, splitter_{}, mu_{}, cv_{}, submit_{}, publish_{},
+        coordinator_updates_{}, aggregator_{nullptr}, aggregator_thread_{} {
+    const int timeout = 100;
 
-  virtual ~ErisClient(void) = default;
-  bool train(void) override;
+    if (!valid_zmq_endpoint(router_address))
+      throw std::invalid_argument{
+          "invalid endpoint address for coordinator router socket"};
+    if (!valid_zmq_endpoint(subscribe_address))
+      throw std::invalid_argument{
+          "invalid endpoint address for coordinator publish socket"};
 
-  bool set_coordinator_rpc(const std::string &address);
-  bool set_coordinator_subscription(const std::string &address);
+    if (!dealer_.connect(router_address))
+      throw std::runtime_error{
+          "failed to connect to given coordinator router address"};
+
+    if (!subscriber_.connect(subscribe_address))
+      throw std::runtime_error{
+          "failed to connect to given coordinator publish address"};
+
+    subscriber_.setsockopt(ZMQ_RCVTIMEO, &timeout, sizeof(timeout));
+    subscriber_.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+  }
+
+  /**
+   * Deletes an instance of an ErisClient object.
+   */
+  ~ErisClient(void) noexcept {
+    if (aggregator_) {
+      aggregator_->stop();
+      aggregator_thread_.join();
+    }
+    running_ = false;
+    if (coordinator_updates_.joinable())
+      coordinator_updates_.join();
+  }
+
+  /**
+   * Joins the training and performs the whole training process.
+   *
+   * @return If the training is successful, it returns true; otherwise, it
+   * returns false.
+   */
+  bool train(void) override {
+    if (!join()) {
+      spdlog::error("failed to join the training");
+      return false;
+    }
+
+    uint32_t round = 0;
+    while (round != options_.rounds()) {
+      fit();
+
+      if (!submit_weights(round) || !receive_weights(&round))
+        return false;
+
+      evaluate();
+      spdlog::info("finished with round {0}", round);
+      ++round;
+    }
+
+    return true;
+  }
+
+  /**
+   * Configures the aggregator parameters. This method should be called before
+   * the training starts; otherwise, it will have no effect.
+   *
+   * @return If the training is successful, it returns true; otherwise, it
+   * returns false.
+   */
   bool set_aggregator_config(const std::string &address, uint16_t submit_port,
-                             uint16_t publish_port);
-
-protected:
-  class ClientState {
-  public:
-    explicit ClientState(void);
-    ~ClientState(void);
-
-    bool join(ErisClient *client, const std::string &rpc_address,
-              const std::string &subscribe_address,
-              const std::string *listen_address = nullptr,
-              const uint16_t *rpc_port = nullptr,
-              const uint16_t *publish_port = nullptr);
-
-    bool configure(ErisClient *client, const InitialState &state);
-
-    bool submit_weights(const std::vector<float> &parameters, uint32_t round);
-    std::vector<float> receive_weights(uint32_t *round);
-
-    inline void unlock(void) { mu_.unlock(); }
-    inline void lock(void) { mu_.lock(); }
-
-    inline const TrainingOptions &get_options(void) const noexcept {
-      return options_;
+                             uint16_t publish_port) noexcept {
+    if (!valid_ipv4(address) || address == "0.0.0.0" || submit_port == 0 ||
+        publish_port == 0 || submit_port == publish_port) {
+      return false;
     }
 
-    inline const std::vector<void *> &get_subscriptions(void) const noexcept {
-      return subscriptions_;
-    }
-
-    inline const std::vector<std::unique_ptr<eris::Aggregator::Stub>> &
-    get_submitters(void) const noexcept {
-      return submitters_;
-    }
-
-    inline bool is_aggregator(void) const noexcept {
-      return aggregator_ != nullptr && aggregator_thread_ != nullptr;
-    }
-
-    bool register_aggregator(const FragmentInfo &aggregator) noexcept;
-
-  private:
-    void start_aggregator(uint32_t fragment_id,
-                          const std::string *listen_address,
-                          const uint16_t *rpc_port,
-                          const uint16_t *publish_port) noexcept;
-    void coordinator_subscribe(const std::string &subscribe_address) noexcept;
-    bool query_fragment(std::unique_ptr<eris::Aggregator::Stub> &aggr,
-                        WeightUpdate *update) noexcept;
-
-    void *zmq_ctx;
-    void *coord_sub;
-    std::atomic_bool coord_subscribed_;
-
-    std::mutex mu_;
-    std::condition_variable aggregator_joined_;
-    TrainingOptions options_;
-    RandomSplit splitter;
-
-    std::vector<void *> subscriptions_;
-    std::vector<std::unique_ptr<eris::Aggregator::Stub>> submitters_;
-
-    std::unique_ptr<std::thread> coord_updater_;
-
-    std::unique_ptr<ErisAggregator> aggregator_;
-    std::unique_ptr<std::thread> aggregator_thread_;
-  };
+    aggr_address_ = address;
+    aggr_submit_port_ = submit_port;
+    aggr_publish_port_ = publish_port;
+    return true;
+  }
 
 private:
-  std::string rpc_address_;
-  std::string subscribe_address_;
+  /**
+   * It tries to join the training process. It will try to obtain the
+   * configurations from the configured ErisCoordinator, and it will perform the
+   * necessary configurations based on the response from the coordinator.
+   *
+   * @return If it manages to join the training process, it returns true;
+   * otherwise, it returns false.
+   */
+  bool join(void) noexcept {
+    eris::StateRequest req;
+    eris::JoinRequest join_req;
+    eris::StateResponse res;
+    zmq_msg_t msg, reply;
 
-  std::string aggr_address_;
-  uint16_t aggr_rpc_port_;
-  uint16_t aggr_publish_port_;
+    if (!aggr_address_.empty()) {
+      join_req.set_submit_address("tcp://" + aggr_address_ + ":" +
+                                  std::to_string(aggr_submit_port_));
+      join_req.set_publish_address("tcp://" + aggr_address_ + ":" +
+                                   std::to_string(aggr_publish_port_));
+      setup_aggregator();
+    }
 
-  ClientState state_;
+    *req.mutable_join() = join_req;
+
+    zmq_msg_init_size(&msg, req.ByteSizeLong());
+    req.SerializeToArray(zmq_msg_data(&msg), req.ByteSizeLong());
+    if (!dealer_.send_msg(&msg, 0)) {
+      spdlog::error("failed to send join request to given coordinator");
+      goto joining_failed;
+    }
+
+    zmq_msg_init(&reply);
+    if (!dealer_.recv_msg(&reply, 0) ||
+        !res.ParseFromArray(zmq_msg_data(&reply), zmq_msg_size(&reply))) {
+      spdlog::error("failed to receive join response from the coordinator");
+      goto joining_failed;
+    }
+    zmq_msg_close(&reply);
+
+    if (res.has_error()) {
+      spdlog::error("failed to join client with error: {}", res.error().msg());
+      goto joining_failed;
+    } else if (!res.has_state() && !res.state().has_options()) {
+      spdlog::error("invalid state returned from the coordinator");
+      goto joining_failed;
+    }
+    options_ = res.state().options();
+    splitter_.configure(get_parameters().size(), options_.splits(),
+                        options_.split_seed());
+
+    if (res.state().has_assigned_fragment())
+      start_aggregator(res.state().assigned_fragment());
+    else
+      aggregator_ = nullptr;
+
+    submit_.resize(options_.splits());
+    publish_.resize(options_.splits());
+
+    for (const auto &aggr : res.state().aggregators())
+      if (!register_aggregator(aggr)) {
+        spdlog::error("failed to register aggregator with submit address {} "
+                      "and publish address{}",
+                      aggr.submit_address(), aggr.submit_address());
+        goto joining_failed;
+      }
+    listen_coordinator_updates();
+
+    return true;
+
+  joining_failed:
+    aggregator_ = nullptr;
+    return false;
+  }
+
+  /**
+   * It tries to register a new aggregator for a specific fragment. It does no
+   * peform any locking of the client state.
+   *
+   * @param aggr The aggregator to register.
+   * @return If it manages to register the given aggregator, it returns true;
+   * otherwise, it returns false.
+   */
+  bool register_aggregator(const eris::FragmentInfo &aggr) noexcept {
+    submit_[aggr.id()] = std::make_unique<Socket>(ZMQ_DEALER);
+    if (!submit_[aggr.id()]->connect(aggr.submit_address()))
+      return false;
+
+    publish_[aggr.id()] = std::make_unique<Socket>(ZMQ_SUB);
+    if (!publish_[aggr.id()]->connect(aggr.publish_address()))
+      return true;
+    publish_[aggr.id()]->setsockopt(ZMQ_SUBSCRIBE, "", 0);
+
+    return true;
+  }
+
+  /**
+   * It tries to register a new aggregator for a specific fragment. It locks the
+   * state before registering the new aggregator.
+   *
+   * @param aggr The aggregator to register.
+   * @return If it manages to register the given aggregator, it returns true;
+   * otherwise, it returns false.
+   */
+  bool register_aggregator_locked(const eris::FragmentInfo &aggr) noexcept {
+    std::lock_guard lk(mu_);
+    return register_aggregator(aggr);
+  }
+
+  /**
+   * It starts a thread to listen on updates from the coordinator.
+   */
+  void listen_coordinator_updates(void) noexcept {
+    coordinator_updates_ = std::thread{[&]() {
+      zmq_msg_t msg;
+      eris::FragmentInfo aggregator;
+
+      zmq_msg_init(&msg);
+      while (running_) {
+        if (!subscriber_.recv_msg(&msg, 0))
+          continue;
+
+        if (!aggregator.ParseFromArray(zmq_msg_data(&msg),
+                                       zmq_msg_size(&msg)) ||
+            !register_aggregator_locked(aggregator)) {
+          zmq_msg_close(&msg);
+          zmq_msg_init(&msg);
+          spdlog::error("failed to register received aggregator");
+          continue;
+        }
+
+        cv_.notify_one();
+        zmq_msg_close(&msg);
+        zmq_msg_init(&msg);
+      }
+    }};
+  }
+
+  /**
+   * It starts the aggregator thread for a given fragment.
+   *
+   * @param fragment_id The identifier of the fragment assigned to the
+   * aggregator.
+   */
+  void start_aggregator(uint16_t fragment_id) noexcept {
+    std::promise<void> started;
+    std::future<void> started_ready = started.get_future();
+
+    aggregator_->configure(splitter_.get_fragment_size(fragment_id),
+                           options_.min_clients());
+
+    aggregator_thread_ = std::thread(
+        [](std::shared_ptr<ErisAggregator<Socket>> aggregator,
+           std::promise<void> started) {
+          aggregator->start(std::move(started));
+        },
+        aggregator_, std::move(started));
+
+    started_ready.wait();
+  }
+
+  /**
+   * It setups the aggregator. In practice, it will start the ErisService for
+   * the aggregator, but it will not serve any request.
+   */
+  void setup_aggregator(void) noexcept {
+    ErisServiceConfig config;
+    config.set_router_address(aggr_address_);
+    config.set_router_port(aggr_submit_port_);
+    config.set_publish_address(aggr_address_);
+    config.set_publish_port(aggr_publish_port_);
+
+    aggregator_ = std::make_shared<ErisAggregator<Socket>>(config);
+  }
+
+  /**
+   * It submits the model parameters to the aggregators for a given training
+   * round.
+   *
+   * @param round The current training round.
+   * @return If it manages to succesfully submit the weights, it returns true;
+   * otherwise, it returns false.
+   */
+  bool submit_weights(uint32_t round) noexcept {
+    eris::WeightSubmissionResponse res;
+    std::vector<float> parameters = get_parameters();
+    std::vector<eris::WeightSubmissionRequest> fragments =
+        splitter_.split(parameters, round);
+
+    for (size_t i = 0; i < fragments.size(); ++i) {
+      zmq_msg_t msg, reply;
+      bool submitted, received;
+
+      {
+        std::unique_lock lk(mu_);
+        if (!submit_[i])
+          cv_.wait(lk, [this, &i]() { return submit_[i] != nullptr; });
+      }
+
+      zmq_msg_init_size(&msg, fragments[i].ByteSizeLong());
+      zmq_msg_init(&reply);
+      fragments[i].SerializeToArray(zmq_msg_data(&msg),
+                                    fragments[i].ByteSizeLong());
+
+      {
+        std::lock_guard lk(mu_);
+        submitted = submit_[i]->send_msg(&msg, 0);
+      }
+
+      if (!submitted) {
+        spdlog::error("failed to submit weights to aggregator with ID {}", i);
+        zmq_msg_close(&reply);
+        return false;
+      }
+
+      {
+        std::lock_guard lk(mu_);
+        received = submit_[i]->recv_msg(&reply, 0);
+      }
+
+      if (!received) {
+        spdlog::error("failed to receive successful weight submission "
+                      "notification from aggregator with ID {}",
+                      i);
+        zmq_msg_close(&reply);
+        return false;
+      } else if (!res.ParseFromArray(zmq_msg_data(&reply),
+                                     zmq_msg_size(&reply))) {
+        spdlog::error("failed to parseweight submission "
+                      "notification from aggregator with ID {}",
+                      i);
+        zmq_msg_close(&reply);
+        return false;
+      } else if (res.has_error()) {
+        spdlog::error("aggregator {} returned: {}", i, res.error().msg());
+        zmq_msg_close(&reply);
+        return false;
+      }
+      zmq_msg_close(&reply);
+    }
+
+    return true;
+  }
+
+  /**
+   * It receives the weights from teh aggregators for a given training round.
+   * Also, the round will be updates if the client receives weights for a higher
+   * round. This could happen in case the client is some rounds behind with the
+   * training.
+   *
+   * @param round The current training round. It will be updates if the client
+   * receives weights from a higher round.
+   * @return If it manages to succesfully receive the model parameters from all
+   * the aggregators, it returns true; otherwise, it returns false.
+   */
+  bool receive_weights(uint32_t *round) noexcept {
+    std::vector<eris::WeightUpdate> weights(options_.splits());
+    std::vector<bool> done(options_.splits(), false);
+    size_t i = 0;
+
+    while (i < done.size()) {
+      zmq_msg_t msg;
+      bool received;
+
+      if (done[i]) {
+        ++i;
+        continue;
+      }
+
+      weights[i] = eris::WeightUpdate{};
+      zmq_msg_init(&msg);
+      {
+        std::lock_guard lk(mu_);
+        received = publish_[i]->recv_msg(&msg, 0);
+      }
+
+      if (!received) {
+        spdlog::error(
+            "failed to receive weight updates from aggregator with ID {}", i);
+        zmq_msg_close(&msg);
+        return false;
+      } else if (!weights[i].ParseFromArray(zmq_msg_data(&msg),
+                                            zmq_msg_size(&msg))) {
+        spdlog::error(
+            "failed to deserialize weight updates from aggregator with ID {}",
+            i);
+        zmq_msg_close(&msg);
+        return false;
+      }
+
+      zmq_msg_close(&msg);
+
+      if (weights[i].round() == *round) {
+        done[i++] = true;
+      } else if (weights[i].round() > *round) {
+        *round = weights[i].round();
+        std::fill(done.begin(), done.end(), false);
+        done[i] = true;
+        i = 0;
+      }
+    }
+    set_parameters(splitter_.reassemble(weights));
+
+    return true;
+  }
+
+  friend class MockClient;
+
+  Socket dealer_;            /**< The ZeroMQ socket sending requests to the
+                                ErisCoordinator */
+  Socket subscriber_;        /**< The ZeroMQ socket receiving updates from the
+                                ErisCoordinator */
+  std::atomic_bool running_; /**< Whether the process is running */
+
+  std::string aggr_address_;   /**< The IPv4 address on which the aggregator
+                                  should be listening to */
+  uint16_t aggr_submit_port_;  /**< The port number on which the aggregator
+                                  should be receiving weights submissions */
+  uint16_t aggr_publish_port_; /**< The port number on which the aggregator
+                                 should publish weight updates */
+
+  eris::TrainingOptions options_; /**< The training configurations coming from
+                                     the ErisCoordinator */
+  RandomSplit splitter_;       /**< The splitter splitting the model weights */
+  std::mutex mu_;              /**< A mutex to provide mutual exclusion to the
+                                  client's state */
+  std::condition_variable cv_; /**< A condition variable notifying for updates
+                                  in the list of known aggregators */
+  std::vector<std::unique_ptr<Socket>> submit_;  /**< The list aggregator
+                                                    submissions connections */
+  std::vector<std::unique_ptr<Socket>> publish_; /**< The list aggregator
+                                                    subscriptions */
+  std::thread coordinator_updates_; /**< The thread listening for updates from
+                                       the ErisCoordinator */
+
+  std::shared_ptr<ErisAggregator<Socket>> aggregator_; /**< The
+                                                          ErisAggregator
+                                                          service */
+  std::thread aggregator_thread_; /**< The thread running the
+                                     aggregation process */
 };
