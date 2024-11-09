@@ -12,6 +12,7 @@ option(eris_ENABLE_COVERAGE "Enable code coverage" OFF)
 
 option(eris_ENABLE_MEMCHECK "Enable memory checks" OFF)
 
+option(eris_ENABLE_DOC "Enable Doxygen targets" OFF)
 option(eris_ENABLE_TSAN "Enable ThreadSanitizer build" OFF)
 option(eris_ENABLE_ASAN "Enable AddressSanitizer build" OFF)
 option(eris_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer build" OFF)
@@ -127,7 +128,6 @@ endif()
 
 
 include(coverage)
-include(doxygen)
 
 include(FetchContent)
 set(FETCHCONTENT_QUIET OFF)
@@ -139,4 +139,7 @@ if(eris_BUILD_TESTS)
   add_subdirectory(test)
 endif()
 
-Doxygen(src docs)
+if(eris_ENABLE_DOC)
+  include(doxygen)
+  Doxygen(src docs)
+endif()
