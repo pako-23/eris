@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # Libraries
 import torch
 import torchvision
@@ -18,34 +20,38 @@ import numpy as np
 import shutil
 
 
-
 ########################################################################################
 # MNIST - IMAGE CLASSIFICATION
 ########################################################################################
 def download_mnist():
     print("\nDownloading MNIST dataset...")
     # Define transformations for the datasets
-    transform_mnist = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))  # Normalize with mean and std for MNIST
-    ])
+    transform_mnist = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.1307,), (0.3081,)
+            ),  # Normalize with mean and std for MNIST
+        ]
+    )
 
     # Download and load the MNIST training and test datasets
     trainset_mnist = torchvision.datasets.MNIST(
-        root='./data', train=True, download=True, transform=transform_mnist)
+        root="./data", train=True, download=True, transform=transform_mnist
+    )
     testset_mnist = torchvision.datasets.MNIST(
-        root='./data', train=False, download=True, transform=transform_mnist)
+        root="./data", train=False, download=True, transform=transform_mnist
+    )
 
-    # Save the dataset 
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    torch.save(trainset_mnist, 'datasets/mnist_train.pt')
-    torch.save(testset_mnist, 'datasets/mnist_test.pt')
+    # Save the dataset
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(trainset_mnist, "datasets/mnist_train.pt")
+    torch.save(testset_mnist, "datasets/mnist_test.pt")
     print("MNIST training dataset saved correctly as numpy file.")
-    
-    # Remove 'data' folder
-    shutil.rmtree('data')
 
+    # Remove 'data' folder
+    shutil.rmtree("data")
 
 
 ########################################################################################
@@ -54,27 +60,32 @@ def download_mnist():
 def download_cifar10():
     print("\nDownloading CIFAR-10 dataset...")
     # Define transformations for the datasets
-    transform_cifar10 = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))  # Normalize with mean and std for CIFAR-10
-    ])
+    transform_cifar10 = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)
+            ),  # Normalize with mean and std for CIFAR-10
+        ]
+    )
 
     # Download and load the CIFAR-10 training and test datasets
     trainset_cifar10 = torchvision.datasets.CIFAR10(
-        root='./data', train=True, download=True, transform=transform_cifar10)
+        root="./data", train=True, download=True, transform=transform_cifar10
+    )
     testset_cifar10 = torchvision.datasets.CIFAR10(
-        root='./data', train=False, download=True, transform=transform_cifar10)
+        root="./data", train=False, download=True, transform=transform_cifar10
+    )
 
     # Save as torch tensor
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    torch.save(trainset_cifar10, 'datasets/cifar10_train.pt')
-    torch.save(testset_cifar10, 'datasets/cifar10_test.pt')
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(trainset_cifar10, "datasets/cifar10_train.pt")
+    torch.save(testset_cifar10, "datasets/cifar10_test.pt")
     print("CIFAR-10 training dataset saved correctly as numpy file.")
 
     # Remove 'data' folder
-    shutil.rmtree('data')
-
+    shutil.rmtree("data")
 
 
 ########################################################################################
@@ -93,7 +104,7 @@ def download_cifar10():
 #     # Load the Air Passenger dataset
 #     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
 #     data = pd.read_csv(url, parse_dates=['Month'], index_col='Month')
-    
+
 #     # Scale the data
 #     scaler = StandardScaler()
 #     data['Passengers'] = scaler.fit_transform(data['Passengers'].values.reshape(-1, 1))
@@ -114,28 +125,30 @@ def download_cifar10():
 #     # Save the dataset as torch tensor
 #     if not os.path.exists('datasets'):
 #         os.makedirs('datasets')
-    
+
 #     torch.save(train_dataset, 'datasets/airline_train.pt')
 #     torch.save(test_dataset, 'datasets/airline_test.pt')
 #     print("Airline Passengers dataset saved correctly as csv file.")
 
+
 def create_window(data, seq_length):
     x, y = [], []
-    for i in range(len(data)-seq_length):
-        _x = data[i:(i+seq_length)]
-        _y = data[i+seq_length]
+    for i in range(len(data) - seq_length):
+        _x = data[i : (i + seq_length)]
+        _y = data[i + seq_length]
         x.append(_x)
         y.append(_y)
 
-    return np.array(x),np.array(y)
+    return np.array(x), np.array(y)
+
 
 def download_airline():
     print("\nDownloading Airline Passengers dataset...")
     # Load the Air Passenger dataset
     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
     data = pd.read_csv(url)
-    data = data.iloc[:,1:2].values
-    
+    data = data.iloc[:, 1:2].values
+
     # Scale the data
     sc = StandardScaler()
     training_data = sc.fit_transform(data)
@@ -144,20 +157,27 @@ def download_airline():
     window_size = 30
     x, y = create_window(training_data, window_size)
 
-    X_train, X_test, Y_train, Y_test = train_test_split(x, y, test_size=0.20, shuffle=False)
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        x, y, test_size=0.20, shuffle=False
+    )
 
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
-    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(Y_train, dtype=torch.float32),
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test, dtype=torch.float32),
+        torch.tensor(Y_test, dtype=torch.float32),
+    )
 
     # Save the dataset as torch tensor
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    
-    torch.save(train_dataset, 'datasets/airline_train.pt')
-    torch.save(test_dataset, 'datasets/airline_test.pt')
-    print("Airline Passengers dataset saved correctly as csv file.")
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
 
+    torch.save(train_dataset, "datasets/airline_train.pt")
+    torch.save(test_dataset, "datasets/airline_test.pt")
+    print("Airline Passengers dataset saved correctly as csv file.")
 
 
 ########################################################################################
@@ -168,11 +188,23 @@ def download_adult():
     # Load the dataset from UCI Machine Learning Repository
     url = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
     column_names = [
-        'age', 'workclass', 'fnlwgt', 'education', 'education-num', 'marital-status',
-        'occupation', 'relationship', 'race', 'sex', 'capital-gain', 'capital-loss',
-        'hours-per-week', 'native-country', 'income'
+        "age",
+        "workclass",
+        "fnlwgt",
+        "education",
+        "education-num",
+        "marital-status",
+        "occupation",
+        "relationship",
+        "race",
+        "sex",
+        "capital-gain",
+        "capital-loss",
+        "hours-per-week",
+        "native-country",
+        "income",
     ]
-    data = pd.read_csv(url, header=None, names=column_names, na_values=' ?')
+    data = pd.read_csv(url, header=None, names=column_names, na_values=" ?")
 
     # Check for missing values
     # print("\nMissing values per column:")
@@ -180,55 +212,83 @@ def download_adult():
 
     # Preprocessing
     # Separate features and target variable
-    X = data.drop('income', axis=1)
-    y = data['income']
+    X = data.drop("income", axis=1)
+    y = data["income"]
 
     # Encode target variable
     label_encoder = LabelEncoder()
     y = label_encoder.fit_transform(y)
 
     # Preprocessing for numerical and categorical features
-    numerical_features = ['age', 'fnlwgt', 'education-num', 'capital-gain', 'capital-loss', 'hours-per-week']
-    categorical_features = ['workclass', 'education', 'marital-status', 'occupation', 'relationship', 'race', 'sex', 'native-country']
+    numerical_features = [
+        "age",
+        "fnlwgt",
+        "education-num",
+        "capital-gain",
+        "capital-loss",
+        "hours-per-week",
+    ]
+    categorical_features = [
+        "workclass",
+        "education",
+        "marital-status",
+        "occupation",
+        "relationship",
+        "race",
+        "sex",
+        "native-country",
+    ]
 
     # Create preprocessing pipelines for numerical and categorical features
-    numerical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='median')),
-        ('scaler', StandardScaler())
-    ])
+    numerical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
 
-    categorical_transformer = Pipeline(steps=[
-        ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore'))
-    ])
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore")),
+        ]
+    )
 
     # Combine preprocessing for both numerical and categorical features
     preprocessor = ColumnTransformer(
         transformers=[
-            ('num', numerical_transformer, numerical_features),
-            ('cat', categorical_transformer, categorical_features)
-        ])
+            ("num", numerical_transformer, numerical_features),
+            ("cat", categorical_transformer, categorical_features),
+        ]
+    )
 
     # Preprocess the data
     X_preprocessed = preprocessor.fit_transform(X)
 
     # Split the data into training and test sets
-    X_train, X_test, Y_train, Y_test = train_test_split(X_preprocessed.toarray(), y, test_size=0.2, random_state=42)
-    
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X_preprocessed.toarray(), y, test_size=0.2, random_state=42
+    )
+
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
-    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(Y_train, dtype=torch.float32),
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test, dtype=torch.float32),
+        torch.tensor(Y_test, dtype=torch.float32),
+    )
 
     # Save the dataset as torch tensor
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    torch.save(train_dataset, 'datasets/adult_train.pt')
-    torch.save(test_dataset, 'datasets/adult_test.pt')
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(train_dataset, "datasets/adult_train.pt")
+    torch.save(test_dataset, "datasets/adult_test.pt")
     print("Adult dataset saved correctly as torch tensor.")
-    
-    
 
-######################################################################################## 
+
+########################################################################################
 # LSST - TIME SERIES
 ########################################################################################
 def download_lsst():
@@ -237,23 +297,23 @@ def download_lsst():
     ucr_loader = UCR_UEA_datasets()
 
     # Load a specific dataset
-    X_train, y_train, X_test, y_test = ucr_loader.load_dataset("LSST") 
-    
+    X_train, y_train, X_test, y_test = ucr_loader.load_dataset("LSST")
+
     # Remove the labels (92 and 95) from the dataset - few samples, errors when splitting
-    mask = y_test != '92'
+    mask = y_test != "92"
     X_test = X_test[mask]
     y_test = y_test[mask]
-    mask = y_train != '92'
+    mask = y_train != "92"
     X_train = X_train[mask]
     y_train = y_train[mask]
 
-    mask = y_test != '95'
+    mask = y_test != "95"
     X_test = X_test[mask]
     y_test = y_test[mask]
-    mask = y_train != '95'
+    mask = y_train != "95"
     X_train = X_train[mask]
     y_train = y_train[mask]
-    
+
     # Encode the string labels
     label_encoder = LabelEncoder()
 
@@ -262,16 +322,26 @@ def download_lsst():
     y_test = label_encoder.transform(y_test)
 
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(y_train, dtype=torch.float32))
-    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(y_test, dtype=torch.float32))
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(y_train, dtype=torch.float32),
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test, dtype=torch.float32),
+        torch.tensor(y_test, dtype=torch.float32),
+    )
 
     # Save the dataset as torch tensor
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    torch.save(train_dataset, 'datasets/lsst_train.pt')
-    torch.save(test_dataset, 'datasets/lsst_test.pt')
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(train_dataset, "datasets/lsst_train.pt")
+    torch.save(test_dataset, "datasets/lsst_test.pt")
     print("LSST dataset saved correctly as torch tensor.")
 
-    
 
-
+if __name__ == "__main__":
+    download_adult()
+    download_airline()
+    download_cifar10()
+    download_lsst()
+    download_mnist()
