@@ -11,6 +11,9 @@ __pycache__/
 # Datasets
 *.pt
 
+# Excel
+*.xlsx
+
 # Images
 *.png
 

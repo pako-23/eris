@@ -6,7 +6,6 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import TensorDataset
 import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
 from sklearn.compose import ColumnTransformer
@@ -15,17 +14,18 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
 from tslearn.datasets import UCR_UEA_datasets
+from ucimlrepo import fetch_ucirepo # type: ignore
 import os
 import numpy as np
 import shutil
+
 
 
 ########################################################################################
 # MNIST - IMAGE CLASSIFICATION
 ########################################################################################
 def download_mnist():
-    print("\nDownloading MNIST dataset...")
-    # Define transformations for the datasets
+    print("\033[93m\nDownloading MNIST dataset...\033[0m")    # Define transformations for the datasets
     transform_mnist = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -54,11 +54,12 @@ def download_mnist():
     shutil.rmtree("data")
 
 
+
 ########################################################################################
 # CIFAR-10 - IMAGE CLASSIFICATION
 ########################################################################################
 def download_cifar10():
-    print("\nDownloading CIFAR-10 dataset...")
+    print("\033[93m\nDownloading CIFAR-10 dataset...\033[0m")
     # Define transformations for the datasets
     transform_cifar10 = transforms.Compose(
         [
@@ -86,6 +87,43 @@ def download_cifar10():
 
     # Remove 'data' folder
     shutil.rmtree("data")
+
+
+
+########################################################################################
+# F-MNIST
+########################################################################################
+def download_fashion_mnist():
+    print("\033[93m\nDownloading Fashion-MNIST dataset...\033[0m")
+    
+    # Define transformations for the dataset
+    transform_fashion_mnist = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                (0.2860406,), (0.35302424,)
+            ),  # Normalize with mean and std for Fashion-MNIST
+        ]
+    )
+    
+    # Download and load the Fashion-MNIST training and test datasets
+    trainset_fashion = torchvision.datasets.FashionMNIST(
+        root="./data", train=True, download=True, transform=transform_fashion_mnist
+    )
+    testset_fashion = torchvision.datasets.FashionMNIST(
+        root="./data", train=False, download=True, transform=transform_fashion_mnist
+    )
+    
+    # Save the dataset
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(trainset_fashion, "datasets/fashion_mnist_train.pt")
+    torch.save(testset_fashion, "datasets/fashion_mnist_test.pt")
+    print("Fashion-MNIST training and test datasets saved correctly as torch files.")
+    
+    # Remove 'data' folder
+    shutil.rmtree("data")
+
 
 
 ########################################################################################
@@ -143,7 +181,7 @@ def create_window(data, seq_length):
 
 
 def download_airline():
-    print("\nDownloading Airline Passengers dataset...")
+    print("\033[93m\nDownloading Airline Passengers dataset...\033[0m")
     # Load the Air Passenger dataset
     url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
     data = pd.read_csv(url)
@@ -180,11 +218,12 @@ def download_airline():
     print("Airline Passengers dataset saved correctly as csv file.")
 
 
+
 ########################################################################################
 # ADULT - TABULAR CLASSIFICATION
 ########################################################################################
 def download_adult():
-    print("\nDownloading Adult dataset...")
+    print("\033[93m\nDownloading Adult dataset...\033[0m")
     # Load the dataset from UCI Machine Learning Repository
     url = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
     column_names = [
@@ -288,11 +327,91 @@ def download_adult():
     print("Adult dataset saved correctly as torch tensor.")
 
 
+
+########################################################################################
+# Breast Cancer Wisconsin (Diagnostic) - TABULAR CLASSIFICATION
+########################################################################################
+def download_breast(preprocess=True):
+    print("\033[93m\nDownloading Breast Cancer Wisconsin dataset..\033[0m")
+    
+    # fetch dataset 
+    breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17) 
+    
+    # data (as pandas dataframes) 
+    X = breast_cancer_wisconsin_diagnostic.data.features 
+    y = breast_cancer_wisconsin_diagnostic.data.targets 
+    y.loc[:, 'Diagnosis'] = y['Diagnosis'].map({'M': 1, 'B': 0})
+    
+    # # metadata and variable information 
+    # print(f"Metadata: {breast_cancer_wisconsin_diagnostic.metadata}") 
+    # print(f"Info variables: {breast_cancer_wisconsin_diagnostic.variables}") 
+
+    # Preprocessing dataframe X
+    if preprocess:
+        scaler = MinMaxScaler()
+        X = scaler.fit_transform(X)
+
+    # Split the data into training and test sets
+    X_train, X_test, Y_train, Y_test = train_test_split(X, y['Diagnosis'].values, test_size=0.2, random_state=42)
+    Y_train = Y_train.astype(float)
+    Y_test = Y_test.astype(float)
+
+    # Create TensorDataset for training and testing
+    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
+    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
+    
+    # Save the dataset as torch tensor
+    if not os.path.exists('datasets'):
+        os.makedirs('datasets')
+    torch.save(train_dataset, 'datasets/breast_train.pt')
+    torch.save(test_dataset, 'datasets/breast_test.pt')
+
+
+
+########################################################################################
+# Diabetes - TABULAR CLASSIFICATION
+################################################################################
+def download_diabetes(preprocess=True): 
+    print("\033[93m\nDownloading Diabetes Health Indicators dataset...\033[0m")
+    
+    # fetch dataset 
+    cdc_diabetes_health_indicators = fetch_ucirepo(id=891) 
+    
+    # data (as pandas dataframes) 
+    X = cdc_diabetes_health_indicators.data.features 
+    y = cdc_diabetes_health_indicators.data.targets
+    
+    # # metadata and variable information 
+    # print(f"Metadata: {breast_cancer_wisconsin_diagnostic.metadata}") 
+    # print(f"Info variables: {breast_cancer_wisconsin_diagnostic.variables}") 
+
+    # Preprocessing dataframe X
+    if preprocess:
+        scaler = MinMaxScaler()
+        X = scaler.fit_transform(X)
+        
+    # Split the data into training and test sets
+    X_train, X_test, Y_train, Y_test = train_test_split(X, y['Diabetes_binary'].values, test_size=0.2, random_state=42)
+    X_train = X_train.astype(float)
+    X_test = X_test.astype(float)
+    
+    # Create TensorDataset for training and testing
+    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
+    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
+    
+    # Save the dataset as torch tensor
+    if not os.path.exists('datasets'):
+        os.makedirs('datasets')
+    torch.save(train_dataset, 'datasets/diabetes_train.pt')
+    torch.save(test_dataset, 'datasets/diabetes_test.pt')
+    
+    
+
 ########################################################################################
 # LSST - TIME SERIES
 ########################################################################################
 def download_lsst():
-    print("\nDownloading LSST dataset...")
+    print("\033[93m\nDownloading LSST dataset...\033[0m")
     # Load the dataset from UCR Time Series Classification Archive
     ucr_loader = UCR_UEA_datasets()
 
@@ -340,8 +459,13 @@ def download_lsst():
 
 
 if __name__ == "__main__":
-    download_adult()
-    download_airline()
-    download_cifar10()
-    download_lsst()
+    print("\033[93m\n--> Start downloading all datasets <--\033[0m")
     download_mnist()
+    download_cifar10()
+    download_fashion_mnist()
+    # download_adult()
+    download_breast()
+    download_diabetes()
+    download_airline()
+    download_lsst()
+

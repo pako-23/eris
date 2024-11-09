@@ -1,14 +1,8 @@
 # Libraries
+# import experiments.data.download_datasets as 
 import download_datasets
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import random as rmd
-from sklearn.cluster import KMeans
-from sklearn.model_selection import train_test_split
 import argparse
 from sklearn.cluster import KMeans
-import copy
 import torch
 from torch.utils.data import Subset, DataLoader
 import os
@@ -50,7 +44,34 @@ elif args.dataset == 'cifar10':
     # Load CIFAR-10 dataset
     X_train = torch.load('datasets/cifar10_train.pt')
     X_test = torch.load('datasets/cifar10_test.pt')
-    
+
+elif args.dataset == 'fmnist':
+    # if not exists, download Fashion MNIST dataset
+    if not os.path.exists('datasets/fashion_mnist_train.pt'):
+        download_datasets.download_cifar10()
+
+    # Load CIFAR-10 dataset
+    X_train = torch.load('datasets/fashion_mnist_train.pt')
+    X_test = torch.load('datasets/fashion_mnist_test.pt')
+
+elif args.dataset == 'breast':
+    # if not exists, download breast cancer dataset
+    if not os.path.exists('datasets/breast_train.pt'):
+        download_datasets.download_breast()
+
+    # Load breast cancer dataset
+    X_train = torch.load('datasets/breast_train.pt')
+    X_test = torch.load('datasets/breast_test.pt')
+
+elif args.dataset == 'diabetes':
+    # if not exists, download diabetes dataset
+    if not os.path.exists('datasets/diabetes_train.pt'):
+        download_datasets.download_diabetes()
+
+    # Load diabetes dataset
+    X_train = torch.load('datasets/diabetes_train.pt')
+    X_test = torch.load('datasets/diabetes_test.pt')
+
 elif args.dataset == 'airline':
     # if not exists, download airline dataset
     if not os.path.exists('datasets/airline_train.pt'):
