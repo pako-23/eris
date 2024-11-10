@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
-from tslearn.datasets import UCR_UEA_datasets
+from tslearn.datasets import UCR_UEA_datasets # type: ignore
 from ucimlrepo import fetch_ucirepo # type: ignore
 import os
 import numpy as np
