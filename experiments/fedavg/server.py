@@ -62,7 +62,7 @@ def fit_config(server_round: int):
     config = {
         "current_round": server_round,
         "local_epochs": cfg.local_epochs,
-        "tot_rounds": cfg.n_rounds,
+        "tot_rounds": cfg.n_rounds_dict[cfg.dataset_name],
         "min_latent_space": 0,
         "max_latent_space": max_latent_space,
     }
@@ -291,7 +291,7 @@ def main() -> None:
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
         server_address="0.0.0.0:8098",   # 0.0.0.0 listens to all available interfaces
-        config=fl.server.ServerConfig(num_rounds=cfg.n_rounds),
+        config=fl.server.ServerConfig(num_rounds=cfg.n_rounds_dict[cfg.dataset_name]),
         strategy=strategy,
     )
     # convert history to list

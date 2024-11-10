@@ -1,7 +1,7 @@
 # Training settings
 batch_size = 64
 test_batch_size = 64
-n_rounds = 10
+# n_rounds = 30
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
@@ -14,7 +14,7 @@ dataset_name = "mnist" # Options: "mnist", "cifar10", "fmnist, "breast", "diabet
 client_number = 10
 
 # Cross validation
-k_folds = 2  # Set 1 to disable cross validation
+k_folds = 1  # Set 1 to disable cross validation
 
 # Model settings
 n_classes_dict = {
@@ -26,6 +26,17 @@ n_classes_dict = {
     "adult": 2,
     "airline": 1, # regression 
     "lsst":12,
+}
+
+n_rounds_dict = {
+    "mnist": 15,
+    "cifar10": 20,
+    "fmnist": 15, 
+    "breast": 200,
+    "diabetes": 20,
+    "adult": 50,
+    "airline": 1000,
+    "lsst": 100,
 }
 
 
