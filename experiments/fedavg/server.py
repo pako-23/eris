@@ -20,6 +20,7 @@ from flwr.server.client_proxy import ClientProxy
 from flwr.common import FitRes
 import argparse
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import os
 from logging import WARNING
@@ -28,8 +29,6 @@ from collections import OrderedDict
 import json
 import time
 import pandas as pd
-import config as cfg
-import utils as utils
 from sklearn.model_selection import train_test_split
 from flwr.common import (
     EvaluateIns,
@@ -43,9 +42,6 @@ from flwr.common import (
 )
 from flwr.common import NDArray, NDArrays
 from functools import reduce
-from flwr.server.client_manager import ClientManager
-import matplotlib.pyplot as plt
-from flwr.server.strategy import DifferentialPrivacyServerSideFixedClipping, DifferentialPrivacyServerSideAdaptiveClipping
 
 import sys
 import os
@@ -53,6 +49,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 from public import models
+from public import utils
+from public import config as cfg
 
 
 # Define the max latent space as global variable
@@ -74,13 +72,13 @@ def fit_config(server_round: int):
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy of each client by number of examples used
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    f1_scores = [num_examples * m[cfg.metric_name] for num_examples, m in metrics]
+    f1_scores = [num_examples * m['f1_score'] for num_examples, m in metrics]
     # validities = [num_examples * m["validity"] for num_examples, m in metrics]
     examples = [num_examples for num_examples, _ in metrics]
     # Aggregate and return custom metric (weighted average)
     return {
         "accuracy": sum(accuracies) / sum(examples),
-        cfg.metric_name: sum(f1_scores) / sum(examples)}
+        'f1_score': sum(f1_scores) / sum(examples)}
 
 def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
     """Aggregate evaluation results obtained from multiple clients."""
@@ -194,7 +192,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
             # Save the model
-            torch.save(self.model.state_dict(), f"checkpoints/{cfg.predictor_name}/{cfg.dataset_name}/model_{server_round}.pth")
+            torch.save(self.model.state_dict(), f"checkpoints/{self.model.__class__.__name__}/{cfg.dataset_name}/model_{server_round}.pth")
         
         return aggregated_parameters_global, aggregated_metrics
     
@@ -255,38 +253,24 @@ def main() -> None:
     
     # Start time
     start_time = time.time()
-
-    # Create directories and delede old files
-    utils.create_delede_folders()
     
     # Load the test set
-    test_dataset = torch.load(f'../Data/datasets/{cfg.dataset_name}_test.pt', weights_only=False)
+    test_dataset = torch.load(f'../data/datasets/{cfg.dataset_name}_test.pt', weights_only=False)
 
     # Create the data loaders
     test_loader = DataLoader(test_dataset, batch_size=cfg.test_batch_size, shuffle=False)
 
     # model and history folder
-    device = utils.check_gpu(manual_seed=True, print_info=True)
+    device = utils.check_gpu(seed=cfg.seed, print_info=True)
+    utils.set_seed(cfg.seed)
     # model = models.predictors[cfg.predictor_name](in_channels=cfg.channels, num_classes=cfg.n_classes, input_size=cfg.input_size).to(device)
 
-    # model and history folder
-    model = models.predictors[cfg.predictor_name](
-        in_channels=cfg.channels, 
-        num_classes=cfg.n_classes, 
-        input_size=cfg.input_size
-        ).to(device)
+    # model and history folder    
+    model = models.model_dict[cfg.dataset_name](
+        models.model_args[cfg.dataset_name]).to(device)
     
-    if not cfg.only_predictor:
-        model = models.generators[cfg.cf_generator](
-            predictor=model,
-            in_channels=cfg.channels, 
-            num_classes=cfg.n_classes, 
-            input_size=cfg.input_size
-            ).to(device)
-        
-        test_fn = models.test_generators[cfg.cf_generator]
-    else:
-        test_fn = models.simple_test
+    # Create directories and delede old files
+    utils.create_delede_folders(model.__class__.__name__)
 
     # Define strategy
     strategy = SaveModelStrategy(
@@ -301,29 +285,8 @@ def main() -> None:
         on_fit_config_fn=fit_config,
         dataset=cfg.dataset_name,
     )
-    
-    # Central Differential Privacy
-    if cfg.central_dp_fixed:
-        print(f"\n\033[94mCentral Differential Privacy (Fixed) with noise multiplier {cfg.noise_multiplier_fixed} and clipping norm {cfg.clipping_norm_fixed}\033[0m")
-        strategy = DifferentialPrivacyServerSideFixedClipping(
-            strategy,
-            noise_multiplier=cfg.noise_multiplier_fixed,
-            clipping_norm=cfg.clipping_norm_fixed,
-            num_sampled_clients=cfg.client_number,
-        )
-    elif cfg.central_dp_adaptive:
-        print(f"\n\033[94mCentral Differential Privacy (Adaptive) with noise multiplier {cfg.noise_multiplier_adapt}, initial clipping norm {cfg.initial_clipping_norm_adapt}, target clipped quantile {cfg.target_clipped_quantile_adapt}, clip norm learning rate {cfg.clip_norm_lr_adapt}, clipped count standard deviation {cfg.clipped_count_stddev_adapt}\033[0m")
-        strategy = DifferentialPrivacyServerSideAdaptiveClipping(
-            strategy,
-            noise_multiplier=cfg.noise_multiplier_adapt,
-            num_sampled_clients=cfg.client_number,
-            initial_clipping_norm=cfg.initial_clipping_norm_adapt,
-            target_clipped_quantile=cfg.target_clipped_quantile_adapt,
-            clip_norm_lr=cfg.clip_norm_lr_adapt,
-            clipped_count_stddev=cfg.clipped_count_stddev_adapt,
-        )
         
-    print(f"\033[94mTraining {cfg.predictor_name} on {cfg.dataset_name} with {cfg.client_number} clients\033[0m\n")
+    print(f"\033[94mTraining {model.__class__.__name__} on {cfg.dataset_name} with {cfg.client_number} clients\033[0m\n")
 
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
@@ -334,44 +297,42 @@ def main() -> None:
     # convert history to list
     loss = [k[1] for k in history.losses_distributed]
     accuracy = [k[1] for k in history.metrics_distributed['accuracy']]
-    if cfg.only_predictor:
-        metric = [k[1] for k in history.metrics_distributed['f1_score']]
-    else:
-        metric = [k[1] for k in history.metrics_distributed['validity']] 
+    metric = [k[1] for k in history.metrics_distributed['f1_score']]
 
     # Save loss and accuracy to a file
-    print(f"Saving metrics to as .json in histories folder: histories/{cfg.predictor_name}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json")
-    with open(f'histories/{cfg.predictor_name}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json', 'w') as f:
+    print(f"Saving metrics to as .json in histories folder: histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json")
+    with open(f'histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json', 'w') as f:
         json.dump({
             'loss': loss, 
             'accuracy': accuracy,
-            cfg.metric_name: metric,
+            'f1_score': metric,
             }, f)
 
     # Single Plot
-    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(loss, accuracy,metric, show=False)
+    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(loss, accuracy,metric, model.__class__.__name__, show=False)
 
     # Load the best model
-    model.load_state_dict(torch.load(f"checkpoints/{cfg.predictor_name}/{cfg.dataset_name}/model_{best_loss_round}.pth", weights_only=False))
+    model.load_state_dict(torch.load(f"checkpoints/{model.__class__.__name__}/{cfg.dataset_name}/model_{best_loss_round}.pth", weights_only=False))
 
     # Evaluate the model on the test set
     # loss_test, accuracy_test, f1_score_test = models.simple_test(model, device, test_loader)
-    loss_test, accuracy_test, metric_test = test_fn(model, device, test_loader)
-    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, {cfg.metric_name}: {metric_test*100:.2f} \033[0m\n")
+    criterion = F.mse_loss if cfg.n_classes_dict[cfg.dataset_name]==1 else F.cross_entropy
+    loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
+    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, {'f1_score'}: {metric_test*100:.2f} \033[0m\n")
 
     # Print training time in minutes (grey color)
     training_time = round((time.time() - start_time)/60, 2)
     print(f"\033[90mTraining time: {training_time} minutes\033[0m")
     time.sleep(1)
     
-    # save excel file with metrics
-    df = pd.DataFrame({
-        'Loss': loss_test, 
-        'Accuracy': accuracy_test,
-        cfg.metric_name: metric_test,
-        'Time': training_time,
-    }, index=[0])
-    df.to_excel(f"metrics_{args.fold}.xlsx", index=False)
+    # Save metrics as numpy array
+    metrics = {
+        "loss": loss_test,
+        "accuracy": accuracy_test,
+        'f1_score': metric_test,
+        "time": training_time,
+    }
+    np.save(f'test_metrics_fold_{args.fold}.npy', metrics)
     
 if __name__ == "__main__":
     main()

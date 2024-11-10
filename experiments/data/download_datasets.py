@@ -117,8 +117,8 @@ def download_fashion_mnist():
     # Save the dataset
     if not os.path.exists("datasets"):
         os.makedirs("datasets")
-    torch.save(trainset_fashion, "datasets/fashion_mnist_train.pt")
-    torch.save(testset_fashion, "datasets/fashion_mnist_test.pt")
+    torch.save(trainset_fashion, "datasets/fmnist_train.pt")
+    torch.save(testset_fashion, "datasets/fmnist_test.pt")
     print("Fashion-MNIST training and test datasets saved correctly as torch files.")
     
     # Remove 'data' folder

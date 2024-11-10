@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import config as cfg
+# import config as cfg
 import torch
 import os
 import csv
@@ -17,55 +17,78 @@ from flwr.common import (
     parameters_to_ndarrays,
 )
 
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+from public import config as cfg
+
 
 
 # create folder if not exists
-def create_delede_folders():
+def create_delede_folders(predictor_name):
     # Results
-    if not os.path.exists(f"results/{cfg.predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"results/{cfg.predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"results/{predictor_name}/{cfg.dataset_name}"):
+        os.makedirs(f"results/{predictor_name}/{cfg.dataset_name}")
     else:
         # remove the directory and create a new one
-        os.system(f"rm -r results/{cfg.predictor_name}/{cfg.dataset_name}")
-        os.makedirs(f"results/{cfg.predictor_name}/{cfg.dataset_name}")
+        os.system(f"rm -r results/{predictor_name}/{cfg.dataset_name}")
+        os.makedirs(f"results/{predictor_name}/{cfg.dataset_name}")
     # Histories
-    if not os.path.exists(f"histories/{cfg.predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"histories/{cfg.predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"histories/{predictor_name}/{cfg.dataset_name}"):
+        os.makedirs(f"histories/{predictor_name}/{cfg.dataset_name}")
     else:
         # remove the client folders
         for c in range(cfg.client_number):
-            os.system(f"rm -r histories/{cfg.predictor_name}/{cfg.dataset_name}/client_{c+1}")  
+            os.system(f"rm -r histories/{predictor_name}/{cfg.dataset_name}/client_{c+1}")  
     # Checkpoints
-    if not os.path.exists(f"checkpoints/{cfg.predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"checkpoints/{cfg.predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"checkpoints/{predictor_name}/{cfg.dataset_name}"):
+        os.makedirs(f"checkpoints/{predictor_name}/{cfg.dataset_name}")
     # Images
-    if not os.path.exists(f"images/{cfg.predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"images/{cfg.predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"images/{predictor_name}/{cfg.dataset_name}"):
+        os.makedirs(f"images/{predictor_name}/{cfg.dataset_name}")
     
     
 # define device
-def check_gpu(manual_seed=True, print_info=True):
-    if manual_seed:
-        torch.manual_seed(0)
+def check_gpu(seed=0, print_info=True):
+    torch.manual_seed(seed)
     if torch.cuda.is_available():
         if print_info:
             print("CUDA is available")
         device = 'cuda'
-        torch.cuda.manual_seed_all(0) 
+        torch.cuda.manual_seed_all(seed) 
     elif torch.backends.mps.is_available():
         if print_info:
             print("MPS is available")
         device = torch.device("mps")
-        torch.mps.manual_seed(0)
+        torch.mps.manual_seed(seed)
     else:
         if print_info:
             print("CUDA is not available")
         device = 'cpu'
     return device
 
+def set_seed(seed):
+    # Set seed for torch
+    torch.manual_seed(seed)
+    
+    # If using CUDA
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # For multi-GPU
+    if torch.backends.mps.is_available():
+        torch.mps.manual_seed(seed)
+    # Set seed for NumPy
+    np.random.seed(seed)
+    # Set deterministic behavior for CUDNN
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    # Set PYTHONHASHSEED
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 # plot and save plot on server side
-def plot_loss_and_accuracy(loss, accuracy, f1_score, show=True):
+def plot_loss_and_accuracy(loss, accuracy, f1_score, predictor_name, show=True):
     # read args
     rounds = cfg.n_rounds
 
@@ -77,14 +100,14 @@ def plot_loss_and_accuracy(loss, accuracy, f1_score, show=True):
 
     plt.plot(loss, label='Loss')
     plt.plot(accuracy, label='Accuracy')
-    plt.plot(f1_score, label=cfg.metric_name)
+    plt.plot(f1_score, label='f1_score')
     min_loss_index = loss.index(min(loss))
     max_accuracy_index = accuracy.index(max(accuracy))
     max_f1score_index = f1_score.index(max(f1_score))
-    print(f"\n\033[1;34mServer Side\033[0m \nMinimum Loss occurred at round {min_loss_index + 1} with a loss value of {loss[min_loss_index]:.3f} \nMaximum Accuracy occurred at round {max_accuracy_index + 1} with an accuracy value of {accuracy[max_accuracy_index]*100:.2f}% \nMaximum {cfg.metric_name} occurred at round {max_f1score_index + 1} with a {cfg.metric_name} value of {f1_score[max_f1score_index]*100:.2f}%\n")
+    print(f"\n\033[1;34mServer Side\033[0m \nMinimum Loss occurred at round {min_loss_index + 1} with a loss value of {loss[min_loss_index]:.3f} \nMaximum Accuracy occurred at round {max_accuracy_index + 1} with an accuracy value of {accuracy[max_accuracy_index]*100:.2f}% \nMaximum {'f1_score'} occurred at round {max_f1score_index + 1} with a {'f1_score'} value of {f1_score[max_f1score_index]*100:.2f}%\n")
     plt.scatter(min_loss_index, loss[min_loss_index], color='blue', marker='*', s=100, label='Min Loss')
     plt.scatter(max_accuracy_index, accuracy[max_accuracy_index], color='orange', marker='*', s=100, label='Max Accuracy')
-    plt.scatter(max_f1score_index, f1_score[max_f1score_index], color='green', marker='*', s=100, label=f'Max {cfg.metric_name}')
+    plt.scatter(max_f1score_index, f1_score[max_f1score_index], color='green', marker='*', s=100, label=f'Max {'f1_score'}')
     
     # Labels and title
     plt.xlabel('Rounds')
@@ -93,7 +116,7 @@ def plot_loss_and_accuracy(loss, accuracy, f1_score, show=True):
     plt.legend()
     plt.ylim(-0.05, 1.4)
     plt.grid()
-    plt.savefig(f"images/{cfg.predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
+    plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
     if show:
         plt.show()
     return min_loss_index+1, max_accuracy_index+1
@@ -115,7 +138,7 @@ def save_client_metrics(round_num, loss, accuracy, f1_score, client_id=1, histor
         writer = csv.writer(file)
         
         if not file_exists:
-            writer.writerow(['Round', 'Loss', 'Accuracy', cfg.metric_name])
+            writer.writerow(['Round', 'Loss', 'Accuracy', 'f1_score'])
 
         # Write the metrics
         writer.writerow([round_num, loss, accuracy, f1_score])
@@ -135,7 +158,7 @@ def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
     rounds = df['Round']
     loss = df['Loss']
     accuracy = df['Accuracy']
-    f1_score = df[cfg.metric_name]
+    f1_score = df['f1_score']
     
     # Set up the plotting
     sns.set(style="whitegrid")
@@ -144,7 +167,7 @@ def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
     plt.figure(figsize=(12, 6))
     plt.plot(rounds, loss, label='Loss')
     plt.plot(rounds, accuracy, label='Accuracy')
-    plt.plot(rounds, f1_score, label=cfg.metric_name)
+    plt.plot(rounds, f1_score, label='f1_score')
 
     # Find the index (round) of minimum loss and maximum accuracy
     min_loss_round = df.loc[loss.idxmin(), 'Round']
@@ -152,12 +175,12 @@ def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
     max_f1score_round = df.loc[f1_score.idxmax(), 'Round']
 
     # Print the rounds where min loss and max accuracy occurred
-    print(f"\n\033[1;33mClient {client_id}\033[0m \nMinimum Loss occurred at round {min_loss_round} with a loss value of {loss.min()} \nMaximum Accuracy occurred at round {max_accuracy_round} with an accuracy value of {accuracy.max()} \nMax {cfg.metric_name} occurred at round {max_f1score_round} with a {cfg.metric_name} value of {f1_score.max()}\n")
+    print(f"\n\033[1;33mClient {client_id}\033[0m \nMinimum Loss occurred at round {min_loss_round} with a loss value of {loss.min()} \nMaximum Accuracy occurred at round {max_accuracy_round} with an accuracy value of {accuracy.max()} \nMax {'f1_score'} occurred at round {max_f1score_round} with a {'f1_score'} value of {f1_score.max()}\n")
     
     # Mark these points with a star
     plt.scatter(min_loss_round, loss.min(), color='blue', marker='*', s=100, label='Min Loss')
     plt.scatter(max_accuracy_round, accuracy.max(), color='orange', marker='*', s=100, label='Max Accuracy')
-    plt.scatter(max_f1score_round, f1_score.max(), color='green', marker='*', s=100, label=f'Max {cfg.metric_name}')
+    plt.scatter(max_f1score_round, f1_score.max(), color='green', marker='*', s=100, label=f'Max {'f1_score'}')
 
     # Labels and title
     plt.xlabel('Round')

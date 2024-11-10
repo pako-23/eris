@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from math import prod
-
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 
 
@@ -175,7 +176,7 @@ class TransformerModelFlexible(nn.Module):
         # Transformer Components
         self.embedding = nn.Linear(input_size, hidden_dim)  # Input_dim=1 -> hidden_dim=64
         self.pos_encoder = nn.Parameter(torch.zeros(1, sequence_length, hidden_dim))  # Positional encoding for sequence length 30
-        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=num_heads, batch_first=True)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.fc = nn.Linear(hidden_dim, num_classes)  
 
@@ -212,18 +213,139 @@ class LinearModel(nn.Module):
         self.output_layer = nn.Linear(input_size, num_classes) 
 
     def forward(self, x):
-        x = self.output_layer(x)
+        x = self.output_layer(x.squeeze(-1))
         
         return x
 
 
 
 
+#############################################################################################################
+# Helper functions 
+#############################################################################################################
+## Predictor 
+# simple train function
+def simple_train(model, device, train_loader, optimizer, criterion, epoch, client_id=None):
+    model.train()
+    loss_list = []
+    for batch_idx, (data, target) in enumerate(train_loader):
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+        loss = criterion(output, target)
+        loss.backward()
+        optimizer.step()
+        # if batch_idx % 100 == 0:
+        #     print(f'Train Epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)} '
+        #           f'({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
+        loss_list.append(loss.item())
+    # print(f'Client: {client_id} - Train Epoch: {epoch} \tLoss: {sum(loss_list)/len(loss_list):.6f}')
+
+
+# simple test function
+def simple_test(model, device, test_loader, criterion, client_id=None):
+    model.eval()
+    test_loss = 0
+    correct = 0
+    y_true_all, y_pred_all, y_pred_all_digits = [], [], []
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            test_loss += criterion(output, target, reduction='sum').item()  # sum up batch loss
+            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            correct += pred.eq(target.view_as(pred)).sum().item()
+            
+            y_true_all.extend(target.cpu().numpy())
+            y_pred_all.extend(pred.cpu().numpy())
+            y_pred_all_digits.extend(output.cpu().numpy())
+
+    test_loss /= len(test_loader.dataset)
+    
+    if criterion == F.cross_entropy:
+        accuracy = correct / len(test_loader.dataset)
+        f1_score_trad = f1_score(y_true_all, y_pred_all, average='weighted') # Calculate metrics for each label, and find their average weighted by support. NOT traditional F1-score
+        print(f'Validation set (Client {client_id}): Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} '
+            f'({100. * correct / len(test_loader.dataset):.0f}%)')
+        return test_loss, accuracy, f1_score_trad 
+
+    else:
+        mae = mean_absolute_error(y_true_all, y_pred_all_digits)
+        mse = mean_squared_error(y_true_all, y_pred_all_digits)
+        print(f'Validation set (Client {client_id}): Average loss: {test_loss:.4f}, MAE: {mae:.4f}, MSE: {mse:.4f}')
+        return test_loss, mae, mse
 
 
 
 
 
+
+#############################################################################################################
+# Config
+#############################################################################################################
+model_dict = {
+    "mnist": LeNet5,
+    "cifar10": ResNet9,
+    "fmnist":LeNet5,
+    "breast": MLP,  
+    "diabetes": MLP,
+    "adult": MLP,
+    "airline":LinearModel,
+    "lsst": TransformerModelFlexible,
+}
+
+model_args = {
+    "mnist": 
+        {
+            "in_channels": 1, 
+            "num_classes": 10, 
+            "input_size": (28, 28),
+        },
+    "cifar10": 
+        {
+            "in_channels": 3, 
+            "num_classes": 10, 
+            "input_size": (32, 32),    
+        },
+    "fmnist":
+        {
+            "in_channels": 1, 
+            "num_classes": 10, 
+            "input_size": (28, 28),   
+        },
+    "breast":
+        {
+            "input_size": 30, 
+            "num_classes": 2, 
+            "hidden_dim": 128
+        },
+    "diabetes":
+        {
+            "input_size": 21, 
+            "num_classes": 2, 
+            "hidden_dim": 128
+        },
+    "adult":
+        {
+            "input_size": 105, 
+            "num_classes": 2, 
+            "hidden_dim": 128
+        },
+    "airline":
+        {
+            "input_size": 30, 
+            "num_classes": 1, 
+        },
+    "lsst":
+        {
+            "input_size": 6,
+            "sequence_length": 36,
+            "num_classes": 12,
+            "num_heads": 2,
+            "num_layers": 2,
+            "hidden_dim": 64,
+        }
+}
 
 
 

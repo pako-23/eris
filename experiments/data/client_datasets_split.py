@@ -13,7 +13,7 @@ warnings.filterwarnings('ignore')
 # Get input arguments
 args = argparse.ArgumentParser(description='Split the dataset into N clients')
 args.add_argument('--n_clients', type=int, default=5, help='Number of clients to create')
-args.add_argument('--dataset', type=str, default='mnist', help='Dataset to split', choices=['mnist', 'cifar10', 'airline', 'adult', 'lsst'])
+args.add_argument('--dataset', type=str, default='mnist', help='Dataset to split', choices=['mnist', 'cifar10', 'fmnist', 'breast', 'diabetes', 'airline', 'adult', 'lsst']) 
 args.add_argument('--seed', type=int, default=1, help='Random seed')
 args = args.parse_args()
 
@@ -47,12 +47,12 @@ elif args.dataset == 'cifar10':
 
 elif args.dataset == 'fmnist':
     # if not exists, download Fashion MNIST dataset
-    if not os.path.exists('datasets/fashion_mnist_train.pt'):
-        download_datasets.download_cifar10()
+    if not os.path.exists('datasets/fmnist_train.pt'):
+        download_datasets.download_fashion_mnist()
 
     # Load CIFAR-10 dataset
-    X_train = torch.load('datasets/fashion_mnist_train.pt')
-    X_test = torch.load('datasets/fashion_mnist_test.pt')
+    X_train = torch.load('datasets/fmnist_train.pt')
+    X_test = torch.load('datasets/fmnist_test.pt')
 
 elif args.dataset == 'breast':
     # if not exists, download breast cancer dataset
