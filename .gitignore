@@ -8,14 +8,36 @@ __pycache__/
 # C extensions
 *.so
 
+# json
+*.json
+
+# csv
+*.csv
+
+# ubyte
+*ubyte
+
 # Datasets
 *.pt
+*.pyc
+*.pth
 
 # Excel
 *.xlsx
 
+# gz
+*.gz
+
+# tar
+*.tar
+
 # Images
 *.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
 
 # Distribution / packaging
 .Python
