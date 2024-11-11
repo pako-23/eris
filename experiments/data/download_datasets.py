@@ -13,19 +13,20 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import LabelEncoder
-from tslearn.datasets import UCR_UEA_datasets # type: ignore
-from ucimlrepo import fetch_ucirepo # type: ignore
+from tslearn.datasets import UCR_UEA_datasets  # type: ignore
+from ucimlrepo import fetch_ucirepo  # type: ignore
 import os
 import numpy as np
 import shutil
-
 
 
 ########################################################################################
 # MNIST - IMAGE CLASSIFICATION
 ########################################################################################
 def download_mnist():
-    print("\033[93m\nDownloading MNIST dataset...\033[0m")    # Define transformations for the datasets
+    print(
+        "\033[93m\nDownloading MNIST dataset...\033[0m"
+    )  # Define transformations for the datasets
     transform_mnist = transforms.Compose(
         [
             transforms.ToTensor(),
@@ -52,7 +53,6 @@ def download_mnist():
 
     # Remove 'data' folder
     shutil.rmtree("data")
-
 
 
 ########################################################################################
@@ -89,13 +89,12 @@ def download_cifar10():
     shutil.rmtree("data")
 
 
-
 ########################################################################################
 # F-MNIST
 ########################################################################################
 def download_fashion_mnist():
     print("\033[93m\nDownloading Fashion-MNIST dataset...\033[0m")
-    
+
     # Define transformations for the dataset
     transform_fashion_mnist = transforms.Compose(
         [
@@ -105,7 +104,7 @@ def download_fashion_mnist():
             ),  # Normalize with mean and std for Fashion-MNIST
         ]
     )
-    
+
     # Download and load the Fashion-MNIST training and test datasets
     trainset_fashion = torchvision.datasets.FashionMNIST(
         root="./data", train=True, download=True, transform=transform_fashion_mnist
@@ -113,17 +112,16 @@ def download_fashion_mnist():
     testset_fashion = torchvision.datasets.FashionMNIST(
         root="./data", train=False, download=True, transform=transform_fashion_mnist
     )
-    
+
     # Save the dataset
     if not os.path.exists("datasets"):
         os.makedirs("datasets")
     torch.save(trainset_fashion, "datasets/fmnist_train.pt")
     torch.save(testset_fashion, "datasets/fmnist_test.pt")
     print("Fashion-MNIST training and test datasets saved correctly as torch files.")
-    
+
     # Remove 'data' folder
     shutil.rmtree("data")
-
 
 
 ########################################################################################
@@ -216,7 +214,6 @@ def download_airline():
     torch.save(train_dataset, "datasets/airline_train.pt")
     torch.save(test_dataset, "datasets/airline_test.pt")
     print("Airline Passengers dataset saved correctly as csv file.")
-
 
 
 ########################################################################################
@@ -327,24 +324,23 @@ def download_adult():
     print("Adult dataset saved correctly as torch tensor.")
 
 
-
 ########################################################################################
 # Breast Cancer Wisconsin (Diagnostic) - TABULAR CLASSIFICATION
 ########################################################################################
 def download_breast(preprocess=True):
     print("\033[93m\nDownloading Breast Cancer Wisconsin dataset..\033[0m")
-    
-    # fetch dataset 
-    breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17) 
-    
-    # data (as pandas dataframes) 
-    X = breast_cancer_wisconsin_diagnostic.data.features 
-    y = breast_cancer_wisconsin_diagnostic.data.targets 
-    y.loc[:, 'Diagnosis'] = y['Diagnosis'].map({'M': 1, 'B': 0})
-    
-    # # metadata and variable information 
-    # print(f"Metadata: {breast_cancer_wisconsin_diagnostic.metadata}") 
-    # print(f"Info variables: {breast_cancer_wisconsin_diagnostic.variables}") 
+
+    # fetch dataset
+    breast_cancer_wisconsin_diagnostic = fetch_ucirepo(id=17)
+
+    # data (as pandas dataframes)
+    X = breast_cancer_wisconsin_diagnostic.data.features
+    y = breast_cancer_wisconsin_diagnostic.data.targets
+    y.loc[:, "Diagnosis"] = y["Diagnosis"].map({"M": 1, "B": 0})
+
+    # # metadata and variable information
+    # print(f"Metadata: {breast_cancer_wisconsin_diagnostic.metadata}")
+    # print(f"Info variables: {breast_cancer_wisconsin_diagnostic.variables}")
 
     # Preprocessing dataframe X
     if preprocess:
@@ -352,60 +348,74 @@ def download_breast(preprocess=True):
         X = scaler.fit_transform(X)
 
     # Split the data into training and test sets
-    X_train, X_test, Y_train, Y_test = train_test_split(X, y['Diagnosis'].values, test_size=0.2, random_state=42)
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X, y["Diagnosis"].values, test_size=0.2, random_state=42
+    )
     Y_train = Y_train.astype(float)
     Y_test = Y_test.astype(float)
 
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
-    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
-    
-    # Save the dataset as torch tensor
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    torch.save(train_dataset, 'datasets/breast_train.pt')
-    torch.save(test_dataset, 'datasets/breast_test.pt')
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(Y_train, dtype=torch.float32),
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test, dtype=torch.float32),
+        torch.tensor(Y_test, dtype=torch.float32),
+    )
 
+    # Save the dataset as torch tensor
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(train_dataset, "datasets/breast_train.pt")
+    torch.save(test_dataset, "datasets/breast_test.pt")
 
 
 ########################################################################################
 # Diabetes - TABULAR CLASSIFICATION
 ################################################################################
-def download_diabetes(preprocess=True): 
+def download_diabetes(preprocess=True):
     print("\033[93m\nDownloading Diabetes Health Indicators dataset...\033[0m")
-    
-    # fetch dataset 
-    cdc_diabetes_health_indicators = fetch_ucirepo(id=891) 
-    
-    # data (as pandas dataframes) 
-    X = cdc_diabetes_health_indicators.data.features 
+
+    # fetch dataset
+    cdc_diabetes_health_indicators = fetch_ucirepo(id=891)
+
+    # data (as pandas dataframes)
+    X = cdc_diabetes_health_indicators.data.features
     y = cdc_diabetes_health_indicators.data.targets
-    
-    # # metadata and variable information 
-    # print(f"Metadata: {breast_cancer_wisconsin_diagnostic.metadata}") 
-    # print(f"Info variables: {breast_cancer_wisconsin_diagnostic.variables}") 
+
+    # # metadata and variable information
+    # print(f"Metadata: {breast_cancer_wisconsin_diagnostic.metadata}")
+    # print(f"Info variables: {breast_cancer_wisconsin_diagnostic.variables}")
 
     # Preprocessing dataframe X
     if preprocess:
         scaler = MinMaxScaler()
         X = scaler.fit_transform(X)
-        
+
     # Split the data into training and test sets
-    X_train, X_test, Y_train, Y_test = train_test_split(X, y['Diabetes_binary'].values, test_size=0.2, random_state=42)
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X, y["Diabetes_binary"].values, test_size=0.2, random_state=42
+    )
     X_train = X_train.astype(float)
     X_test = X_test.astype(float)
-    
+
     # Create TensorDataset for training and testing
-    train_dataset = TensorDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32))
-    test_dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32))
-    
+    train_dataset = TensorDataset(
+        torch.tensor(X_train, dtype=torch.float32),
+        torch.tensor(Y_train, dtype=torch.float32),
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X_test, dtype=torch.float32),
+        torch.tensor(Y_test, dtype=torch.float32),
+    )
+
     # Save the dataset as torch tensor
-    if not os.path.exists('datasets'):
-        os.makedirs('datasets')
-    torch.save(train_dataset, 'datasets/diabetes_train.pt')
-    torch.save(test_dataset, 'datasets/diabetes_test.pt')
-    
-    
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    torch.save(train_dataset, "datasets/diabetes_train.pt")
+    torch.save(test_dataset, "datasets/diabetes_test.pt")
+
 
 ########################################################################################
 # LSST - TIME SERIES
@@ -460,6 +470,10 @@ def download_lsst():
 
 if __name__ == "__main__":
     print("\033[93m\n--> Start downloading all datasets <--\033[0m")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    if os.getcwd() != script_dir:
+        os.chdir(script_dir)
+
     download_mnist()
     download_cifar10()
     download_fashion_mnist()
@@ -468,4 +482,3 @@ if __name__ == "__main__":
     download_diabetes()
     download_airline()
     download_lsst()
-

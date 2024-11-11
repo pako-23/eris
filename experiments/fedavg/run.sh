@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # This code is usually called from cross_validation.sh, and it starts the server and clients 
 # for the federated learning process. The server is started first, and then the clients are started.
@@ -90,6 +90,3 @@ if [ $k_folds -gt 1 ]; then
 fi
 
 echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
-
-
-

@@ -196,3 +196,4 @@ build/
 build-dev/
 compile_commands.json
 TAGS
+*.pdf
