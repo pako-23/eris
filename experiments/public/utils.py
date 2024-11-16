@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import scipy
+import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 # import config as cfg
@@ -325,3 +327,137 @@ def plot_mean_std_metrics(plot_metrics, name):
 
     # Show the plot
     # plt.show()
+
+
+# p-value of audit hypothesis test
+def p_value_DP_audit(m, r, v, eps, delta):
+    '''
+    The following functions for computing the p-value of the
+    audit hypothesis test and the largest lower bound on epsilon
+    are taken directly from Appendix D in https://arxiv.org/pdf/2305.08846
+    
+    Args:
+    m: number of examples, each included independently with probability 0.5
+    r: number of guesses (i.e. excluding abstentions)
+    v: number of correct guesses by auditor
+    eps, delta: DP guarantee of null hypothesis
+
+    Returns:
+    p-value = probability of >=v correct guesses under null hypothesis
+    '''
+    assert 0 <= v <= r <= m
+    assert eps >= 0
+    assert 0 <= delta <= 1
+    q = 1/(1+math.exp(-eps)) # accuracy of eps-DP randomized response
+    beta = scipy.stats.binom.sf(v-1, r, q) # = P[Binomial(r, q) >= v]
+    alpha = 0
+    sum = 0 # = P[v > Binomial(r, q) >= v - i]
+    for i in range(1, v + 1):
+        sum = sum + scipy.stats.binom.pmf(v - i, r, q)
+        if sum > i * alpha:
+            alpha = sum / i
+    p = beta + alpha * delta * 2 * m
+    return min(p, 1)
+
+
+def get_eps_audit(m, r, v, delta, p):
+    """
+    The following functions for computing the p-value of the
+    audit hypothesis test and the largest lower bound on epsilon
+    are taken directly from Appendix D in https://arxiv.org/pdf/2305.08846
+    
+    Args:   
+    m: number of examples, each included independently with probability 0.5
+    r: number of guesses (i.e. excluding abstentions)
+    v: number of correct guesses by auditor
+    p: 1-confidence e.g. p=0.05 corresponds to 95%
+    
+    Returns:
+    lower bound on eps i.e. algorithm is not (eps,delta)-DP
+    """
+    assert 0 <= v <= r <= m
+    assert 0 <= delta <= 1
+    assert 0 < p < 1
+    eps_min = 0 # maintain p_value_DP(eps_min) < p
+    eps_max = 1 # maintain p_value_DP(eps_max) >= p
+    while p_value_DP_audit(m, r, v, eps_max, delta) < p: eps_max = eps_max + 1
+    for _ in range(30): # binary search
+        eps = (eps_min + eps_max) / 2
+        if p_value_DP_audit(m, r, v, eps, delta) < p:
+            eps_min = eps
+        else:
+            eps_max = eps
+    return eps_min
+
+
+def parameters_to_1d(parameters):
+    """
+    Transform a list of parameters into a 1D numpy array.
+    """
+    return np.concatenate([x.flatten() for x in parameters])
+
+
+# save some auditing metrics
+def save_audit_metrics(round_num, accuracy, privacy_estimate, client_id=1, history_folder="histories/"):
+
+    # Create folder for client
+    folder = history_folder + f"client_{client_id}/"
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+        
+    # file path
+    file_path = folder + f'audit.csv'
+    # Check if the file exists; if not, create it and write headers
+    file_exists = os.path.isfile(file_path)
+    with open(file_path, 'a', newline='') as file:
+        writer = csv.writer(file)
+        
+        if not file_exists:
+            writer.writerow(['Round', 'Accuracy', 'Privacy'])
+
+        # Write the metrics
+        writer.writerow([round_num, accuracy, privacy_estimate])
+
+
+# plot and save privacy audit metrics
+def plot_audit_metrics(client_id, model_name, dataset_name, show=True):
+    history_folder = f"histories/{model_name}/{dataset_name}/"
+    df = pd.read_csv(history_folder + f'client_{client_id}/audit.csv')
+    image_folder = f"images/{model_name}/{dataset_name}/client_{client_id}/"
+
+    if not os.path.exists(image_folder):
+        os.makedirs(image_folder)
+
+    # Extract data from DataFrame
+    rounds = df['Round']
+    accuracy = df['Accuracy']
+    privacy_estimate = df['Privacy']
+    
+    # Set up the plotting
+    sns.set(style="whitegrid")
+
+    # Plot loss and privacy
+    plt.figure(figsize=(12, 6))
+    plt.plot(rounds, accuracy, label='MIA Accuracy')
+    plt.plot(rounds, privacy_estimate, label='Empirical privacy leakage lower bound (p=0.05)')
+
+    # Find the index (round) of max accuracy and privacy loss
+    max_accuracy_round = df.loc[accuracy.idxmax(), 'Round']
+    max_privacy_round = df.loc[privacy_estimate.idxmax(), 'Round']
+
+    # Print the rounds where max accuracy and max privacy occurred
+    print(f"\n\033[1;33mClient {client_id}\033[0m \nMaximum MIA accuracy occurred at round {max_accuracy_round} with an accuracy value of {accuracy.max()} \nMax privacy leakage lower bound occurred at round {max_privacy_round} with an epsilon value of {privacy_estimate.max()}\n")
+    
+    # Mark these points with a star
+    plt.scatter(max_accuracy_round, accuracy.max(), color='orange', marker='*', s=100, label='Max MIA Accuracy')
+    plt.scatter(max_privacy_round, privacy_estimate.max(), color='green', marker='*', s=100, label='Max Privacy Leakage lower bound')
+
+    # Labels and title
+    plt.xlabel('Round')
+    plt.ylabel('Metrics')
+    plt.title(f'Client {client_id} privacy metrics')
+    plt.legend()
+    # plt.ylim(-0.05, 1.4)
+    plt.savefig(image_folder + f"/audit_{rounds.iloc[-1]}_rounds.png")
+    if show:
+        plt.show()

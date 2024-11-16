@@ -14,6 +14,14 @@ momentum = 0.9
 seed = 1
 transform = None
 
+# Privacy auditing
+privacy_audit = True
+canary_frac = 0.2 # Fraction of canary samples per client
+score_fn = 'whitebox' # Options: "whitebox", "blackbox"
+p_value = 0.05 # Significance level for hypothesis testing
+k_plus = 1 / 3 # Fraction of clients with highest scores
+k_min = 1 / 3 # Fraction of clients with lowest scores
+delta = 1e-5 # Targeted delta for differential privacy
 
 # dataset settings
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
@@ -35,7 +43,7 @@ n_classes_dict = {
 }
 
 n_rounds_dict = {
-    "mnist": 15,
+    "mnist": 15, 
     "cifar10": 20,
     "fmnist": 15, 
     "breast": 200,

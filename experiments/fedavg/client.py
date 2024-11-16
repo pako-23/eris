@@ -19,6 +19,8 @@ import argparse
 from torch.utils.data import random_split
 import torch.nn.functional as F
 import numpy as np
+import math
+import scipy 
 
 import sys
 import os
@@ -33,8 +35,26 @@ from public import config as cfg
 
 # Define Flower client 
 class FlowerClient(fl.client.NumPyClient):
-    def __init__(self, model, train_loader, val_loader, optimizer, criterion, num_examples, 
-                 client_id, train_fn, evaluate_fn, device):
+    def __init__(self, 
+                 model: torch.nn.Module,
+                 train_loader: DataLoader,
+                 val_loader: DataLoader,
+                 optimizer: torch.optim.Optimizer,
+                 criterion: torch.nn.Module,
+                 num_examples: dict, 
+                 client_id: int,
+                 train_fn: callable,
+                 evaluate_fn: callable,
+                 device: torch.device,
+                 privacy_audit: bool = True,
+                 canary_frac: float = 0.2, 
+                 score_fn: str = 'whitebox', 
+                 p_value: float = 0.05,
+                 k_plus: float = 1 / 3, 
+                 k_min: float = 1 / 3
+                ):
+        
+        # Define the client
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -47,6 +67,17 @@ class FlowerClient(fl.client.NumPyClient):
         self.device = device
         self.dataset_name = cfg.dataset_name
         self.predictor_name = model.__class__.__name__
+        self.canary_frac = canary_frac
+        self.p_value = p_value
+        self.k_plus = k_plus
+        self.k_min = k_min
+        self.privacy_audit = privacy_audit
+        self.privacy_estimate = -1
+        
+        if score_fn == 'whitebox':
+            self.score_fn = self.score_with_pseudograd
+        else:
+            NotImplementedError(f'score function {score_fn} is not known')
  
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -60,10 +91,75 @@ class FlowerClient(fl.client.NumPyClient):
 
     def fit(self, parameters, config):
         self.set_parameters(parameters)  
-        for epoch in range(config["local_epochs"]):
-            self.train_fn(self.model, self.device, self.train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+        
+        if self.privacy_audit:
+            # Privacy auditing (We follow the procedure from https://proceedings.neurips.cc/paper_files/paper/2023/hash/9a6f6e0d6781d1cb8689192408946d73-Abstract-Conference.html)
+            # choose canaries from the training data
+            canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
+            n_canaries = len(canaries)
+
+            # subsample canaries & make new dataloader
+            true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(n_canaries) * 0.5).sample()
+            canaries_in_idx = torch.nonzero(true_in_out)
+            canaries_out_idx = torch.nonzero(1 - true_in_out)
+            subsampled_train_data = torch.utils.data.ConcatDataset([
+                non_canaries,
+                torch.utils.data.Subset(canaries, canaries_in_idx)
+            ])
+            self.train_loader = DataLoader(subsampled_train_data, batch_size=cfg.batch_size, shuffle=True)
+
+            # train
+            for epoch in range(config["local_epochs"]):
+                self.train_fn(self.model, self.device, self.train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+
+            # normalize client update vector
+            params_out = self.get_parameters(config)
+            client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(parameters)
+            client_update /= np.linalg.norm(client_update)
+
+            # compute scores for each canary, used to predict membership
+            scores = []
+            self.set_parameters(parameters)
+            for x, y in torch.utils.data.DataLoader(canaries, batch_size=1):
+                scores.append(self.score_fn(x, y, client_update))
             
-        return self.get_parameters(config), self.num_examples["train"], {}
+            # guess which canaries were in the training data
+            true_in_out = true_in_out.numpy()
+            score_indices_sorted = np.argsort(np.asarray(scores))
+            classified_in = score_indices_sorted[:int(n_canaries * self.k_plus + 1)]
+            classified_out = score_indices_sorted[int(n_canaries * (1 - self.k_min) + 1):]
+            abstained = np.setdiff1d(score_indices_sorted, np.concatenate((classified_in, classified_out)))
+            classification = np.zeros(n_canaries)
+            classification[classified_in] = 1
+            classification[abstained] = 2
+            W = true_in_out == classification
+            accuracy = W.sum() / (len(classified_in) + len(classified_out))
+            num_correct = W.sum()
+
+            # compute empirical privacy estimate, which should be < epsilon w/ high probability
+            self.privacy_estimate = utils.get_eps_audit(
+                m=n_canaries,
+                r=len(classified_in) + len(classified_out),
+                v=num_correct,
+                delta=cfg.delta,
+                p=0.05)
+
+            # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
+            # privacy_estimate = np.max([np.log(1 - cfg.delta - fpr) - np.log(fnr), 
+                                # np.log(1 - cfg.delta - fnr) - np.log(fpr)])
+
+            utils.save_audit_metrics(config["current_round"], accuracy, self.privacy_estimate, client_id=self.client_id,
+                                            history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/")
+
+        
+        else:
+            # train
+            for epoch in range(config["local_epochs"]):
+                self.train_fn(self.model, self.device, self.train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+            
+            params_out = self.get_parameters(config)
+                    
+        return params_out, self.num_examples["train"], {}
     
     
     def evaluate(self, parameters, config):
@@ -77,9 +173,30 @@ class FlowerClient(fl.client.NumPyClient):
         return float(loss), self.num_examples["val"], {
             "accuracy": float(accuracy),
             "f1_score": float(f1_score),
+            "privacy_estimate": self.privacy_estimate,
         }
 
+
+    def score_with_pseudograd(self, sample, target, client_update):
+        '''
+        Computes membership inference attack score by 
+        computing the inner product between the 'pseudogradient'
+        represented by client update and the true gradient
+        for each canary.
+
+        '''
+        self.model.to('cpu')
+        prediction = self.model(sample)
+        loss = torch.nn.functional.cross_entropy(prediction, target)
+        audit_grad = torch.autograd.grad(loss, list(self.model.parameters()))
+        audit_grad = utils.parameters_to_1d(audit_grad)
+        self.model.to(self.device)
+        return np.dot(client_update, - audit_grad)
                 
+
+
+
+
 
 
 
@@ -131,12 +248,32 @@ def main()->None:
     criterion = F.mse_loss if cfg.n_classes_dict[cfg.dataset_name]==1 else F.cross_entropy
 
     # Start Flower client
-    client = FlowerClient(model, train_loader, val_loader, optimizer, criterion, num_examples, args.id, 
-                           models.simple_train, models.simple_test, device).to_client()
+    client = FlowerClient(
+                        model, 
+                        train_loader, 
+                        val_loader, 
+                        optimizer, 
+                        criterion, 
+                        num_examples, 
+                        args.id, 
+                        models.simple_train, 
+                        models.simple_test, 
+                        device,
+                        privacy_audit=cfg.privacy_audit,
+                        canary_frac=cfg.canary_frac,
+                        score_fn=cfg.score_fn,
+                        p_value=cfg.p_value,
+                        k_plus=cfg.k_plus,
+                        k_min=cfg.k_min                          
+                          ).to_client()
     fl.client.start_client(server_address="[::]:8098", client=client) # local host
     
     # read saved data and plot
     utils.plot_client_metrics(args.id, model.__class__.__name__, cfg.dataset_name, show=False)
+    
+    # plot privacy audit metrics
+    utils.plot_audit_metrics(args.id, model.__class__.__name__, cfg.dataset_name, show=False)
+
 
 
 

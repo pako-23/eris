@@ -72,13 +72,18 @@ def fit_config(server_round: int):
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy of each client by number of examples used
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
-    f1_scores = [num_examples * m['f1_score'] for num_examples, m in metrics]
+    f1_scores = [num_examples * m["f1_score"] for num_examples, m in metrics]
+    privacy_estimate_list = [m["privacy_estimate"] for _, m in metrics]
+    privacy_estimate = max(privacy_estimate_list)
     # validities = [num_examples * m["validity"] for num_examples, m in metrics]
+    
     examples = [num_examples for num_examples, _ in metrics]
     # Aggregate and return custom metric (weighted average)
     return {
         "accuracy": sum(accuracies) / sum(examples),
-        'f1_score': sum(f1_scores) / sum(examples)}
+        "f1_score": sum(f1_scores) / sum(examples),
+        "privacy_estimate": privacy_estimate if privacy_estimate > 0 else None
+        }
 
 def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
     """Aggregate evaluation results obtained from multiple clients."""
@@ -298,6 +303,7 @@ def main() -> None:
     loss = [k[1] for k in history.losses_distributed]
     accuracy = [k[1] for k in history.metrics_distributed['accuracy']]
     metric = [k[1] for k in history.metrics_distributed['f1_score']]
+    privacy_estimate = [k[1] for k in history.metrics_distributed['privacy_estimate']]
 
     # Save loss and accuracy to a file
     print(f"Saving metrics to as .json in histories folder: histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json")
@@ -306,11 +312,16 @@ def main() -> None:
             'loss': loss, 
             'accuracy': accuracy,
             'f1_score': metric,
+            'privacy_estimate': privacy_estimate
             }, f)
 
     # Single Plot
     best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(loss, accuracy,metric, model.__class__.__name__, show=False)
 
+    # Privacy estimate plot
+    # utils.plot_audit_metrics(client_id, model_name, dataset_name, show=True):
+
+    
     # Load the best model
     model.load_state_dict(torch.load(f"checkpoints/{model.__class__.__name__}/{cfg.dataset_name}/model_{best_loss_round}.pth", weights_only=False))
 
