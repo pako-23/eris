@@ -112,14 +112,19 @@ def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
     min_loss_index = loss.index(min(loss))
     max_accuracy_index = accuracy.index(max(accuracy))
     max_f1score_index = f1_score.index(max(f1_score))
-    max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
+    if accuracy_mia[0] == None:
+        max_accuracy_mia_index = 0
+        to_print = f"No MIA"
+    else:
+        max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
+        to_print = f"Maximun MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%"
     print(
         f"""
         \n\033[1;34mServer Side\033[0m 
         Minimum Loss: round {min_loss_index + 1}, value {loss[min_loss_index]:.3f} 
         Maximum Accuracy: round {max_accuracy_index + 1}, value {accuracy[max_accuracy_index] * 100:.2f}% 
         Maximum f1_score: round {max_f1score_index + 1}, value {f1_score[max_f1score_index] * 100:.2f}%
-        Maximun MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%\n
+        {to_print}\n
         """
     )
     plt.scatter(min_loss_index, loss[min_loss_index], color='blue', marker='*', s=100, label='Min Loss')
@@ -466,12 +471,17 @@ def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
         max_accuracy_mia = accuracy.max()
         max_accuracy_round_mia = df.loc[accuracy.idxmax(), 'Round']
         axes[0].scatter(max_accuracy_round_mia, max_accuracy_mia, color='orange', marker='*', s=150, label='Max MIA Accuracy')
+        # Define the random guess accuracy value
+        random_guess_accuracy = 0.5  # 50%
+        # Add the dashed horizontal line
+        axes[0].axhline(
+            y=random_guess_accuracy,            # Y-axis position
+            color='red',                        # Line color
+            linestyle='--',                     # Dashed line style
+            linewidth=2,                        # Line width for visibility
+            label='Random Guess' # Label for the legend
+        )
         axes[0].legend()
-        # axes[0].annotate(f'Max: {max_accuracy_mia:.2f} at Round {max_accuracy_round_mia}',
-        #                 xy=(max_accuracy_round_mia, max_accuracy_mia),
-        #                 xytext=(max_accuracy_round_mia, max_accuracy_mia + 0.05),
-        #                 arrowprops=dict(facecolor='orange', shrink=0.05),
-        #                 horizontalalignment='center')
 
         # Plot Privacy Estimate on the second subplot
         axes[1].plot(rounds, privacy_estimate, label='Empirical Privacy Leakage Lower Bound (p=0.05)', color='green')
@@ -484,17 +494,12 @@ def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
         max_privacy_round = df.loc[privacy_estimate.idxmax(), 'Round']
         axes[1].scatter(max_privacy_round, max_privacy, color='red', marker='*', s=150, label='Max Privacy Leakage')
         axes[1].legend()
-        # axes[1].annotate(f'Max: {max_privacy:.2f} at Round {max_privacy_round}',
-        #                 xy=(max_privacy_round, max_privacy),
-        #                 xytext=(max_privacy_round, max_privacy + 0.05),
-        #                 arrowprops=dict(facecolor='red', shrink=0.05),
-        #                 horizontalalignment='center')
 
         # Adjust layout for better spacing
         plt.tight_layout()
 
         # Save the figure
-        plt.savefig(os.path.join(image_folder, f"audit_{rounds.iloc[-1]}_rounds_2.png"))
+        plt.savefig(os.path.join(image_folder, f"audit_{rounds.iloc[-1]}_rounds.png"))
         if show:
             plt.show()
         plt.close()

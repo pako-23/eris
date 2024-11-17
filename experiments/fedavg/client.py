@@ -54,6 +54,7 @@ class FlowerClient(fl.client.NumPyClient):
                  k_min: float = 1 / 3
                 ):
         
+        
         # Define the client
         self.model = model
         self.train_loader = train_loader
