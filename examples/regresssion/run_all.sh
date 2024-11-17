@@ -1,7 +1,7 @@
 #!/bin/sh -eu
 
 ./coordinator.py &
-sleep 0.5
+sleep 1.5
 
 for i in $(seq 1 5); do
     ./client.py "$(expr "50051" + "$i")" "$(expr "5555" + "$i")" &

@@ -52,10 +52,11 @@ for fold in $(seq 1 $k_folds); do
     if [ $k_folds -gt 1 ]; then
         echo -e "\n\033[1;36mFold $fold\033[0m"
     fi
+    
     # Creating dataset
-    # cd ../data
-    # python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-    # cd ../fedavg
+    cd ../data
+    python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+    cd ../fedavg
 
     echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 

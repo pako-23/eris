@@ -26,6 +26,9 @@ trash.ipynb
 # Excel
 *.xlsx
 
+# Numpy
+.npy
+
 # gz
 *.gz
 

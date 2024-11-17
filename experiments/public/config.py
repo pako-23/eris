@@ -24,7 +24,7 @@ k_min = 1 / 3 # Fraction of clients with lowest scores
 delta = 1e-5 # Targeted delta for differential privacy
 
 # dataset settings
-dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+dataset_name = "airline"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 client_number = 5
 
 # Cross validation
