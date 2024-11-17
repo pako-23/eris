@@ -73,9 +73,10 @@ class FlowerClient(fl.client.NumPyClient):
         self.k_min = k_min
         self.privacy_audit = privacy_audit
         self.privacy_estimate = -1
+        self.accuracy_mia = -1
         
         if score_fn == 'whitebox':
-            self.score_fn = self.score_with_pseudograd
+            self.score_fn = self.score_with_pseudograd_batch
         else:
             NotImplementedError(f'score function {score_fn} is not known')
  
@@ -119,9 +120,10 @@ class FlowerClient(fl.client.NumPyClient):
 
             # compute scores for each canary, used to predict membership
             scores = []
-            self.set_parameters(parameters)
-            for x, y in torch.utils.data.DataLoader(canaries, batch_size=1):
-                scores.append(self.score_fn(x, y, client_update))
+            dataloader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
+            for samples, targets in dataloader:
+                batch_scores = self.score_fn(samples, targets, client_update)
+                scores.extend(batch_scores)
             
             # guess which canaries were in the training data
             true_in_out = true_in_out.numpy()
@@ -133,7 +135,7 @@ class FlowerClient(fl.client.NumPyClient):
             classification[classified_in] = 1
             classification[abstained] = 2
             W = true_in_out == classification
-            accuracy = W.sum() / (len(classified_in) + len(classified_out))
+            self.accuracy_mia = W.sum() / (len(classified_in) + len(classified_out))
             num_correct = W.sum()
 
             # compute empirical privacy estimate, which should be < epsilon w/ high probability
@@ -147,8 +149,8 @@ class FlowerClient(fl.client.NumPyClient):
             # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
             # privacy_estimate = np.max([np.log(1 - cfg.delta - fpr) - np.log(fnr), 
                                 # np.log(1 - cfg.delta - fnr) - np.log(fpr)])
-
-            utils.save_audit_metrics(config["current_round"], accuracy, self.privacy_estimate, client_id=self.client_id,
+            print("save audit metrics")
+            utils.save_audit_metrics(config["current_round"], self.accuracy_mia, self.privacy_estimate, client_id=self.client_id,
                                             history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/")
 
         
@@ -174,27 +176,34 @@ class FlowerClient(fl.client.NumPyClient):
             "accuracy": float(accuracy),
             "f1_score": float(f1_score),
             "privacy_estimate": self.privacy_estimate,
+            "accuracy_mia": self.accuracy_mia
         }
 
 
-    def score_with_pseudograd(self, sample, target, client_update):
+    def score_with_pseudograd_batch(self, samples, targets, client_update):
         '''
-        Computes membership inference attack score by 
+        Computes membership inference attack scores for a batch by 
         computing the inner product between the 'pseudogradient'
-        represented by client update and the true gradient
-        for each canary.
-
+        represented by client update and the true gradients
+        for each sample in the batch.
         '''
-        self.model.to('cpu')
-        prediction = self.model(sample)
-        loss = torch.nn.functional.cross_entropy(prediction, target)
-        audit_grad = torch.autograd.grad(loss, list(self.model.parameters()))
-        audit_grad = utils.parameters_to_1d(audit_grad)
-        self.model.to(self.device)
-        return np.dot(client_update, - audit_grad)
-                
-
-
+        self.model.to(self.device)  # Ensure model is on the correct device
+        samples = samples.to(self.device)
+        targets = targets.to(self.device)
+        
+        # Forward pass
+        predictions = self.model(samples)
+        losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none')
+        
+        scores = []
+        for loss in losses:
+            # Compute gradients for each sample
+            audit_grad = torch.autograd.grad(loss, self.model.parameters(), retain_graph=True)
+            audit_grad = np.concatenate([x.cpu().flatten().numpy() for x in audit_grad])
+            score = np.dot(client_update, -audit_grad)
+            scores.append(score)
+        
+        return scores
 
 
 
@@ -271,8 +280,6 @@ def main()->None:
     # read saved data and plot
     utils.plot_client_metrics(args.id, model.__class__.__name__, cfg.dataset_name, show=False)
     
-    # plot privacy audit metrics
-    utils.plot_audit_metrics(args.id, model.__class__.__name__, cfg.dataset_name, show=False)
 
 
 

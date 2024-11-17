@@ -25,7 +25,7 @@ delta = 1e-5 # Targeted delta for differential privacy
 
 # dataset settings
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-client_number = 10
+client_number = 5
 
 # Cross validation
 k_folds = 1  # Set 1 to disable cross validation
@@ -43,7 +43,7 @@ n_classes_dict = {
 }
 
 n_rounds_dict = {
-    "mnist": 15, 
+    "mnist": 3, #15
     "cifar10": 20,
     "fmnist": 15, 
     "breast": 200,
@@ -56,7 +56,7 @@ n_rounds_dict = {
 
 experiments = {
     "mnist": {
-        "rounds": 10,
+        "rounds": 3, #15
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,

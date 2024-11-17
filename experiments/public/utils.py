@@ -90,9 +90,14 @@ def set_seed(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 # plot and save plot on server side
-def plot_loss_and_accuracy(loss, accuracy, f1_score, predictor_name, show=True):
+def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
     # read args
-    rounds = cfg.n_rounds
+    rounds = cfg.n_rounds_dict[cfg.dataset_name]
+    loss = metrics_distributed['loss']
+    accuracy = metrics_distributed['accuracy']
+    f1_score = metrics_distributed['f1_score']
+    accuracy_mia = metrics_distributed['accuracy_mia']
+    # privacy_estimate = metrics_distributed['privacy_estimate']
 
     # Set up the plotting
     sns.set(style="whitegrid")
@@ -103,13 +108,24 @@ def plot_loss_and_accuracy(loss, accuracy, f1_score, predictor_name, show=True):
     plt.plot(loss, label='Loss')
     plt.plot(accuracy, label='Accuracy')
     plt.plot(f1_score, label='f1_score')
+    plt.plot(accuracy_mia, label='MIA Accuracy')
     min_loss_index = loss.index(min(loss))
     max_accuracy_index = accuracy.index(max(accuracy))
     max_f1score_index = f1_score.index(max(f1_score))
-    print(f"\n\033[1;34mServer Side\033[0m \nMinimum Loss occurred at round {min_loss_index + 1} with a loss value of {loss[min_loss_index]:.3f} \nMaximum Accuracy occurred at round {max_accuracy_index + 1} with an accuracy value of {accuracy[max_accuracy_index]*100:.2f}% \nMaximum {'f1_score'} occurred at round {max_f1score_index + 1} with a {'f1_score'} value of {f1_score[max_f1score_index]*100:.2f}%\n")
+    max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
+    print(
+        f"""
+        \n\033[1;34mServer Side\033[0m 
+        Minimum Loss: round {min_loss_index + 1}, value {loss[min_loss_index]:.3f} 
+        Maximum Accuracy: round {max_accuracy_index + 1}, value {accuracy[max_accuracy_index] * 100:.2f}% 
+        Maximum f1_score: round {max_f1score_index + 1}, value {f1_score[max_f1score_index] * 100:.2f}%
+        Maximun MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%\n
+        """
+    )
     plt.scatter(min_loss_index, loss[min_loss_index], color='blue', marker='*', s=100, label='Min Loss')
     plt.scatter(max_accuracy_index, accuracy[max_accuracy_index], color='orange', marker='*', s=100, label='Max Accuracy')
     plt.scatter(max_f1score_index, f1_score[max_f1score_index], color='green', marker='*', s=100, label=f'Max {'f1_score'}')
+    plt.scatter(max_accuracy_mia_index, accuracy_mia[max_accuracy_mia_index], color='red', marker='*', s=100, label='Max MIA Accuracy')
     
     # Labels and title
     plt.xlabel('Rounds')
@@ -121,6 +137,9 @@ def plot_loss_and_accuracy(loss, accuracy, f1_score, predictor_name, show=True):
     plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
     if show:
         plt.show()
+    
+    plt.close()
+    
     return min_loss_index+1, max_accuracy_index+1
 
 
@@ -144,55 +163,6 @@ def save_client_metrics(round_num, loss, accuracy, f1_score, client_id=1, histor
 
         # Write the metrics
         writer.writerow([round_num, loss, accuracy, f1_score])
-
-
-# plot and save plot on client side
-def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
-
-    history_folder = f"histories/{predictor_name}/{dataset_name}/"
-    df = pd.read_csv(history_folder + f'client_{client_id}/metrics.csv')
-    image_folder = f"images/{predictor_name}/{dataset_name}/client_{client_id}/"
-
-    if not os.path.exists(image_folder):
-        os.makedirs(image_folder)
-
-    # Extract data from DataFrame
-    rounds = df['Round']
-    loss = df['Loss']
-    accuracy = df['Accuracy']
-    f1_score = df['f1_score']
-    
-    # Set up the plotting
-    sns.set(style="whitegrid")
-
-    # Plot loss and accuracy
-    plt.figure(figsize=(12, 6))
-    plt.plot(rounds, loss, label='Loss')
-    plt.plot(rounds, accuracy, label='Accuracy')
-    plt.plot(rounds, f1_score, label='f1_score')
-
-    # Find the index (round) of minimum loss and maximum accuracy
-    min_loss_round = df.loc[loss.idxmin(), 'Round']
-    max_accuracy_round = df.loc[accuracy.idxmax(), 'Round']
-    max_f1score_round = df.loc[f1_score.idxmax(), 'Round']
-
-    # Print the rounds where min loss and max accuracy occurred
-    print(f"\n\033[1;33mClient {client_id}\033[0m \nMinimum Loss occurred at round {min_loss_round} with a loss value of {loss.min()} \nMaximum Accuracy occurred at round {max_accuracy_round} with an accuracy value of {accuracy.max()} \nMax {'f1_score'} occurred at round {max_f1score_round} with a {'f1_score'} value of {f1_score.max()}\n")
-    
-    # Mark these points with a star
-    plt.scatter(min_loss_round, loss.min(), color='blue', marker='*', s=100, label='Min Loss')
-    plt.scatter(max_accuracy_round, accuracy.max(), color='orange', marker='*', s=100, label='Max Accuracy')
-    plt.scatter(max_f1score_round, f1_score.max(), color='green', marker='*', s=100, label=f'Max {'f1_score'}')
-
-    # Labels and title
-    plt.xlabel('Round')
-    plt.ylabel('Metrics')
-    plt.title(f'Client {client_id} Metrics (Validation Set)')
-    plt.legend()
-    plt.ylim(-0.05, 1.4)
-    plt.savefig(image_folder + f"/training_{rounds.iloc[-1]}_rounds.png")
-    if show:
-        plt.show()
 
 
 class LocalDpMod:
@@ -327,6 +297,7 @@ def plot_mean_std_metrics(plot_metrics, name):
 
     # Show the plot
     # plt.show()
+    plt.close()
 
 
 # p-value of audit hypothesis test
@@ -419,45 +390,127 @@ def save_audit_metrics(round_num, accuracy, privacy_estimate, client_id=1, histo
         writer.writerow([round_num, accuracy, privacy_estimate])
 
 
-# plot and save privacy audit metrics
-def plot_audit_metrics(client_id, model_name, dataset_name, show=True):
-    history_folder = f"histories/{model_name}/{dataset_name}/"
-    df = pd.read_csv(history_folder + f'client_{client_id}/audit.csv')
-    image_folder = f"images/{model_name}/{dataset_name}/client_{client_id}/"
+# plot and save plot on client side
+def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
+
+    history_folder = f"histories/{predictor_name}/{dataset_name}/"
+    df = pd.read_csv(history_folder + f'client_{client_id}/metrics.csv')
+    image_folder = f"images/{predictor_name}/{dataset_name}/client_{client_id}/"
 
     if not os.path.exists(image_folder):
         os.makedirs(image_folder)
 
     # Extract data from DataFrame
     rounds = df['Round']
+    loss = df['Loss']
     accuracy = df['Accuracy']
-    privacy_estimate = df['Privacy']
+    f1_score = df['f1_score']
     
     # Set up the plotting
     sns.set(style="whitegrid")
 
-    # Plot loss and privacy
+    # Plot loss and accuracy
     plt.figure(figsize=(12, 6))
-    plt.plot(rounds, accuracy, label='MIA Accuracy')
-    plt.plot(rounds, privacy_estimate, label='Empirical privacy leakage lower bound (p=0.05)')
+    plt.plot(rounds, loss, label='Loss')
+    plt.plot(rounds, accuracy, label='Accuracy')
+    plt.plot(rounds, f1_score, label='f1_score')
 
-    # Find the index (round) of max accuracy and privacy loss
+    # Find the index (round) of minimum loss and maximum accuracy
+    min_loss_round = df.loc[loss.idxmin(), 'Round']
     max_accuracy_round = df.loc[accuracy.idxmax(), 'Round']
-    max_privacy_round = df.loc[privacy_estimate.idxmax(), 'Round']
+    max_f1score_round = df.loc[f1_score.idxmax(), 'Round']
 
-    # Print the rounds where max accuracy and max privacy occurred
-    print(f"\n\033[1;33mClient {client_id}\033[0m \nMaximum MIA accuracy occurred at round {max_accuracy_round} with an accuracy value of {accuracy.max()} \nMax privacy leakage lower bound occurred at round {max_privacy_round} with an epsilon value of {privacy_estimate.max()}\n")
-    
     # Mark these points with a star
-    plt.scatter(max_accuracy_round, accuracy.max(), color='orange', marker='*', s=100, label='Max MIA Accuracy')
-    plt.scatter(max_privacy_round, privacy_estimate.max(), color='green', marker='*', s=100, label='Max Privacy Leakage lower bound')
+    plt.scatter(min_loss_round, loss.min(), color='blue', marker='*', s=100, label='Min Loss')
+    plt.scatter(max_accuracy_round, accuracy.max(), color='orange', marker='*', s=100, label='Max Accuracy')
+    plt.scatter(max_f1score_round, f1_score.max(), color='green', marker='*', s=100, label=f'Max {'f1_score'}')
 
     # Labels and title
     plt.xlabel('Round')
     plt.ylabel('Metrics')
-    plt.title(f'Client {client_id} privacy metrics')
+    plt.title(f'Client {client_id} Metrics (Validation Set)')
     plt.legend()
-    # plt.ylim(-0.05, 1.4)
-    plt.savefig(image_folder + f"/audit_{rounds.iloc[-1]}_rounds.png")
+    plt.ylim(-0.05, 1.4)
+    plt.savefig(image_folder + f"/training_{rounds.iloc[-1]}_rounds.png")
     if show:
         plt.show()
+    plt.close()
+    
+    max_accuracy_mia = None
+    max_accuracy_round_mia = None
+    max_privacy = None
+    max_privacy_round = None
+    
+    # privacy audit
+    if cfg.privacy_audit:
+        df = pd.read_csv(history_folder + f'client_{client_id}/audit.csv')
+
+        # Extract data from DataFrame
+        rounds = df['Round']
+        accuracy = df['Accuracy']
+        privacy_estimate = df['Privacy']
+        
+        # Set up the plotting style
+        sns.set(style="whitegrid")
+
+        # Create a figure with two subplots side by side
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6), sharex=True)
+
+        # Plot MIA Accuracy on the first subplot
+        axes[0].plot(rounds, accuracy, label='MIA Accuracy', color='blue')
+        axes[0].set_xlabel('Round')
+        axes[0].set_ylabel('Accuracy')
+        axes[0].set_title(f'Client {client_id} MIA Accuracy')
+        
+        # Find and mark the max accuracy
+        max_accuracy_mia = accuracy.max()
+        max_accuracy_round_mia = df.loc[accuracy.idxmax(), 'Round']
+        axes[0].scatter(max_accuracy_round_mia, max_accuracy_mia, color='orange', marker='*', s=150, label='Max MIA Accuracy')
+        axes[0].legend()
+        # axes[0].annotate(f'Max: {max_accuracy_mia:.2f} at Round {max_accuracy_round_mia}',
+        #                 xy=(max_accuracy_round_mia, max_accuracy_mia),
+        #                 xytext=(max_accuracy_round_mia, max_accuracy_mia + 0.05),
+        #                 arrowprops=dict(facecolor='orange', shrink=0.05),
+        #                 horizontalalignment='center')
+
+        # Plot Privacy Estimate on the second subplot
+        axes[1].plot(rounds, privacy_estimate, label='Empirical Privacy Leakage Lower Bound (p=0.05)', color='green')
+        axes[1].set_xlabel('Round')
+        axes[1].set_ylabel('Privacy Leakage (ε)')
+        axes[1].set_title(f'Client {client_id} Privacy Leakage')
+        
+        # Find and mark the max privacy leakage
+        max_privacy = privacy_estimate.max()
+        max_privacy_round = df.loc[privacy_estimate.idxmax(), 'Round']
+        axes[1].scatter(max_privacy_round, max_privacy, color='red', marker='*', s=150, label='Max Privacy Leakage')
+        axes[1].legend()
+        # axes[1].annotate(f'Max: {max_privacy:.2f} at Round {max_privacy_round}',
+        #                 xy=(max_privacy_round, max_privacy),
+        #                 xytext=(max_privacy_round, max_privacy + 0.05),
+        #                 arrowprops=dict(facecolor='red', shrink=0.05),
+        #                 horizontalalignment='center')
+
+        # Adjust layout for better spacing
+        plt.tight_layout()
+
+        # Save the figure
+        plt.savefig(os.path.join(image_folder, f"audit_{rounds.iloc[-1]}_rounds_2.png"))
+        if show:
+            plt.show()
+        plt.close()
+
+    # Print the rounds where min loss and max accuracy occurred
+    print(
+        f"""
+        \n\033[1;33mClient {client_id}\033[0m 
+        Minimum Loss: round {min_loss_round}, value {loss.min()} 
+        Maximum Accuracy: round {max_accuracy_round}, value {accuracy.max()} 
+        Maximum f1_score: round {max_f1score_round}, value {f1_score.max()} 
+        Maximum MIA Accuracy: round {max_accuracy_round_mia}, value {max_accuracy_mia} 
+        Max Privacy Leakage Lower Bound: round {max_privacy_round}, epsilon {max_privacy}\n
+        """
+    )
+
+    
+    
+    

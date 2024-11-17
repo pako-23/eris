@@ -73,6 +73,9 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy of each client by number of examples used
     accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
     f1_scores = [num_examples * m["f1_score"] for num_examples, m in metrics]
+    # accuracy_mia = [num_examples * m["accuracy_mia"] for num_examples, m in metrics]
+    accuracy_mia_list = [m["accuracy_mia"] for _, m in metrics]
+    accuracy_mia = max(accuracy_mia_list)
     privacy_estimate_list = [m["privacy_estimate"] for _, m in metrics]
     privacy_estimate = max(privacy_estimate_list)
     # validities = [num_examples * m["validity"] for num_examples, m in metrics]
@@ -82,6 +85,8 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     return {
         "accuracy": sum(accuracies) / sum(examples),
         "f1_score": sum(f1_scores) / sum(examples),
+        # "accuracy_mia": sum(accuracy_mia) / sum(examples) if accuracy_mia[0] > 0 else None,
+        "accuracy_mia": accuracy_mia if accuracy_mia > 0 else None,
         "privacy_estimate": privacy_estimate if privacy_estimate > 0 else None
         }
 
@@ -300,23 +305,21 @@ def main() -> None:
         strategy=strategy,
     )
     # convert history to list
-    loss = [k[1] for k in history.losses_distributed]
-    accuracy = [k[1] for k in history.metrics_distributed['accuracy']]
-    metric = [k[1] for k in history.metrics_distributed['f1_score']]
-    privacy_estimate = [k[1] for k in history.metrics_distributed['privacy_estimate']]
+    metrics_distributed = {
+        'loss': [k[1] for k in history.losses_distributed],
+        'accuracy': [k[1] for k in history.metrics_distributed['accuracy']],
+        'f1_score': [k[1] for k in history.metrics_distributed['f1_score']],
+        'accuracy_mia': [k[1] for k in history.metrics_distributed['accuracy_mia']],
+        'privacy_estimate': [k[1] for k in history.metrics_distributed['privacy_estimate']]
+    }
 
     # Save loss and accuracy to a file
     print(f"Saving metrics to as .json in histories folder: histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json")
     with open(f'histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json', 'w') as f:
-        json.dump({
-            'loss': loss, 
-            'accuracy': accuracy,
-            'f1_score': metric,
-            'privacy_estimate': privacy_estimate
-            }, f)
+        json.dump(metrics_distributed, f)
 
     # Single Plot
-    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(loss, accuracy,metric, model.__class__.__name__, show=False)
+    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, model.__class__.__name__, show=False)
 
     # Privacy estimate plot
     # utils.plot_audit_metrics(client_id, model_name, dataset_name, show=True):
@@ -326,7 +329,6 @@ def main() -> None:
     model.load_state_dict(torch.load(f"checkpoints/{model.__class__.__name__}/{cfg.dataset_name}/model_{best_loss_round}.pth", weights_only=False))
 
     # Evaluate the model on the test set
-    # loss_test, accuracy_test, f1_score_test = models.simple_test(model, device, test_loader)
     criterion = F.mse_loss if cfg.n_classes_dict[cfg.dataset_name]==1 else F.cross_entropy
     loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
     print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, {'f1_score'}: {metric_test*100:.2f} \033[0m\n")
