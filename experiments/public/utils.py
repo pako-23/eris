@@ -89,65 +89,8 @@ def set_seed(seed):
     # Set PYTHONHASHSEED
     os.environ['PYTHONHASHSEED'] = str(seed)
 
+
 # plot and save plot on server side
-def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
-    # read args
-    rounds = cfg.n_rounds_dict[cfg.dataset_name]
-    loss = metrics_distributed['loss']
-    accuracy = metrics_distributed['accuracy']
-    f1_score = metrics_distributed['f1_score']
-    accuracy_mia = metrics_distributed['accuracy_mia']
-    # privacy_estimate = metrics_distributed['privacy_estimate']
-
-    # Set up the plotting
-    sns.set(style="whitegrid")
-    
-    # Plot loss and accuracy
-    plt.figure(figsize=(12, 6))
-
-    plt.plot(loss, label='Loss')
-    plt.plot(accuracy, label='Accuracy')
-    plt.plot(f1_score, label='f1_score')
-    plt.plot(accuracy_mia, label='MIA Accuracy')
-    min_loss_index = loss.index(min(loss))
-    max_accuracy_index = accuracy.index(max(accuracy))
-    max_f1score_index = f1_score.index(max(f1_score))
-    if accuracy_mia[0] == None:
-        max_accuracy_mia_index = 0
-        to_print = f"No MIA"
-    else:
-        max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
-        to_print = f"Maximun MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%"
-    print(
-        f"""
-        \n\033[1;34mServer Side\033[0m 
-        Minimum Loss: round {min_loss_index + 1}, value {loss[min_loss_index]:.3f} 
-        Maximum Accuracy: round {max_accuracy_index + 1}, value {accuracy[max_accuracy_index] * 100:.2f}% 
-        Maximum f1_score: round {max_f1score_index + 1}, value {f1_score[max_f1score_index] * 100:.2f}%
-        {to_print}\n
-        """
-    )
-    plt.scatter(min_loss_index, loss[min_loss_index], color='blue', marker='*', s=100, label='Min Loss')
-    plt.scatter(max_accuracy_index, accuracy[max_accuracy_index], color='orange', marker='*', s=100, label='Max Accuracy')
-    plt.scatter(max_f1score_index, f1_score[max_f1score_index], color='green', marker='*', s=100, label=f'Max {'f1_score'}')
-    plt.scatter(max_accuracy_mia_index, accuracy_mia[max_accuracy_mia_index], color='red', marker='*', s=100, label='Max MIA Accuracy')
-    
-    # Labels and title
-    plt.xlabel('Rounds')
-    plt.ylabel('Metrics')
-    plt.title('Distributed Metrics (Weighted Average on Test-Set)')
-    plt.legend()
-    plt.ylim(-0.05, 1.4)
-    plt.grid()
-    plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
-    if show:
-        plt.show()
-    
-    plt.close()
-    
-    return min_loss_index+1, max_accuracy_index+1
-
-# plot loss and accuracy
 def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
     # Read arguments
     rounds = cfg.n_rounds_dict[cfg.dataset_name]

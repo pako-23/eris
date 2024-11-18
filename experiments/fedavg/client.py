@@ -121,10 +121,13 @@ class FlowerClient(fl.client.NumPyClient):
 
             # compute scores for each canary, used to predict membership
             scores = []
+            # self.set_parameters(parameters)
             dataloader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
             for samples, targets in dataloader:
                 batch_scores = self.score_fn(samples, targets, client_update)
                 scores.extend(batch_scores)
+            
+            # self.set_parameters(params_out)
             
             # guess which canaries were in the training data
             true_in_out = true_in_out.numpy()
