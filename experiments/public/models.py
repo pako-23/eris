@@ -235,7 +235,7 @@ def simple_train(model, device, train_loader, optimizer, criterion, epoch, clien
         loss = criterion(output, target)
         loss.backward()
         optimizer.step()
-        # if batch_idx % 100 == 0:
+        # if batch_idx % 10 == 0:
         #     print(f'Train Epoch: {epoch} [{batch_idx * len(data)}/{len(train_loader.dataset)} '
         #           f'({100. * batch_idx / len(train_loader):.0f}%)]\tLoss: {loss.item():.6f}')
         loss_list.append(loss.item())

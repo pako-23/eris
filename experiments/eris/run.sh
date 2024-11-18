@@ -35,16 +35,21 @@ n_clients=$(extract_config_var "client_number")
 dataset_name=$(extract_config_var "dataset_name")
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients and k-folds $k_folds\033[0m"
 
-echo -e "\033[1;36m\nData Generation\033[0m"
-cd ../data
-python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-cd ../eris
+# echo -e "\033[1;36m\nData Generation\033[0m"
+# cd ../data
+# python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+# cd ../eris
 
+# start training
 ./coordinator.py &
 sleep 0.5
 
+# for i in $(seq 1 $n_clients); do
+#     ./client.py "$(expr "50051" + "$i")" "$(expr "5555" + "$i")" "$i" &
+#     sleep 0.2
+# done
 for i in $(seq 1 $n_clients); do
-    ./client.py "$(expr "50051" + "$i")" "$(expr "5555" + "$i")" --id $i &
+    ./client.py --submit-port "$((50051 + i))" --publish-port "$((5555 + i))" --id "$i" &
     sleep 0.2
 done
 for i in $(seq 1 $n_clients); do
