@@ -1,5 +1,6 @@
 pandas==2.2.3
 scikit-learn==1.5.2
+seaborn==0.13.2
 torch==2.5.1
 torchvision==0.20.1
 tslearn==0.6.3

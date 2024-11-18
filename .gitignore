@@ -27,7 +27,7 @@ trash.ipynb
 *.xlsx
 
 # Numpy
-.npy
+*.npy
 
 # gz
 *.gz

@@ -75,12 +75,8 @@ for fold in $(seq 1 $k_folds); do
 
     # Clean up
     echo "Fold completed correctly"
-    trap - SIGTERM 
-    # pkill -u dario -f client.py
-    pkill -u dariofenoglio -f client.py
-    # pkill -u dario -f server.py
-    pkill -u dariofenoglio -f sever.py
-
+    pkill -9 -f server.py
+    pkill -9 -f client.py
 done
 
 # Aggregate results
