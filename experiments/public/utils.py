@@ -147,6 +147,180 @@ def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
     
     return min_loss_index+1, max_accuracy_index+1
 
+# plot loss and accuracy
+def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
+    # Read arguments
+    rounds = cfg.n_rounds_dict[cfg.dataset_name]
+    loss = metrics_distributed['loss']
+    accuracy = metrics_distributed['accuracy']
+    f1_score = metrics_distributed['f1_score']
+
+    # Set up the plotting style
+    sns.set(style="whitegrid")
+    
+    # Create a 2x2 grid of subplots
+    if cfg.privacy_audit:
+        accuracy_mia = metrics_distributed['accuracy_mia']
+        privacy_estimate = metrics_distributed['privacy_estimate']
+        fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+        
+        # -------------------- Subplot 1: Loss --------------------
+        ax = axs[0, 0]
+        ax.plot(loss, label='Loss', color='blue')
+        
+        # Identify and plot the minimum loss point
+        min_loss_index = loss.index(min(loss))
+        ax.scatter(min_loss_index, loss[min_loss_index], color='blue', marker='*', s=150, label='Min Loss')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('Loss')
+        ax.set_title('Loss over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+        # -------------------- Subplot 2: Accuracy & F1 Score --------------------
+        ax = axs[0, 1]
+        ax.plot(accuracy, label='Accuracy', color='orange')
+        ax.plot(f1_score, label='F1 Score', color='green')
+        
+        # Identify and plot the maximum accuracy and F1 score points
+        max_accuracy_index = accuracy.index(max(accuracy))
+        max_f1score_index = f1_score.index(max(f1_score))
+        ax.scatter(max_accuracy_index, accuracy[max_accuracy_index], color='orange', marker='*', s=150, label='Max Accuracy')
+        ax.scatter(max_f1score_index, f1_score[max_f1score_index], color='green', marker='*', s=150, label='Max F1 Score')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('Score')
+        ax.set_title('Accuracy & F1 Score over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+        # -------------------- Subplot 3: MIA Accuracy --------------------
+        ax = axs[1, 0]
+        ax.plot(accuracy_mia, label='MIA Accuracy', color='red')
+        
+        # Identify and plot the maximum MIA accuracy point
+        max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
+        ax.scatter(max_accuracy_mia_index, accuracy_mia[max_accuracy_mia_index], color='red', marker='*', s=150, label='Max MIA Accuracy')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('MIA Accuracy')
+        ax.set_title('MIA Accuracy over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+        # -------------------- Subplot 4: Privacy Estimate --------------------
+        ax = axs[1, 1]
+        ax.plot(privacy_estimate, label='Privacy Estimate (Epsilon)', color='purple')
+        
+        # Identify and plot the maximum privacy estimate point
+        max_privacy_index = privacy_estimate.index(max(privacy_estimate))
+        ax.scatter(max_privacy_index, privacy_estimate[max_privacy_index], color='purple', marker='*', s=150, label='Max Privacy Leakage')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('Epsilon')
+        ax.set_title('Privacy Estimate over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+        
+        # Print summary information
+        print(
+            f"""
+            \n\033[1;34mServer Side\033[0m 
+            Minimum Loss: round {min_loss_index + 1}, value {loss[min_loss_index]:.3f} 
+            Maximum Accuracy: round {max_accuracy_index + 1}, value {accuracy[max_accuracy_index] * 100:.2f}% 
+            Maximum F1 Score: round {max_f1score_index + 1}, value {f1_score[max_f1score_index] * 100:.2f}%
+            Maximum MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%
+            Maximum Epsilon (Privacy): round {max_privacy_index + 1}, value {privacy_estimate[max_privacy_index]:.3f}\n
+            """
+        )
+        
+        # Save the figure
+        plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
+        
+        # Show the plot if required
+        if show:
+            plt.show()
+        
+        # Close the plot to free memory
+        plt.close()
+        
+        return min_loss_index + 1, max_accuracy_index + 1
+    
+    else:
+
+        fig, axs = plt.subplots(1, 2, figsize=(14, 10))
+        
+        # -------------------- Subplot 1: Loss --------------------
+        ax = axs[0]
+        ax.plot(loss, label='Loss', color='blue')
+        
+        # Identify and plot the minimum loss point
+        min_loss_index = loss.index(min(loss))
+        ax.scatter(min_loss_index, loss[min_loss_index], color='blue', marker='*', s=150, label='Min Loss')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('Loss')
+        ax.set_title('Loss over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+        # -------------------- Subplot 2: Accuracy & F1 Score --------------------
+        ax = axs[1]
+        ax.plot(accuracy, label='Accuracy', color='orange')
+        ax.plot(f1_score, label='F1 Score', color='green')
+        
+        # Identify and plot the maximum accuracy and F1 score points
+        max_accuracy_index = accuracy.index(max(accuracy))
+        max_f1score_index = f1_score.index(max(f1_score))
+        ax.scatter(max_accuracy_index, accuracy[max_accuracy_index], color='orange', marker='*', s=150, label='Max Accuracy')
+        ax.scatter(max_f1score_index, f1_score[max_f1score_index], color='green', marker='*', s=150, label='Max F1 Score')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('Score')
+        ax.set_title('Accuracy & F1 Score over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+    
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+        
+        # Print summary information
+        print(
+            f"""
+            \n\033[1;34mServer Side\033[0m 
+            Minimum Loss: round {min_loss_index + 1}, value {loss[min_loss_index]:.3f} 
+            Maximum Accuracy: round {max_accuracy_index + 1}, value {accuracy[max_accuracy_index] * 100:.2f}% 
+            Maximum F1 Score: round {max_f1score_index + 1}, value {f1_score[max_f1score_index] * 100:.2f}%
+            Maximum MIA Accuracy: round None, value None%
+            Maximum Epsilon (Privacy): round None, value None\n
+            """
+        )
+        
+        # Save the figure
+        plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
+        
+        # Show the plot if required
+        if show:
+            plt.show()
+        
+        # Close the plot to free memory
+        plt.close()
+        
+        return min_loss_index + 1, max_accuracy_index + 1
+    
+
+
 
 # save client metrics
 def save_client_metrics(round_num, loss, accuracy, f1_score, client_id=1, history_folder="histories/"):

@@ -87,7 +87,7 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "f1_score": sum(f1_scores) / sum(examples),
         # "accuracy_mia": sum(accuracy_mia) / sum(examples) if accuracy_mia[0] > 0 else None,
         "accuracy_mia": accuracy_mia if accuracy_mia > 0 else None,
-        "privacy_estimate": privacy_estimate if privacy_estimate > 0 else None
+        "privacy_estimate": privacy_estimate if privacy_estimate > -0.5 else None
         }
 
 def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
