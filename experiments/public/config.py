@@ -56,6 +56,7 @@ n_rounds_dict = {
 
 experiments = {
     "mnist": {
+        "dataset": "mnist",
         "rounds": 2,  # Originally 15
         "clients": 10,
         "batch": 64,

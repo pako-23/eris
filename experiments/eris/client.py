@@ -5,7 +5,7 @@ from eris import ErisClient
 import torch
 import torch.nn.functional as F
 from torch.utils.data import random_split
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 import sys
 import os
 import argparse
@@ -33,7 +33,7 @@ class ExampleClient(ErisClient):
         train_fn=None,
         evaluate_fn=None,
         device=None,
-        args=None,
+        config=None,
     ):
         # Initialize the superclass with only the required positional arguments
         super().__init__(router_address, subscribe_address)
@@ -49,8 +49,10 @@ class ExampleClient(ErisClient):
         self.train_fn = train_fn
         self.evaluate_fn = evaluate_fn
         self.device = device
-        self.dataset_name = args.dataset
+        self.dataset_name = config['dataset']
         self.predictor_name = model.__class__.__name__ if model else None
+        self.config = config
+        self.current_round = 0
             
     def get_parameters(self):
         self.model.to('cpu')
@@ -63,8 +65,9 @@ class ExampleClient(ErisClient):
     def fit(self):
         self.model.train(True)
         self.model.to(self.device)
+        self.current_round += 1
 
-        for epoch in range(2):
+        for epoch in range(self.config['epochs']):
             self.train_fn(
                 self.model, 
                 self.device, 
@@ -76,7 +79,16 @@ class ExampleClient(ErisClient):
             )
             
     def evaluate(self):
-        pass
+        self.model.eval(True)
+        self.model.to(self.device)
+        
+        print("Evaluation!!!")
+        loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
+        
+        # save loss and accuracy client
+        utils.save_client_metrics(self.current_round, loss, accuracy, f1_score, client_id=self.client_id,
+                                    history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/")
+        
 
 
 def start_node(
@@ -92,7 +104,7 @@ def start_node(
     train_fn=None,
     evaluate_fn=None,
     device=None,
-    args=None,
+    config=None,
 ):
     # Initialize the ExampleClient with positional and keyword arguments
     client = ExampleClient(
@@ -108,7 +120,7 @@ def start_node(
         train_fn=train_fn,
         evaluate_fn=evaluate_fn,
         device=device,
-        args=args,
+        config=config,
     )
 
     # Configure aggregator if ports are provided
@@ -199,7 +211,7 @@ def main():
             train_fn=models.simple_train,
             evaluate_fn=models.simple_test,
             device=device,
-            args=args,
+            config=config,
         )
     else:
         return start_node(
@@ -213,7 +225,7 @@ def main():
             train_fn=models.simple_train,
             evaluate_fn=models.simple_test,
             device=device,
-            args=args,
+            config=config,
         )
 
 
