@@ -16,10 +16,17 @@ try:
     # Import the config module from the public folder
     from public import config as cfg
 
-    # Print the requested variable
-    print(cfg.${var_name})
-except AttributeError:
-    print('Error: Variable ${var_name} not found in config module.')
+    # Split the var_name by dots to handle nested keys
+    keys = '${var_name}'.split('.')
+    value = cfg
+    for key in keys:
+        if isinstance(value, dict):
+            value = value[key]
+        else:
+            value = getattr(value, key)
+    print(value)
+except (AttributeError, KeyError) as e:
+    print(f'Error: Variable {var_name} not found in config module. ({e})')
     sys.exit(1)
 except ImportError:
     print('Error: Unable to import config module from public folder.')
@@ -27,12 +34,17 @@ except ImportError:
 "
 }
 
-
-
 # Extract variables using the function
 k_folds=$(extract_config_var "k_folds")
 dataset_name=$(extract_config_var "dataset_name")
-n_clients=$(extract_config_var "client_number")
+n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
+
+# # Extract variables using the function
+# k_folds=$(extract_config_var "k_folds")
+# dataset_name=$(extract_config_var "dataset_name")
+# # n_clients=$(extract_config_var "client_number")
+# n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
+
 
 # Print the number of clients
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
@@ -65,7 +77,7 @@ for fold in $(seq 1 $k_folds); do
     sleep 0.5
 
     for i in $(seq 1 $n_clients); do
-        ./client.py --submit-port "$((50051 + i))" --publish-port "$((5555 + i))" --id "$i" &
+        ./client.py --submit-port "$((50051 + i))" --publish-port "$((5555 + i))" --id "$i" --dataset "$dataset_name" &
         sleep 0.2
     done
     for i in $(seq 1 $n_clients); do
@@ -82,7 +94,7 @@ for fold in $(seq 1 $k_folds); do
     # pkill -u dario -f coordinator.py
 
     sleep 2
-    
+
 done
 
 # # Aggregate results

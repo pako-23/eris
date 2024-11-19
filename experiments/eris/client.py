@@ -32,7 +32,8 @@ class ExampleClient(ErisClient):
         client_id=None,
         train_fn=None,
         evaluate_fn=None,
-        device=None
+        device=None,
+        args=None,
     ):
         # Initialize the superclass with only the required positional arguments
         super().__init__(router_address, subscribe_address)
@@ -48,7 +49,7 @@ class ExampleClient(ErisClient):
         self.train_fn = train_fn
         self.evaluate_fn = evaluate_fn
         self.device = device
-        self.dataset_name = cfg.dataset_name
+        self.dataset_name = args.dataset
         self.predictor_name = model.__class__.__name__ if model else None
             
     def get_parameters(self):
@@ -91,6 +92,7 @@ def start_node(
     train_fn=None,
     evaluate_fn=None,
     device=None,
+    args=None,
 ):
     # Initialize the ExampleClient with positional and keyword arguments
     client = ExampleClient(
@@ -106,6 +108,7 @@ def start_node(
         train_fn=train_fn,
         evaluate_fn=evaluate_fn,
         device=device,
+        args=args,
     )
 
     # Configure aggregator if ports are provided
@@ -142,15 +145,23 @@ def main():
         type=int,
         help="Aggregator publish port",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Dataset name",
+        default='mnist',
+        choices=['mnist', 'cifar10', 'fmnist', 'breast', 'diabetes', 'adula', 'airline', 'lsst'],
+    )
     args = parser.parse_args()
 
     # Check GPU and set manual seed
     device = utils.check_gpu(seed=cfg.seed)
     utils.set_seed(cfg.seed)
+    config = cfg.experiments[args.dataset]
 
     # Initialize model
-    model = models.model_dict[cfg.dataset_name](
-        models.model_args[cfg.dataset_name]
+    model = config['model'](
+        config['model_args']
     ).to(device)
 
     # Load data
@@ -161,19 +172,18 @@ def main():
     train_size = len(data) - val_size  # 80% for training
     torch.manual_seed(cfg.seed)
     train_dataset, val_dataset = random_split(data, [train_size, val_size])
-
     num_examples = {
         "train": train_size,
         "val": val_size
     }
 
     # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=cfg.test_batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=config['batch'], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=config['batch_test'], shuffle=False)
 
     # Optimizer and Loss function
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=cfg.momentum)
-    criterion = F.mse_loss if cfg.n_classes_dict[cfg.dataset_name] == 1 else F.cross_entropy
+    criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
 
     if args.submit_port and args.publish_port:
         return start_node(
@@ -189,6 +199,7 @@ def main():
             train_fn=models.simple_train,
             evaluate_fn=models.simple_test,
             device=device,
+            args=args,
         )
     else:
         return start_node(
@@ -202,6 +213,7 @@ def main():
             train_fn=models.simple_train,
             evaluate_fn=models.simple_test,
             device=device,
+            args=args,
         )
 
 

@@ -28,11 +28,11 @@ dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabe
 client_number = 5
 
 # Cross validation
-k_folds = 2  # Set 1 to disable cross validation
+k_folds = 1  # Set 1 to disable cross validation
 
 # Model settings
 n_classes_dict = {
-    "mnist": 3, # 15
+    "mnist": 10, # 15
     "cifar10": 10,
     "fmnist": 10,
     "breast": 2,
@@ -56,8 +56,8 @@ n_rounds_dict = {
 
 experiments = {
     "mnist": {
-        "rounds": 2, #15
-        "clients":10,
+        "rounds": 2,  # Originally 15
+        "clients": 10,
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
@@ -70,8 +70,128 @@ experiments = {
             "num_classes": 10,
             "input_size": (28, 28),
         },
+        "n_classes": 10,
     },
     "cifar10": {
-        
-    }
+        "rounds": 2,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.ResNet9,
+        "model_args": {
+            "in_channels": 3,
+            "num_classes": 10,
+            "input_size": (32, 32),
+        },
+        "n_classes": 10,
+    },
+    "fmnist": {
+        "rounds": 2,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.LeNet5,
+        "model_args": {
+            "in_channels": 1,
+            "num_classes": 10,
+            "input_size": (28, 28),
+        },
+        "n_classes": 10,
+    },
+    "breast": {
+        "rounds": 1,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.MLP,
+        "model_args": {
+            "input_size": 30,
+            "num_classes": 2,
+            "hidden_dim": 128,
+        },
+        "n_classes": 2,
+    },
+    "diabetes": {
+        "rounds": 1,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.MLP,
+        "model_args": {
+            "input_size": 21,
+            "num_classes": 2,
+            "hidden_dim": 128,
+        },
+        "n_classes": 2,
+    },
+    "adult": {
+        "rounds": 2,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.MLP,
+        "model_args": {
+            "input_size": 105,
+            "num_classes": 2,
+            "hidden_dim": 128,
+        },
+        "n_classes": 2,
+    },
+    "airline": {
+        "rounds": 2,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.LinearModel,
+        "model_args": {
+            "input_size": 30,
+            "num_classes": 1,
+        },
+        "n_classes": 1,
+    },
+    "lsst": {
+        "rounds": 2,
+        "clients": 10,
+        "batch": 64,
+        "batch_test": 64,
+        "epochs": 2,
+        "splits": 5,
+        "lr": 0.01,
+        "momentum": 0.9,
+        "model": models.TransformerModelFlexible,
+        "model_args": {
+            "input_size": 6,
+            "sequence_length": 36,
+            "num_classes": 12,
+            "num_heads": 2,
+            "num_layers": 2,
+            "hidden_dim": 64,
+        },
+        "n_classes": 12,
+    },
 }
+
