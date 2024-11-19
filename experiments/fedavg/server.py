@@ -320,7 +320,6 @@ def main() -> None:
 
     # Single Plot
     best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, model.__class__.__name__, show=False)
-
     # Privacy estimate plot
     # utils.plot_audit_metrics(client_id, model_name, dataset_name, show=True):
 
