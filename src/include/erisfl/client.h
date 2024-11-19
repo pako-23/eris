@@ -43,5 +43,5 @@ public:
   /**
    * Evaluates the model performance.
    */
-  virtual void evaluate(void) {};
+  virtual void evaluate(void) = 0;
 };

@@ -40,7 +40,7 @@ public:
   virtual py::list get_parameters(void) = 0;
   virtual void set_parameters(const py::list &parameters) = 0;
   virtual void fit(void) = 0;
-  virtual void evaluate(void) {};
+  virtual void evaluate(void) = 0;
 };
 
 class PyClient : public PyClientBase {
@@ -60,6 +60,10 @@ public:
   }
 
   void fit(void) override { PYBIND11_OVERRIDE_PURE(void, PyClientBase, fit, ); }
+
+  void evaluate(void) override {
+    PYBIND11_OVERRIDE_PURE(void, PyClientBase, evaluate, );
+  }
 };
 
 class PyErisClient : public PyClientBase {
@@ -83,6 +87,10 @@ public:
   bool set_aggregator_config(const std::string &address, uint16_t submit_port,
                              uint16_t publish_port) {
     return client_.set_aggregator_config(address, submit_port, publish_port);
+  }
+
+  void evaluate(void) override {
+    PYBIND11_OVERRIDE_PURE(void, PyErisClient, evaluate, );
   }
 
 private:
