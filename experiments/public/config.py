@@ -16,12 +16,12 @@ transform = None
 
 # Privacy auditing
 privacy_audit = False
-canary_frac = 0.2 # Fraction of canary samples per client
-score_fn = 'whitebox' # Options: "whitebox", "blackbox"
-p_value = 0.05 # Significance level for hypothesis testing
-k_plus = 1 / 3 # Fraction of clients with highest scores
-k_min = 1 / 3 # Fraction of clients with lowest scores
-delta = 1e-5 # Targeted delta for differential privacy
+canary_frac = 0.2  # Fraction of canary samples per client
+score_fn = "whitebox"  # Options: "whitebox", "blackbox"
+p_value = 0.05  # Significance level for hypothesis testing
+k_plus = 1 / 3  # Fraction of clients with highest scores
+k_min = 1 / 3  # Fraction of clients with lowest scores
+delta = 1e-5  # Targeted delta for differential privacy
 
 # dataset settings
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
@@ -32,7 +32,7 @@ k_folds = 1  # Set 1 to disable cross validation
 
 # Model settings
 n_classes_dict = {
-    "mnist": 10, # 15
+    "mnist": 10,  # 15
     "cifar10": 10,
     "fmnist": 10,
     "breast": 2,
@@ -43,9 +43,9 @@ n_classes_dict = {
 }
 
 n_rounds_dict = {
-    "mnist": 3, #15
+    "mnist": 3,  # 15
     "cifar10": 20,
-    "fmnist": 15, 
+    "fmnist": 15,
     "breast": 200,
     "diabetes": 20,
     "adult": 50,
@@ -195,4 +195,3 @@ experiments = {
         "n_classes": 12,
     },
 }
-

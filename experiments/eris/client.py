@@ -20,11 +20,11 @@ from public import config as cfg
 
 class ExampleClient(ErisClient):
     def __init__(
-        self, 
-        router_address: str, 
-        subscribe_address: str, 
-        model=None, 
-        train_loader=None, 
+        self,
+        router_address: str,
+        subscribe_address: str,
+        model=None,
+        train_loader=None,
         val_loader=None,
         optimizer=None,
         criterion=None,
@@ -37,7 +37,7 @@ class ExampleClient(ErisClient):
     ):
         # Initialize the superclass with only the required positional arguments
         super().__init__(router_address, subscribe_address)
-        
+
         # Initialize additional attributes
         self.model = model
         self.train_loader = train_loader
@@ -49,13 +49,13 @@ class ExampleClient(ErisClient):
         self.train_fn = train_fn
         self.evaluate_fn = evaluate_fn
         self.device = device
-        self.dataset_name = config['dataset']
+        self.dataset_name = config["dataset"]
         self.predictor_name = model.__class__.__name__ if model else None
         self.config = config
         self.current_round = 0
-            
+
     def get_parameters(self):
-        self.model.to('cpu')
+        self.model.to("cpu")
         return [param.data.numpy() for param in self.model.parameters()]
 
     def set_parameters(self, parameters):
@@ -67,33 +67,40 @@ class ExampleClient(ErisClient):
         self.model.to(self.device)
         self.current_round += 1
 
-        for epoch in range(self.config['epochs']):
+        for epoch in range(self.config["epochs"]):
             self.train_fn(
-                self.model, 
-                self.device, 
-                self.train_loader, 
-                self.optimizer, 
-                self.criterion, 
-                epoch, 
-                self.client_id
+                self.model,
+                self.device,
+                self.train_loader,
+                self.optimizer,
+                self.criterion,
+                epoch,
+                self.client_id,
             )
-            
+
     def evaluate(self):
-        self.model.eval(True)
+        self.model.eval()
         self.model.to(self.device)
-        
+
         print("Evaluation!!!")
-        loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
-        
+        loss, accuracy, f1_score = self.evaluate_fn(
+            self.model, self.device, self.val_loader, self.criterion, self.client_id
+        )
+
         # save loss and accuracy client
-        utils.save_client_metrics(self.current_round, loss, accuracy, f1_score, client_id=self.client_id,
-                                    history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/")
-        
+        utils.save_client_metrics(
+            self.current_round,
+            loss,
+            accuracy,
+            f1_score,
+            client_id=self.client_id,
+            history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/",
+        )
 
 
 def start_node(
-    aggr_rpc_port=None, 
-    aggr_publish_port=None, 
+    aggr_rpc_port=None,
+    aggr_publish_port=None,
     model=None,
     train_loader=None,
     val_loader=None,
@@ -108,14 +115,14 @@ def start_node(
 ):
     # Initialize the ExampleClient with positional and keyword arguments
     client = ExampleClient(
-        "tcp://127.0.0.1:50051", 
-        "tcp://127.0.0.1:5555", 
+        "tcp://127.0.0.1:50051",
+        "tcp://127.0.0.1:5555",
         model=model,
-        train_loader=train_loader, 
+        train_loader=train_loader,
         val_loader=val_loader,
-        optimizer=optimizer, 
+        optimizer=optimizer,
         criterion=criterion,
-        num_examples=num_examples, 
+        num_examples=num_examples,
         client_id=client_id,
         train_fn=train_fn,
         evaluate_fn=evaluate_fn,
@@ -135,10 +142,10 @@ def start_node(
     return 1
 
 
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Flower")
+    parser = argparse.ArgumentParser(
+        description="Start an Eris client configured with the options for the given experiment"
+    )
     parser.add_argument(
         "--id",
         type=int,
@@ -161,8 +168,13 @@ def main():
         "--dataset",
         type=str,
         help="Dataset name",
-        default='mnist',
-        choices=['mnist', 'cifar10', 'fmnist', 'breast', 'diabetes', 'adula', 'airline', 'lsst'],
+        default="mnist",
+        choices=list(cfg.experiments.keys()),
+    )
+    parser.add_argument(
+        "shard",
+        type=str,
+        help="Path to the dataset portion",
     )
     args = parser.parse_args()
 
@@ -172,30 +184,25 @@ def main():
     config = cfg.experiments[args.dataset]
 
     # Initialize model
-    model = config['model'](
-        config['model_args']
-    ).to(device)
+    model = config["model"](config["model_args"]).to(device)
 
     # Load data
-    data = torch.load(f'../data/client_datasets/IID_data_client_{args.id}.pt', weights_only=False)
-    
+    data = torch.load(args.shard, weights_only=False)
+
     # Split the dataset
     val_size = int(len(data) * 0.2)  # 20% for validation
     train_size = len(data) - val_size  # 80% for training
     torch.manual_seed(cfg.seed)
     train_dataset, val_dataset = random_split(data, [train_size, val_size])
-    num_examples = {
-        "train": train_size,
-        "val": val_size
-    }
+    num_examples = {"train": train_size, "val": val_size}
 
     # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=config['batch'], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config['batch_test'], shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=config["batch_test"], shuffle=False)
 
     # Optimizer and Loss function
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=cfg.momentum)
-    criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
+    criterion = F.mse_loss if config["n_classes"] == 1 else F.cross_entropy
 
     if args.submit_port and args.publish_port:
         return start_node(
@@ -227,7 +234,6 @@ def main():
             device=device,
             config=config,
         )
-
 
 
 if __name__ == "__main__":

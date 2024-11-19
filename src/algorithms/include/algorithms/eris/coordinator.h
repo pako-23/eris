@@ -154,8 +154,8 @@ private:
         state_[i].set_publish_address(req.publish_address());
         state->set_assigned_fragment(i);
         service_.publish_event(state_[i]);
-        spdlog::info("new aggregator joined for fragment {}. RPC "
-                     "address: {}, Publish address: {}",
+        spdlog::info("new aggregator joined for fragment {}. submit "
+                     "address: {}, publish address: {}",
                      i, req.submit_address(), req.publish_address());
 
         break;

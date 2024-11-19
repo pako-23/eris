@@ -38,6 +38,7 @@ except ImportError:
 k_folds=$(extract_config_var "k_folds")
 dataset_name=$(extract_config_var "dataset_name")
 n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
+aggregators=$(extract_config_var "experiments.${dataset_name}.splits")
 
 # # Extract variables using the function
 # k_folds=$(extract_config_var "k_folds")
@@ -50,11 +51,9 @@ n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
 
 # if k_folds > 1, print "Cross validation with k_folds"
-if [ $k_folds -gt 1 ]; then
+if [ "$k_folds" -gt 1 ]; then
     echo -e "\n\033[1;36mCross validation with $k_folds folds\033[0m"
-fi
-# if k_folds = 1, print "No cross validation"
-if [ $k_folds -eq 1 ]; then
+elif [ "$k_folds" -eq 1 ]; then # if k_folds = 1, print "No cross validation"
     echo -e "\n\033[1;36mNo cross validation\033[0m"
 fi
 
@@ -76,12 +75,19 @@ for fold in $(seq 1 $k_folds); do
     ./coordinator.py --dataset_name "$dataset_name" &
     sleep 0.5
 
-    for i in $(seq 1 $n_clients); do
-        ./client.py --submit-port "$((50051 + i))" --publish-port "$((5555 + i))" --id "$i" --dataset "$dataset_name" &
-        sleep 0.2
-    done
-    for i in $(seq 1 $n_clients); do
-        ./client.py &
+    for i in $(seq 1 "$n_clients"); do
+	if [ "$i" -le "$aggregators" ]; then
+            ./client.py --submit-port "$((50051 + i))" \
+			--publish-port "$((5555 + i))" \
+			--id "$i"                      \
+			--dataset "$dataset_name"      \
+			"../data/client_datasets/IID_data_client_$i.pt" &
+	else
+	    ./client.py --id "$i"                 \
+			--dataset "$dataset_name" \
+			"../data/client_datasets/IID_data_client_$i.pt" &
+	fi
+	sleep 0.2
     done
 
     while pgrep -f ./client.py >/dev/null; do
@@ -89,12 +95,7 @@ for fold in $(seq 1 $k_folds); do
     done
 
     pkill -9 -f coordinator.py
-    # pkill -9 -f client.py
-    # pkill -u dario -f client.py
-    # pkill -u dario -f coordinator.py
-
     sleep 2
-
 done
 
 # # Aggregate results

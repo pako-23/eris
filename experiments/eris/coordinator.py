@@ -19,6 +19,7 @@ def parse_args():
         type=str,
         required=True,
         help="The name of the dataset to run the experiment on",
+        choices=list(cfg.experiments.keys()),
     )
     return parser.parse_args()
 
@@ -26,10 +27,11 @@ def parse_args():
 def main():
     args = parse_args()
     config = cfg.experiments[args.dataset_name]
+
     builder = ErisCoordinatorConfig()
-    builder.set_rounds(int(config['rounds']))
-    builder.set_splits(int(config['splits']))
-    builder.set_min_clients(int(config['clients']))
+    builder.set_rounds(int(config["rounds"]))
+    builder.set_splits(int(config["splits"]))
+    builder.set_min_clients(int(config["clients"]))
 
     coordinator = ErisCoordinator(builder)
     coordinator.start()
@@ -37,5 +39,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
-
