@@ -66,6 +66,8 @@ class ExampleClient(ErisClient):
         self.model.train(True)
         self.model.to(self.device)
         self.current_round += 1
+        
+        print("Training!!", flush=True)
 
         for epoch in range(self.config["epochs"]):
             self.train_fn(
@@ -82,7 +84,7 @@ class ExampleClient(ErisClient):
         self.model.eval()
         self.model.to(self.device)
 
-        print("Evaluation!!!")
+        print("Evaluation!!!", flush=True)
         loss, accuracy, f1_score = self.evaluate_fn(
             self.model, self.device, self.val_loader, self.criterion, self.client_id
         )
