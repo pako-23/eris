@@ -301,7 +301,7 @@ def main() -> None:
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
         server_address="0.0.0.0:8098",   # 0.0.0.0 listens to all available interfaces
-        config=fl.server.ServerConfig(num_rounds=cfg.n_rounds_dict[cfg.dataset_name]),
+        config=fl.server.ServerConfig(num_rounds=cfg.n_rounds_dict[cfg.dataset_name]-1),
         strategy=strategy,
     )
     # convert history to list
@@ -320,10 +320,11 @@ def main() -> None:
 
     # Single Plot
     best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, model.__class__.__name__, show=False)
+    best_loss_round = cfg.n_rounds_dict[cfg.dataset_name] - 1
+    
     # Privacy estimate plot
     # utils.plot_audit_metrics(client_id, model_name, dataset_name, show=True):
 
-    
     # Load the best model
     model.load_state_dict(torch.load(f"checkpoints/{model.__class__.__name__}/{cfg.dataset_name}/model_{best_loss_round}.pth", weights_only=False))
 

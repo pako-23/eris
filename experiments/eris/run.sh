@@ -74,11 +74,12 @@ for fold in $(seq 1 $k_folds); do
 			--publish-port "$((5555 + i))" \
 			--id "$i"                      \
 			--dataset "$dataset_name"      \
-			"../data/client_datasets/IID_data_client_$i.pt" &
+			--shard "../data/client_datasets/IID_data_client_$i.pt" \
+            --fold "$fold" &
 	else
 	    ./client.py --id "$i"                 \
 			--dataset "$dataset_name" \
-			"../data/client_datasets/IID_data_client_$i.pt" &
+			--shard "../data/client_datasets/IID_data_client_$i.pt" &
 	fi
 	sleep 0.2
     done
@@ -91,11 +92,11 @@ for fold in $(seq 1 $k_folds); do
     sleep 2
 done
 
-# # Aggregate results
-# if [ $k_folds -gt 1 ]; then
-#     cd ../public
-#     python average_results.py --strategy "eris" 
-#     sleep 1
-# fi
+# Aggregate results
+if [ $k_folds -gt 1 ]; then
+    cd ../public
+    python average_results.py --strategy "eris" 
+    sleep 1
+fi
 
 # echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"

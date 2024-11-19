@@ -28,7 +28,7 @@ dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabe
 client_number = 10
 
 # Cross validation
-k_folds = 1  # Set 1 to disable cross validation
+k_folds = 2  # Set 1 to disable cross validation
 
 # Model settings
 n_classes_dict = {

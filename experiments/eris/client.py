@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 import sys
 import os
 import argparse
+import time
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -139,49 +140,7 @@ def start_node(
         client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
 
     # Start training
-    if client.train():
-        print("Client finished the training successfully")
-        return 0
-
-    return 1
-
-def start_node(
-    aggr_rpc_port=None,
-    aggr_publish_port=None,
-    model=None,
-    train_loader=None,
-    val_loader=None,
-    optimizer=None,
-    criterion=None,
-    num_examples=None,
-    client_id=None,
-    train_fn=None,
-    evaluate_fn=None,
-    device=None,
-    config=None,
-):
-    # Initialize the ExampleClient with positional and keyword arguments
-    client = ExampleClient(
-        "tcp://127.0.0.1:50051",
-        "tcp://127.0.0.1:5555",
-        model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        optimizer=optimizer,
-        criterion=criterion,
-        num_examples=num_examples,
-        client_id=client_id,
-        train_fn=train_fn,
-        evaluate_fn=evaluate_fn,
-        device=device,
-        config=config,
-    )
-
-    # Configure aggregator if ports are provided
-    if aggr_rpc_port is not None and aggr_publish_port is not None:
-        client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
-
-    # Start training
+    start_time = time.time()
     training_success = client.train()
 
     if training_success:
@@ -216,6 +175,19 @@ def start_node(
             # Evaluate the model on the test set
             loss_test, accuracy_test, metric_test = evaluate_fn(test_model, device, test_loader, criterion)
             print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}%, F1 Score: {metric_test*100:.2f}%\033[0m\n")
+            
+            # Print training time in minutes (grey color)
+            training_time = round((time.time() - start_time)/60, 2)
+            print(f"\033[90mTraining time: {training_time} minutes\033[0m")
+    
+            # Save metrics as numpy array
+            metrics = {
+                "loss": loss_test,
+                "accuracy": accuracy_test,
+                'f1_score': metric_test,
+                "time": training_time,
+            }
+            np.save(f'test_metrics_fold_{config['fold']}.npy', metrics)
 
         return 0
 
@@ -252,9 +224,16 @@ def main():
         choices=list(cfg.experiments.keys()),
     )
     parser.add_argument(
-        "shard",
+        "--shard",
         type=str,
         help="Path to the dataset portion",
+    )
+    parser.add_argument(
+        "--fold",
+        type=int,
+        choices=range(1, 20),
+        default=1,
+        help="Specifies the fold to be used",
     )
     args = parser.parse_args()
     
@@ -262,6 +241,7 @@ def main():
     device = utils.check_gpu(seed=cfg.seed)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
+    config['fold'] = args.fold
 
     # Initialize model
     model = config["model"](config["model_args"]).to(device)
