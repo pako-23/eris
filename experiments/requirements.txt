@@ -6,3 +6,4 @@ torchvision==0.20.1
 tslearn==0.6.3
 ucimlrepo==0.0.7
 flwr==1.12.0
+h5py==3.12.1

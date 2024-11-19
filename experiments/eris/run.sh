@@ -28,37 +28,68 @@ except ImportError:
 }
 
 
+
 # Extract variables using the function
-fold=1
 k_folds=$(extract_config_var "k_folds")
-n_clients=$(extract_config_var "client_number")
 dataset_name=$(extract_config_var "dataset_name")
-echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients and k-folds $k_folds\033[0m"
+n_clients=$(extract_config_var "client_number")
 
-# echo -e "\033[1;36m\nData Generation\033[0m"
-# cd ../data
-# python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-# cd ../eris
+# Print the number of clients
+echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
 
-# start training
-./coordinator.py &
-sleep 0.5
+# if k_folds > 1, print "Cross validation with k_folds"
+if [ $k_folds -gt 1 ]; then
+    echo -e "\n\033[1;36mCross validation with $k_folds folds\033[0m"
+fi
+# if k_folds = 1, print "No cross validation"
+if [ $k_folds -eq 1 ]; then
+    echo -e "\n\033[1;36mNo cross validation\033[0m"
+fi
 
-# for i in $(seq 1 $n_clients); do
-#     ./client.py "$(expr "50051" + "$i")" "$(expr "5555" + "$i")" "$i" &
-#     sleep 0.2
-# done
-for i in $(seq 1 $n_clients); do
-    ./client.py --submit-port "$((50051 + i))" --publish-port "$((5555 + i))" --id "$i" &
-    sleep 0.2
+
+# Cycle through the folds
+for fold in $(seq 1 $k_folds); do
+    if [ $k_folds -gt 1 ]; then
+        echo -e "\n\033[1;36mFold $fold\033[0m"
+    fi
+    
+    # Creating dataset
+    cd ../data
+    python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+    cd ../eris
+
+    echo -e "\n\033[1;36mStarting server with model \033[0m\n"
+
+    # Start training
+    ./coordinator.py --dataset_name "$dataset_name" &
+    sleep 0.5
+
+    for i in $(seq 1 $n_clients); do
+        ./client.py --submit-port "$((50051 + i))" --publish-port "$((5555 + i))" --id "$i" &
+        sleep 0.2
+    done
+    for i in $(seq 1 $n_clients); do
+        ./client.py &
+    done
+
+    while pgrep -f ./client.py >/dev/null; do
+        sleep 5
+    done
+
+    pkill -9 -f coordinator.py
+    # pkill -9 -f client.py
+    # pkill -u dario -f client.py
+    # pkill -u dario -f coordinator.py
+
+    sleep 2
+    
 done
-for i in $(seq 1 $n_clients); do
-    ./client.py &
-done
 
+# # Aggregate results
+# if [ $k_folds -gt 1 ]; then
+#     cd ../public
+#     python average_results.py --strategy "eris" 
+#     sleep 1
+# fi
 
-while pgrep -f ./client.py >/dev/null; do
-    sleep 5
-done
-
-pkill -9 -f coordinator.py
+# echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
