@@ -29,27 +29,30 @@ from public import config as cfg
 
 
 # create folder if not exists
-def create_delede_folders(predictor_name):
+def create_delede_folders(config):
+    dataset_name = config['dataset']
+    client_number = config['clients']
+    predictor_name = config['model_name']
     # Results
-    if not os.path.exists(f"results/{predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"results/{predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"results/{predictor_name}/{dataset_name}"):
+        os.makedirs(f"results/{predictor_name}/{dataset_name}")
     else:
         # remove the directory and create a new one
-        os.system(f"rm -r results/{predictor_name}/{cfg.dataset_name}")
-        os.makedirs(f"results/{predictor_name}/{cfg.dataset_name}")
+        os.system(f"rm -r results/{predictor_name}/{dataset_name}")
+        os.makedirs(f"results/{predictor_name}/{dataset_name}")
     # Histories
-    if not os.path.exists(f"histories/{predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"histories/{predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"histories/{predictor_name}/{dataset_name}"):
+        os.makedirs(f"histories/{predictor_name}/{dataset_name}")
     else:
         # remove the client folders
-        for c in range(cfg.client_number):
-            os.system(f"rm -r histories/{predictor_name}/{cfg.dataset_name}/client_{c+1}")  
+        for c in range(client_number):
+            os.system(f"rm -r histories/{predictor_name}/{dataset_name}/client_{c+1}")  
     # Checkpoints
-    if not os.path.exists(f"checkpoints/{predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"checkpoints/{predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"checkpoints/{predictor_name}/{dataset_name}"):
+        os.makedirs(f"checkpoints/{predictor_name}/{dataset_name}")
     # Images
-    if not os.path.exists(f"images/{predictor_name}/{cfg.dataset_name}"):
-        os.makedirs(f"images/{predictor_name}/{cfg.dataset_name}")
+    if not os.path.exists(f"images/{predictor_name}/{dataset_name}"):
+        os.makedirs(f"images/{predictor_name}/{dataset_name}")
     
     
 # define device
@@ -91,9 +94,10 @@ def set_seed(seed):
 
 
 # plot and save plot on server side
-def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
+def plot_loss_and_accuracy(metrics_distributed, config, show=True):
     # Read arguments
-    rounds = cfg.n_rounds_dict[cfg.dataset_name]
+    rounds = config['rounds']
+    predictor_name = config['model_name']
     loss = metrics_distributed['loss']
     accuracy = metrics_distributed['accuracy']
     f1_score = metrics_distributed['f1_score']
@@ -186,7 +190,7 @@ def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
         )
         
         # Save the figure
-        plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
+        plt.savefig(f"images/{predictor_name}/{config['dataset']}/training_{rounds}_rounds.png")
         
         # Show the plot if required
         if show:
@@ -251,7 +255,7 @@ def plot_loss_and_accuracy(metrics_distributed, predictor_name, show=True):
         )
         
         # Save the figure
-        plt.savefig(f"images/{predictor_name}/{cfg.dataset_name}/training_{rounds}_rounds.png")
+        plt.savefig(f"images/{predictor_name}/{config['dataset']}/training_{rounds}_rounds.png")
         
         # Show the plot if required
         if show:
@@ -513,7 +517,9 @@ def save_audit_metrics(round_num, accuracy, privacy_estimate, client_id=1, histo
 
 
 # plot and save plot on client side
-def plot_client_metrics(client_id, predictor_name, dataset_name, show=True):
+def plot_client_metrics(client_id, config, show=True):
+    predictor_name = config['model_name']
+    dataset_name = config['dataset']
 
     history_folder = f"histories/{predictor_name}/{dataset_name}/"
     df = pd.read_csv(history_folder + f'client_{client_id}/metrics.csv')

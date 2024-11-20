@@ -31,24 +31,15 @@ def calculate_mean_std_metrics(metrics, model_name=None):
     return mean_std_metrics
 
 
-model_names = {
-    "mnist": "LeNet5",
-    "cifar10": "ResNet9",
-    "fmnist": "LeNet5",
-    "breast": "MLP",  
-    "diabetes": "MLP",
-    "adult": "MLP",
-    "airline": "LinearModel",
-    "lsst": "TransformerModelFlexible",
-}
-
 
 # get arguments
 parser = argparse.ArgumentParser(description='Average results')
 parser.add_argument('--strategy', type=str, default='fedavg', help='Strategy to use')
+parser.add_argument('--dataset', type=str, default='mnist', help='Dataset to use')
 args = parser.parse_args()
+config = cfg.experiments[args.dataset]
 
-default_path = f"{model_names[cfg.dataset_name]}/{cfg.dataset_name}"
+default_path = f"{config["model_name"]}/{config["dataset"]}"
 
 # Load metrics from all folds
 metrics = []
@@ -65,7 +56,7 @@ for i in range(cfg.k_folds):
     os.remove(f'../{args.strategy}/test_metrics_fold_{i+1}.npy')
 
 # Calculate the mean metrics
-result = calculate_mean_std_metrics(metrics, model_name=model_names[cfg.dataset_name])
+result = calculate_mean_std_metrics(metrics, model_name=config["model_name"])
 
 # Save the mean metrics to a file
 result_pd = pd.DataFrame(result, index=[0])

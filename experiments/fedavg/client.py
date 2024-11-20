@@ -51,7 +51,8 @@ class FlowerClient(fl.client.NumPyClient):
                  score_fn: str = 'whitebox', 
                  p_value: float = 0.05,
                  k_plus: float = 1 / 3, 
-                 k_min: float = 1 / 3
+                 k_min: float = 1 / 3,
+                 config: dict = {'dataset':'mnist', 'batch':64},
                 ):
         
         
@@ -66,8 +67,6 @@ class FlowerClient(fl.client.NumPyClient):
         self.train_fn = train_fn
         self.evaluate_fn = evaluate_fn
         self.device = device
-        self.dataset_name = cfg.dataset_name
-        self.predictor_name = model.__class__.__name__
         self.canary_frac = canary_frac
         self.p_value = p_value
         self.k_plus = k_plus
@@ -75,6 +74,7 @@ class FlowerClient(fl.client.NumPyClient):
         self.privacy_audit = privacy_audit
         self.privacy_estimate = -1
         self.accuracy_mia = -1
+        self.config = config
         
         if score_fn == 'whitebox':
             self.score_fn = self.score_with_pseudograd_batch
@@ -108,7 +108,7 @@ class FlowerClient(fl.client.NumPyClient):
                 non_canaries,
                 torch.utils.data.Subset(canaries, canaries_in_idx)
             ])
-            self.train_loader = DataLoader(subsampled_train_data, batch_size=cfg.batch_size, shuffle=True)
+            self.train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
 
             # train
             for epoch in range(config["local_epochs"]):
@@ -122,7 +122,7 @@ class FlowerClient(fl.client.NumPyClient):
             # compute scores for each canary, used to predict membership
             scores = []
             # self.set_parameters(parameters)
-            dataloader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
+            dataloader = torch.utils.data.DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
             for samples, targets in dataloader:
                 batch_scores = self.score_fn(samples, targets, client_update)
                 scores.extend(batch_scores)
@@ -153,9 +153,9 @@ class FlowerClient(fl.client.NumPyClient):
             # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
             # privacy_estimate = np.max([np.log(1 - cfg.delta - fpr) - np.log(fnr), 
                                 # np.log(1 - cfg.delta - fnr) - np.log(fpr)])
-            print("save audit metrics")
+            
             utils.save_audit_metrics(config["current_round"], self.accuracy_mia, self.privacy_estimate, client_id=self.client_id,
-                                            history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/")
+                                            history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/")
 
         
         else:
@@ -174,7 +174,7 @@ class FlowerClient(fl.client.NumPyClient):
         
         # save loss and accuracy client
         utils.save_client_metrics(config["current_round"], loss, accuracy, f1_score, client_id=self.client_id,
-                                    history_folder=f"histories/{self.predictor_name}/{self.dataset_name}/")
+                                    history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/")
         
         return float(loss), self.num_examples["val"], {
             "accuracy": float(accuracy),
@@ -225,15 +225,23 @@ def main()->None:
         required=True,
         help="Specifies the artificial data partition",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Dataset name",
+        default="mnist",
+        choices=list(cfg.experiments.keys()),
+    )
     args = parser.parse_args()
 
     # check gpu and set manual seed
     device = utils.check_gpu(seed=cfg.seed)
     utils.set_seed(cfg.seed)
+    config = cfg.experiments[args.dataset]
 
     # model and history folder
-    model = models.model_dict[cfg.dataset_name](
-        models.model_args[cfg.dataset_name]).to(device)
+    model = config["model"](config["model_args"]).to(device)
+
 
     # Load data
     data = torch.load(f'../data/client_datasets/IID_data_client_{args.id}.pt', weights_only=False)
@@ -250,16 +258,13 @@ def main()->None:
     }
 
     # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=cfg.test_batch_size, shuffle=False)
-
-    # x, y = next(iter(train_loader))
-    # print(f"Client {args.id}: Train data shape: {x.shape}, Train labels shape: {y.shape}")
+    train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=config["batch_test"], shuffle=False)
 
     # Optimizer and Loss function
     optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=cfg.momentum)
-    criterion = F.mse_loss if cfg.n_classes_dict[cfg.dataset_name]==1 else F.cross_entropy
-
+    criterion = F.mse_loss if config["n_classes"] == 1 else F.cross_entropy
+    
     # Start Flower client
     client = FlowerClient(
                         model, 
@@ -277,12 +282,13 @@ def main()->None:
                         score_fn=cfg.score_fn,
                         p_value=cfg.p_value,
                         k_plus=cfg.k_plus,
-                        k_min=cfg.k_min                          
+                        k_min=cfg.k_min,
+                        config=config,                         
                           ).to_client()
     fl.client.start_client(server_address="[::]:8098", client=client) # local host
     
     # read saved data and plot
-    utils.plot_client_metrics(args.id, model.__class__.__name__, cfg.dataset_name, show=False)
+    utils.plot_client_metrics(args.id, config, show=False)
     
 
 

@@ -19,10 +19,17 @@ try:
     # Import the config module from the public folder
     from public import config as cfg
 
-    # Print the requested variable
-    print(cfg.${var_name})
-except AttributeError:
-    print('Error: Variable ${var_name} not found in config module.')
+    # Split the var_name by dots to handle nested keys
+    keys = '${var_name}'.split('.')
+    value = cfg
+    for key in keys:
+        if isinstance(value, dict):
+            value = value[key]
+        else:
+            value = getattr(value, key)
+    print(value)
+except (AttributeError, KeyError) as e:
+    print(f'Error: Variable {var_name} not found in config module. ({e})')
     sys.exit(1)
 except ImportError:
     print('Error: Unable to import config module from public folder.')
@@ -32,8 +39,9 @@ except ImportError:
 
 # Extract variables using the function
 k_folds=$(extract_config_var "k_folds")
-n_clients=$(extract_config_var "client_number")
 dataset_name=$(extract_config_var "dataset_name")
+n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
+
 
 # Print the number of clients
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
@@ -60,12 +68,12 @@ for fold in $(seq 1 $k_folds); do
 
     echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 
-    python server.py --fold $fold &
+    python server.py --fold $fold --dataset $dataset_name &
     sleep 2  # Sleep for 2s to give the server enough time to start
 
     for i in $(seq 1 $n_clients); do
         echo "Starting client ID $i"
-        python client.py --id "$i" &
+        python client.py --id "$i" --dataset $dataset_name &
     done
 
     # This will allow you to use CTRL+C to stop all background processes
@@ -81,6 +89,7 @@ done
 
 # Aggregate results
 if [ $k_folds -gt 1 ]; then
+    echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
     cd ../public
     python average_results.py --strategy "fedavg" 
     sleep 1

@@ -51,7 +51,7 @@ class ExampleClient(ErisClient):
         self.evaluate_fn = evaluate_fn
         self.device = device
         self.dataset_name = config["dataset"]
-        self.predictor_name = model.__class__.__name__ if model else None
+        self.predictor_name = config["model_name"] if model else None
         self.config = config
         self.current_round = 0
 
@@ -66,7 +66,7 @@ class ExampleClient(ErisClient):
     def fit(self):        
         # save previous aggregated model if client 1
         if self.client_id == 1:
-            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{cfg.dataset_name}/model_{self.current_round}.pth")
+            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
 
         self.model.train(True)
         self.model.to(self.device)
@@ -169,7 +169,7 @@ def start_node(
             best_loss_round = config['rounds']-1  # Replace with actual logic
 
             # Construct the checkpoint path
-            checkpoint_path = f"checkpoints/{test_model.__class__.__name__}/{config['dataset']}/model_{best_loss_round}.pth"
+            checkpoint_path = f"checkpoints/{config["model_name"]}/{config['dataset']}/model_{best_loss_round}.pth"
             test_model.load_state_dict(torch.load(checkpoint_path,  weights_only=False))
 
             # Evaluate the model on the test set
@@ -266,7 +266,7 @@ def main():
 
     # Create directories and delede old files
     if args.id == 1:
-        utils.create_delede_folders(model.__class__.__name__)
+        utils.create_delede_folders(config)
 
     if args.submit_port and args.publish_port:
         return start_node(

@@ -53,21 +53,15 @@ from public import utils
 from public import config as cfg
 
 
-# Define the max latent space as global variable
-max_latent_space = 2
-
 # Config_client
 def fit_config(server_round: int):
     """Return training configuration dict for each round."""
     config = {
         "current_round": server_round,
         "local_epochs": cfg.local_epochs,
-        "tot_rounds": cfg.n_rounds_dict[cfg.dataset_name],
-        "min_latent_space": 0,
-        "max_latent_space": max_latent_space,
     }
     return config
-
+    
 # Custom weighted average function
 def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     # Multiply accuracy of each client by number of examples used
@@ -145,10 +139,10 @@ def aggregate_fit(
 
 # Custom strategy to save model after each round
 class SaveModelStrategy(fl.server.strategy.FedAvg):
-    def __init__(self, model, dataset, *args, **kwargs):
+    def __init__(self, model, config, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model = model
-        self.dataset = dataset
+        self.config = config
         self.client_cid_list = []
         self.aggregated_cluster_parameters = []
         self.cluster_labels = {}
@@ -202,7 +196,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
             # Save the model
-            torch.save(self.model.state_dict(), f"checkpoints/{self.model.__class__.__name__}/{cfg.dataset_name}/model_{server_round}.pth")
+            torch.save(self.model.state_dict(), f"checkpoints/{self.config["model_name"]}/{self.config['dataset']}/model_{server_round}.pth")
         
         return aggregated_parameters_global, aggregated_metrics
     
@@ -259,49 +253,55 @@ def main() -> None:
         default=1,
         help="Specifies the fold to be used",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Dataset name",
+        default="mnist",
+        choices=list(cfg.experiments.keys()),
+    )
     args = parser.parse_args()
     
     # Start time
     start_time = time.time()
+    config = cfg.experiments[args.dataset]
     
     # Load the test set
-    test_dataset = torch.load(f'../data/datasets/{cfg.dataset_name}_test.pt', weights_only=False)
+    test_dataset = torch.load(f'../data/datasets/{args.dataset}_test.pt', weights_only=False)
 
     # Create the data loaders
-    test_loader = DataLoader(test_dataset, batch_size=cfg.test_batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=config['batch_test'], shuffle=False)
 
     # model and history folder
     device = utils.check_gpu(seed=cfg.seed, print_info=True)
     utils.set_seed(cfg.seed)
-    # model = models.predictors[cfg.predictor_name](in_channels=cfg.channels, num_classes=cfg.n_classes, input_size=cfg.input_size).to(device)
 
     # model and history folder    
-    model = models.model_dict[cfg.dataset_name](
-        models.model_args[cfg.dataset_name]).to(device)
-    
+    model = config["model"](config["model_args"]).to(device)
+
     # Create directories and delede old files
-    utils.create_delede_folders(model.__class__.__name__)
+    utils.create_delede_folders(config)
 
     # Define strategy
     strategy = SaveModelStrategy(
         model=model, # model to be trained
-        min_fit_clients=cfg.client_number,  # Never sample less than 10 clients for training
-        min_evaluate_clients=cfg.client_number,   # Never sample less than 5 clients for evaluation
-        min_available_clients=cfg.client_number,  # Wait until all 10 clients are available
+        min_fit_clients=config['clients'],  # Never sample less than 10 clients for training
+        min_evaluate_clients=config['clients'],   # Never sample less than 5 clients for evaluation
+        min_available_clients=config['clients'],  # Wait until all 10 clients are available
         fraction_fit=1.0, # Sample 100 % of available clients for training
         fraction_evaluate=1.0, # Sample 100 % of available clients for evaluation
         evaluate_metrics_aggregation_fn=weighted_average,
         on_evaluate_config_fn=fit_config,
         on_fit_config_fn=fit_config,
-        dataset=cfg.dataset_name,
+        config=config
     )
         
-    print(f"\033[94mTraining {model.__class__.__name__} on {cfg.dataset_name} with {cfg.client_number} clients\033[0m\n")
+    print(f"\033[94mTraining {config["model_name"]} on {args.dataset} with {config['clients']} clients\033[0m\n")
 
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
         server_address="0.0.0.0:8098",   # 0.0.0.0 listens to all available interfaces
-        config=fl.server.ServerConfig(num_rounds=cfg.n_rounds_dict[cfg.dataset_name]-1),
+        config=fl.server.ServerConfig(num_rounds=config['rounds'] - 1),
         strategy=strategy,
     )
     # convert history to list
@@ -314,22 +314,22 @@ def main() -> None:
     }
 
     # Save loss and accuracy to a file
-    print(f"Saving metrics to as .json in histories folder: histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json")
-    with open(f'histories/{model.__class__.__name__}/{cfg.dataset_name}/distributed_metrics_{args.fold}.json', 'w') as f:
+    print(f"Saving metrics to as .json in histories folder: histories/{config["model_name"]}/{args.dataset}/distributed_metrics_{args.fold}.json")
+    with open(f"histories/{config["model_name"]}/{args.dataset}/distributed_metrics_{args.fold}.json", "w") as f:
         json.dump(metrics_distributed, f)
 
     # Single Plot
-    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, model.__class__.__name__, show=False)
-    best_loss_round = cfg.n_rounds_dict[cfg.dataset_name] - 1
+    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, config, show=False)
+    best_loss_round = config['rounds'] - 1 # take the last round model
     
     # Privacy estimate plot
     # utils.plot_audit_metrics(client_id, model_name, dataset_name, show=True):
 
     # Load the best model
-    model.load_state_dict(torch.load(f"checkpoints/{model.__class__.__name__}/{cfg.dataset_name}/model_{best_loss_round}.pth", weights_only=False))
+    model.load_state_dict(torch.load(f"checkpoints/{config["model_name"]}/{args.dataset}/model_{best_loss_round}.pth", weights_only=False))
 
     # Evaluate the model on the test set
-    criterion = F.mse_loss if cfg.n_classes_dict[cfg.dataset_name]==1 else F.cross_entropy
+    criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
     loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
     print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, {'f1_score'}: {metric_test*100:.2f} \033[0m\n")
 

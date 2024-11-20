@@ -4,10 +4,9 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import models
 
-# Training settings
-batch_size = 64
-test_batch_size = 64
-# n_rounds = 30
+# Training settings (for everyone)
+dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+k_folds = 2  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
@@ -23,37 +22,7 @@ k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
 delta = 1e-5  # Targeted delta for differential privacy
 
-# dataset settings
-dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-client_number = 10
-
-# Cross validation
-k_folds = 2  # Set 1 to disable cross validation
-
-# Model settings
-n_classes_dict = {
-    "mnist": 10,  # 15
-    "cifar10": 10,
-    "fmnist": 10,
-    "breast": 2,
-    "diabetes": 2,
-    "adult": 2,
-    "airline": 1,  # regression
-    "lsst": 12,
-}
-
-n_rounds_dict = {
-    "mnist": 4,  # 15
-    "cifar10": 20,
-    "fmnist": 15,
-    "breast": 200,
-    "diabetes": 20,
-    "adult": 50,
-    "airline": 1000,
-    "lsst": 100,
-}
-
-
+# Experiments config
 experiments = {
     "mnist": {
         "dataset": "mnist",
@@ -66,6 +35,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.LeNet5,
+        "model_name": "LeNet5",
         "model_args": {
             "in_channels": 1,
             "num_classes": 10,
@@ -83,6 +53,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.ResNet9,
+        "model_name": "ResNet9",
         "model_args": {
             "in_channels": 3,
             "num_classes": 10,
@@ -100,6 +71,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.LeNet5,
+        "model_name": "LeNet5",
         "model_args": {
             "in_channels": 1,
             "num_classes": 10,
@@ -117,6 +89,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.MLP,
+        "model_name": "MLP",
         "model_args": {
             "input_size": 30,
             "num_classes": 2,
@@ -134,6 +107,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.MLP,
+        "model_name": "MLP",
         "model_args": {
             "input_size": 21,
             "num_classes": 2,
@@ -151,6 +125,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.MLP,
+        "model_name": "MLP",
         "model_args": {
             "input_size": 105,
             "num_classes": 2,
@@ -168,6 +143,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.LinearModel,
+        "model_name": "LinearModel",
         "model_args": {
             "input_size": 30,
             "num_classes": 1,
@@ -184,6 +160,7 @@ experiments = {
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.TransformerModelFlexible,
+        "model_name": "TransformerModelFlexible",
         "model_args": {
             "input_size": 6,
             "sequence_length": 36,
