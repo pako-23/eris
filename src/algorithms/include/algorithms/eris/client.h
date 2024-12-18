@@ -45,7 +45,7 @@ public:
    */
   explicit ErisClient(const std::string &router_address,
                       const std::string &subscribe_address)
-      : dealer_{ZMQ_DEALER}, subscriber_{ZMQ_SUB}, running_{true},
+      : dealer_{ZMQ_DEALER}, subscriber_{ZMQ_SUB}, running_{false},
         aggr_address_{}, aggr_submit_port_{0}, aggr_publish_port_{0},
         options_{}, splitter_{}, mu_{}, cv_{}, submit_{}, publish_{},
         coordinator_updates_{}, aggregator_{nullptr}, aggregator_thread_{} {
@@ -90,12 +90,10 @@ public:
    * returns false.
    */
   bool train(void) override {
-    if (!join()) {
-      spdlog::error("failed to join the training");
-      return false;
-    }
-
     uint32_t round = 0;
+    if (!running_)
+      return false;
+
     while (round != options_.rounds()) {
       fit();
 
@@ -130,7 +128,15 @@ public:
     return true;
   }
 
-private:
+  /**
+   * Returns the splitter used to split weights.
+   *
+   * @return The splitter used to split weights at each round.
+   */
+  inline const RandomSplit &get_splitter(void) const noexcept {
+    return splitter_;
+  }
+
   /**
    * It tries to join the training process. It will try to obtain the
    * configurations from the configured ErisCoordinator, and it will perform the
@@ -197,7 +203,7 @@ private:
         goto joining_failed;
       }
     listen_coordinator_updates();
-
+    running_ = true;
     return true;
 
   joining_failed:
@@ -205,6 +211,7 @@ private:
     return false;
   }
 
+private:
   /**
    * It tries to register a new aggregator for a specific fragment. It does no
    * peform any locking of the client state.

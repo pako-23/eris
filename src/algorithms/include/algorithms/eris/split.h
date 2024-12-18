@@ -55,6 +55,15 @@ public:
   std::vector<eris::WeightSubmissionRequest>
   split(const std::vector<float> &parameters, uint32_t round) noexcept;
 
+  /**
+   * Returns the mapping from weight to aggregator identifier.
+   *
+   * @return The mapping from weight to aggregator identifier.
+   */
+  const std::vector<uint32_t> &get_mapping(void) const noexcept {
+    return aggregator_mapping_;
+  }
+
 private:
   std::vector<uint32_t>
       aggregator_mapping_; /**< The mapping from parameter position to assigned

@@ -141,7 +141,10 @@ def start_node(
 
     # Start training
     start_time = time.time()
-    training_success = client.train()
+    training_success = client.join()
+    if training_success:
+        # TODO: call client.get_split_mask() to obtain the split mask
+        training_success = client.train()
 
     if training_success:
         print("Client finished the training successfully")

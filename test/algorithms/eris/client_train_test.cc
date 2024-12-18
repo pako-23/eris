@@ -112,6 +112,7 @@ TEST_F(ClientTrainFailedTest, JoinClientFailed) {
 
   std::future<void> response_received = AddResponse(res);
 
+  EXPECT_FALSE(client_.join());
   EXPECT_FALSE(client_.train());
 
   eris::StateRequest req = GetRequest();
@@ -133,6 +134,7 @@ TEST_F(ClientTrainFailedTest, JoinAggregatorFailed) {
 
   std::future<void> response_received = AddResponse(res);
   EXPECT_TRUE(client_.set_aggregator_config("127.0.0.1", 10, 20));
+  EXPECT_FALSE(client_.join());
   EXPECT_FALSE(client_.train());
 
   eris::StateRequest req = GetRequest();

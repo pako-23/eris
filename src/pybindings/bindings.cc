@@ -4,6 +4,7 @@
 #include "erisfl/coordinator.h"
 #include "util/networking.h"
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <pybind11/attr.h>
 #include <pybind11/cast.h>
@@ -36,8 +37,10 @@ public:
 class PyClientBase {
 public:
   virtual ~PyClientBase(void) = default;
+  virtual bool join(void) = 0;
   virtual bool train(void) = 0;
   virtual py::list get_parameters(void) = 0;
+  virtual py::list get_split_mask(void) = 0;
   virtual void set_parameters(const py::list &parameters) = 0;
   virtual void fit(void) = 0;
   virtual void evaluate(void) = 0;
@@ -47,12 +50,20 @@ class PyClient : public PyClientBase {
 public:
   using PyClientBase::PyClientBase;
 
+  bool join(void) override {
+    PYBIND11_OVERRIDE_PURE(bool, PyClientBase, join, );
+  }
+
   bool train(void) override {
     PYBIND11_OVERRIDE_PURE(bool, PyClientBase, train, );
   }
 
   py::list get_parameters(void) override {
     PYBIND11_OVERRIDE_PURE(py::list, PyClientBase, get_parameters, );
+  }
+
+  py::list get_split_mask(void) override {
+    PYBIND11_OVERRIDE_PURE(py::list, PyClientBase, get_split_mask, );
   }
 
   void set_parameters(const py::list &parameters) override {
@@ -74,8 +85,36 @@ public:
 
   bool train(void) override { return client_.train(); }
 
+  bool join(void) override { return client_.join(); }
+
   py::list get_parameters(void) override {
     PYBIND11_OVERRIDE_PURE(py::list, PyErisClient, get_parameters, );
+  }
+
+  py::list get_split_mask(void) override {
+    const std::vector<uint32_t> &mapping = client_.get_splitter().get_mapping();
+    py::gil_scoped_acquire acquire;
+    py::list list;
+
+    size_t shape = 0;
+    size_t i = 0;
+    while (i < mapping.size()) {
+      size_t items = std::accumulate(client_.shapes_[shape].begin(),
+                                     client_.shapes_[shape].end(), 1,
+                                     std::multiplies<size_t>());
+
+      py::array_t<uint32_t> array(client_.shapes_[shape]);
+      auto layer = array.request();
+
+      for (size_t j = 0; j < items; ++j)
+        ((uint32_t *)layer.ptr)[j] = mapping[i++];
+
+      list.append(array);
+      ++shape;
+    }
+
+    py::gil_scoped_release release;
+    return list;
   }
 
   void set_parameters(const py::list &parameters) override {
@@ -162,6 +201,8 @@ private:
     void evaluate(void) override { client_->evaluate(); };
 
   private:
+    friend class PyErisClient;
+
     PyErisClient *client_;
 
     bool shapes_initialized;
@@ -204,8 +245,10 @@ PYBIND11_MODULE(eris, m) {
 
   py::class_<PyClientBase, PyClient>(m, "Client")
       .def(py::init<>())
+      .def("join", &PyClientBase::join)
       .def("train", &PyClientBase::train)
       .def("get_parameters", &PyClientBase::get_parameters)
+      .def("get_split_mask", &PyClientBase::get_split_mask)
       .def("set_parameters", &PyClientBase::set_parameters,
            py::arg("parameters"))
       .def("fit", &PyClientBase::fit)
@@ -214,9 +257,13 @@ PYBIND11_MODULE(eris, m) {
   py::class_<PyErisClient, PyClientBase,
              std::unique_ptr<PyErisClient, py::nodelete>>(m, "ErisClient")
       .def(py::init<const std::string &, const std::string &>())
+      .def("join", &PyErisClient::join,
+           py::call_guard<py::gil_scoped_release>())
       .def("train", &PyErisClient::train,
            py::call_guard<py::gil_scoped_release>())
       .def("get_parameters", &PyErisClient::get_parameters,
+           py::call_guard<py::gil_scoped_acquire>())
+      .def("get_split_mask", &PyErisClient::get_split_mask,
            py::call_guard<py::gil_scoped_acquire>())
       .def("set_parameters", &PyErisClient::set_parameters,
            py::arg("parameters"))
