@@ -14,18 +14,26 @@ seed = 1
 transform = None
 
 # Privacy auditing
-privacy_audit = False
-canary_frac = 0.2  # Fraction of canary samples per client
-score_fn = "whitebox"  # Options: "whitebox", "blackbox"
+privacy_audit = True
+canary_frac = 0.5  # Fraction of canary samples per client
+score_fn = "blackbox"  # Options: "whitebox", "blackbox"
 p_value = 0.05  # Significance level for hypothesis testing
 k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
-delta = 1e-5  # Targeted delta for differential privacy
+
+# Differential Privacy
+local_dp = True
+clipping_norm = 1.0 # (float) limits the L2 norm of each data point’s contribution, affecting the sensitivity of the function (default: 1.0)
+sensitivity = 1.0 # (float) defines the maximum change to the function’s output that any single input can cause (default: 1.0)
+epsilon = 70.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
+delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is used to account for the probability of the privacy guarantee not holding (default: 1e-5)
+
 
 # Experiments config
 experiments = {
     "mnist": {
         "dataset": "mnist",
+        "client_train_samples": 1000,
         "rounds": 5,  # Originally 15
         "clients": 10,
         "batch": 64,
@@ -44,7 +52,9 @@ experiments = {
         "n_classes": 10,
     },
     "cifar10": {
-        "rounds": 2,
+        "dataset": "cifar10",
+        "client_train_samples": 1000,
+        "rounds": 2, # Originally 20
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -62,7 +72,9 @@ experiments = {
         "n_classes": 10,
     },
     "fmnist": {
-        "rounds": 2,
+        "dataset": "fmnist",
+        "client_train_samples": 1000,
+        "rounds": 2, # Originally 15
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -80,7 +92,9 @@ experiments = {
         "n_classes": 10,
     },
     "breast": {
-        "rounds": 1,
+        "dataset": "breast",
+        "client_train_samples": 100,
+        "rounds": 2, # Originally 200
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -98,7 +112,9 @@ experiments = {
         "n_classes": 2,
     },
     "diabetes": {
-        "rounds": 1,
+        "dataset": "diabetes",
+        "client_train_samples": 1000,
+        "rounds": 2, # Originally 20
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -116,7 +132,9 @@ experiments = {
         "n_classes": 2,
     },
     "adult": {
-        "rounds": 2,
+        "dataset": "adult",
+        "client_train_samples": 1000,
+        "rounds": 2, # Originally 50
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -134,7 +152,9 @@ experiments = {
         "n_classes": 2,
     },
     "airline": {
-        "rounds": 2,
+        "dataset": "airline",
+        "client_train_samples": 1000,
+        "rounds": 2, # Originally 1000
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -151,7 +171,9 @@ experiments = {
         "n_classes": 1,
     },
     "lsst": {
-        "rounds": 2,
+        "dataset": "lsst",
+        "client_train_samples": 1000,
+        "rounds": 2, # Originally 100
         "clients": 10,
         "batch": 64,
         "batch_test": 64,

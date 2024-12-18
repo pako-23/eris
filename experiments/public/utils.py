@@ -9,10 +9,6 @@ import torch
 import os
 import csv
 from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
-from flwr.common.differential_privacy import ( # type: ignore
-    add_localdp_gaussian_noise_to_params,
-    compute_clip_model_update,
-)
 from flwr.common import (
     NDArrays,
     ndarrays_to_parameters,
@@ -109,6 +105,8 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True):
     if cfg.privacy_audit:
         accuracy_mia = metrics_distributed['accuracy_mia']
         privacy_estimate = metrics_distributed['privacy_estimate']
+        acc_accuracy_mia = metrics_distributed['accumulative_accuracy_mia']
+        acc_privacy_estimate = metrics_distributed['accumulative_privacy_estimate']
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         
         # -------------------- Subplot 1: Loss --------------------
@@ -147,10 +145,14 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True):
         # -------------------- Subplot 3: MIA Accuracy --------------------
         ax = axs[1, 0]
         ax.plot(accuracy_mia, label='MIA Accuracy', color='red')
+        ax.plot(acc_accuracy_mia, label='Accumulative MIA Accuracy', color='black')
         
         # Identify and plot the maximum MIA accuracy point
         max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
+        max_acc_accuracy_mia_index = acc_accuracy_mia.index(max(acc_accuracy_mia))
         ax.scatter(max_accuracy_mia_index, accuracy_mia[max_accuracy_mia_index], color='red', marker='*', s=150, label='Max MIA Accuracy')
+        ax.scatter(max_acc_accuracy_mia_index, acc_accuracy_mia[max_acc_accuracy_mia_index], color='black', marker='*', s=150, label='Max Acc. MIA Accuracy')
+
         
         # Set labels and title
         ax.set_xlabel('Rounds')
@@ -162,10 +164,13 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True):
         # -------------------- Subplot 4: Privacy Estimate --------------------
         ax = axs[1, 1]
         ax.plot(privacy_estimate, label='Privacy Estimate (Epsilon)', color='purple')
+        ax.plot(acc_privacy_estimate, label='Acc. Privacy Estimate (Epsilon)', color='blue')
         
         # Identify and plot the maximum privacy estimate point
         max_privacy_index = privacy_estimate.index(max(privacy_estimate))
+        max_acc_privacy_index = acc_privacy_estimate.index(max(acc_privacy_estimate))
         ax.scatter(max_privacy_index, privacy_estimate[max_privacy_index], color='purple', marker='*', s=150, label='Max Privacy Leakage')
+        ax.scatter(max_acc_privacy_index, acc_privacy_estimate[max_acc_privacy_index], color='blue', marker='*', s=150, label='Max Acc. Privacy Leakage')
         
         # Set labels and title
         ax.set_xlabel('Rounds')
@@ -185,7 +190,9 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True):
             Maximum Accuracy: round {max_accuracy_index + 1}, value {accuracy[max_accuracy_index] * 100:.2f}% 
             Maximum F1 Score: round {max_f1score_index + 1}, value {f1_score[max_f1score_index] * 100:.2f}%
             Maximum MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%
-            Maximum Epsilon (Privacy): round {max_privacy_index + 1}, value {privacy_estimate[max_privacy_index]:.3f}\n
+            Maximum Epsilon (Privacy): round {max_privacy_index + 1}, value {privacy_estimate[max_privacy_index]:.3f}
+            Maximum Accumulative MIA Accuracy: round {max_acc_accuracy_mia_index + 1}, value {acc_accuracy_mia[max_acc_accuracy_mia_index] * 100:.2f}%
+            Maximum Accumulative Epsilon (Privacy): round {max_acc_privacy_index + 1}, value {acc_privacy_estimate[max_acc_privacy_index]:.3f}\n
             """
         )
         
@@ -291,6 +298,36 @@ def save_client_metrics(round_num, loss, accuracy, f1_score, client_id=1, histor
         writer.writerow([round_num, loss, accuracy, f1_score])
 
 
+def get_norm(input_arrays: NDArrays) -> float:
+    """Compute the L2 norm of the flattened input."""
+    array_norms = [np.linalg.norm(array.flat) for array in input_arrays]
+    # pylint: disable=consider-using-generator
+    return float(np.sqrt(sum([norm**2 for norm in array_norms])))
+
+        
+def my_compute_clip_model_update(
+    param1: NDArrays, param2: NDArrays, clipping_norm: float
+) -> None:
+    """Compute model update (param1 - param2) and clip it.
+    
+    By FlatClip method of the paper: https://arxiv.org/abs/1710.06963
+
+    Then add the clipped value to param1."""
+    model_update = [np.subtract(x, y) for (x, y) in zip(param1, param2)]
+    # clip_inputs_inplace(model_update, clipping_norm)
+    
+    input_norm = get_norm(model_update)
+    scaling_factor = min(1, clipping_norm / input_norm)
+    
+    for ii in range(len(model_update)):
+        model_update[ii] *= scaling_factor
+
+    for i, _ in enumerate(param2):
+        param1[i] = param2[i] + model_update[i]
+    
+    return param1
+
+
 class LocalDpMod:
     """
     Modifier for local differential privacy.
@@ -308,13 +345,13 @@ class LocalDpMod:
     """
 
     def __init__(
-        self, clipping_norm: float, sensitivity: float, epsilon: float, delta: float
+        self, clipping_norm: float, epsilon: float, delta: float, client_id: int = 1
     ) -> None:
         if clipping_norm <= 0:
             raise ValueError("The clipping norm should be a positive value.")
 
-        if sensitivity < 0:
-            raise ValueError("The sensitivity should be a non-negative value.")
+        # if sensitivity < 0:
+        #     raise ValueError("The sensitivity should be a non-negative value.")
 
         if epsilon < 0:
             raise ValueError("Epsilon should be a non-negative value.")
@@ -323,9 +360,10 @@ class LocalDpMod:
             raise ValueError("Delta should be a non-negative value.")
 
         self.clipping_norm = clipping_norm
-        self.sensitivity = sensitivity
+        self.sensitivity = clipping_norm
         self.epsilon = epsilon
         self.delta = delta
+        self.client_id = client_id
 
     def __call__(
         self, server_to_client_params: NDArrays, client_to_server_params: NDArrays
@@ -340,24 +378,18 @@ class LocalDpMod:
         """
         
         # Clip the client update
-        compute_clip_model_update(
+        params_clipped = my_compute_clip_model_update(
             client_to_server_params,
             server_to_client_params,
             self.clipping_norm,
         )
 
-        params_clipped = ndarrays_to_parameters(client_to_server_params)
-
-        # Add noise to model params
-        add_localdp_gaussian_noise_to_params(
-            params_clipped, self.sensitivity, self.epsilon, self.delta
-        )
-
-        # noise_value_sd = (
-        #     self.sensitivity * np.sqrt(2 * np.log(1.25 / self.delta)) / self.epsilon
-        # )
-        
-        return parameters_to_ndarrays(params_clipped)
+        # Add noise to model params        
+        std_dev = self.sensitivity * np.sqrt(2 * np.log(1.25 / self.delta)) / self.epsilon        
+        for ii in range(len(params_clipped)):
+            params_clipped[ii] += np.random.normal(0, std_dev, params_clipped[ii].shape)
+                
+        return params_clipped
 
 # Plotting the metrics
 def plot_mean_std_metrics(plot_metrics, name):
@@ -495,7 +527,7 @@ def parameters_to_1d(parameters):
 
 
 # save some auditing metrics
-def save_audit_metrics(round_num, accuracy, privacy_estimate, client_id=1, history_folder="histories/"):
+def save_audit_metrics(round_num, accuracy, privacy_estimate, acc_accuracy, acc_privacy_estimate, client_id=1, history_folder="histories/"):
 
     # Create folder for client
     folder = history_folder + f"client_{client_id}/"
@@ -510,10 +542,10 @@ def save_audit_metrics(round_num, accuracy, privacy_estimate, client_id=1, histo
         writer = csv.writer(file)
         
         if not file_exists:
-            writer.writerow(['Round', 'Accuracy', 'Privacy'])
+            writer.writerow(['Round', 'Accuracy', 'Privacy', 'Accumulative Accuracy', 'Accumulative Privacy'])
 
         # Write the metrics
-        writer.writerow([round_num, accuracy, privacy_estimate])
+        writer.writerow([round_num, accuracy, privacy_estimate, acc_accuracy, acc_privacy_estimate])
 
 
 # plot and save plot on client side

@@ -16,11 +16,12 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import flwr as fl
 import argparse
-from torch.utils.data import random_split
+from torch.utils.data import Subset, random_split
 import torch.nn.functional as F
 import numpy as np
 import math
 import scipy 
+import copy
 
 import sys
 import os
@@ -74,13 +75,34 @@ class FlowerClient(fl.client.NumPyClient):
         self.privacy_audit = privacy_audit
         self.privacy_estimate = -1
         self.accuracy_mia = -1
+        self.acc_privacy_estimate = -1
+        self.acc_accuracy_mia = -1
         self.config = config
-        
-        if score_fn == 'whitebox':
-            self.score_fn = self.score_with_pseudograd_batch
-        else:
-            NotImplementedError(f'score function {score_fn} is not known')
+        self.acc_scores = None
  
+        # prepare dataset auditing
+        canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
+        self.n_canaries = len(canaries)
+        self.scores = np.zeros(self.n_canaries)
+
+        # subsample canaries & make new dataloader
+        true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(self.n_canaries) * 0.5).sample()
+        self.true_in_out = true_in_out.numpy()
+        canaries_in_idx = torch.nonzero(true_in_out)
+        subsampled_train_data = torch.utils.data.ConcatDataset([
+            non_canaries,
+            torch.utils.data.Subset(canaries, canaries_in_idx)
+        ])
+        self.subsampled_train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
+        self.canary_loader = DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
+
+        # local differential privacy
+        if cfg.local_dp:
+            self.dp_funtion = utils.LocalDpMod(cfg.clipping_norm, cfg.epsilon, cfg.delta, self.client_id)
+            noise_value_sd = (cfg.sensitivity * np.sqrt(2 * np.log(1.25 / cfg.delta)) / cfg.epsilon)
+            if client_id == 1:
+                print(f"\n\033[94mLocal Differential Privacy with noise_value_sd: {noise_value_sd}\033[0m\n")
+
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
 
@@ -91,71 +113,54 @@ class FlowerClient(fl.client.NumPyClient):
         self.model.load_state_dict(state_dict, strict=True)
 
 
-    def fit(self, parameters, config):
-        self.set_parameters(parameters)  
-        
+    def fit(self, params_in, config):
+        self.set_parameters(params_in)  
+
+        # privacy auditing
         if self.privacy_audit:
-            # Privacy auditing (We follow the procedure from https://proceedings.neurips.cc/paper_files/paper/2023/hash/9a6f6e0d6781d1cb8689192408946d73-Abstract-Conference.html)
-            # choose canaries from the training data
-            canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
-            n_canaries = len(canaries)
-
-            # subsample canaries & make new dataloader
-            true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(n_canaries) * 0.5).sample()
-            canaries_in_idx = torch.nonzero(true_in_out)
-            canaries_out_idx = torch.nonzero(1 - true_in_out)
-            subsampled_train_data = torch.utils.data.ConcatDataset([
-                non_canaries,
-                torch.utils.data.Subset(canaries, canaries_in_idx)
-            ])
-            self.train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
-
             # train
             for epoch in range(config["local_epochs"]):
-                self.train_fn(self.model, self.device, self.train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+                self.train_fn(self.model, self.device, self.subsampled_train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+            
+            # Local Differential Privacy
+            if cfg.local_dp:
+                params_out = self.dp_funtion(params_in, self.get_parameters(config))
+                self.set_parameters(params_out)
+            else:
+                params_out = self.get_parameters(config)
 
             # normalize client update vector
-            params_out = self.get_parameters(config)
-            client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(parameters)
-            client_update /= np.linalg.norm(client_update)
+            client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in)
+            client_update = client_update / np.linalg.norm(client_update)
 
-            # compute scores for each canary, used to predict membership
+            # compute scores for each canary, used to predict membership            
             scores = []
-            # self.set_parameters(parameters)
-            dataloader = torch.utils.data.DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
-            for samples, targets in dataloader:
-                batch_scores = self.score_fn(samples, targets, client_update)
-                scores.extend(batch_scores)
-            
-            # self.set_parameters(params_out)
-            
-            # guess which canaries were in the training data
-            true_in_out = true_in_out.numpy()
-            score_indices_sorted = np.argsort(np.asarray(scores))
-            classified_in = score_indices_sorted[:int(n_canaries * self.k_plus + 1)]
-            classified_out = score_indices_sorted[int(n_canaries * (1 - self.k_min) + 1):]
-            abstained = np.setdiff1d(score_indices_sorted, np.concatenate((classified_in, classified_out)))
-            classification = np.zeros(n_canaries)
-            classification[classified_in] = 1
-            classification[abstained] = 2
-            W = true_in_out == classification
-            self.accuracy_mia = W.sum() / (len(classified_in) + len(classified_out))
-            num_correct = W.sum()
+            # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
+            if cfg.score_fn == 'whitebox':
+                self.set_parameters(params_in)
+                for samples, targets in self.canary_loader:
+                    scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
+                self.set_parameters(params_out)
+            if cfg.score_fn == 'blackbox':
+                for samples, targets in self.canary_loader:
+                    scores.extend(self.score_blackbox_batch(samples, targets, client_update))
+            else:
+                NotImplementedError(f'score function {cfg.score_fn} is not known')
 
-            # compute empirical privacy estimate, which should be < epsilon w/ high probability
-            self.privacy_estimate = utils.get_eps_audit(
-                m=n_canaries,
-                r=len(classified_in) + len(classified_out),
-                v=num_correct,
-                delta=cfg.delta,
-                p=0.05)
+            # accumulative leakage
+            if self.acc_scores is None:
+                self.acc_scores = copy.deepcopy(scores)
+            else:
+                self.acc_scores = self.acc_scores + np.asarray(scores)
 
-            # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
-            # privacy_estimate = np.max([np.log(1 - cfg.delta - fpr) - np.log(fnr), 
-                                # np.log(1 - cfg.delta - fnr) - np.log(fpr)])
+            # lower-bound privacy budget evaluation
+            self.accuracy_mia, self.privacy_estimate = self.evaluate_privacy(scores)
+            self.acc_accuracy_mia, self.acc_privacy_estimate = self.evaluate_privacy(self.acc_scores)
             
-            utils.save_audit_metrics(config["current_round"], self.accuracy_mia, self.privacy_estimate, client_id=self.client_id,
-                                            history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/")
+            utils.save_audit_metrics(config["current_round"], self.accuracy_mia, self.privacy_estimate, self.acc_accuracy_mia, 
+                                    self.acc_privacy_estimate, client_id=self.client_id,
+                                    history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
+                                    )
 
         
         else:
@@ -163,7 +168,11 @@ class FlowerClient(fl.client.NumPyClient):
             for epoch in range(config["local_epochs"]):
                 self.train_fn(self.model, self.device, self.train_loader, self.optimizer, self.criterion, epoch, self.client_id)
             
-            params_out = self.get_parameters(config)
+            # Local Differential Privacy
+            if cfg.local_dp:
+                params_out = self.dp_funtion(params_in, self.get_parameters(config))
+            else:
+                params_out = self.get_parameters(config)
                     
         return params_out, self.num_examples["train"], {}
     
@@ -180,10 +189,46 @@ class FlowerClient(fl.client.NumPyClient):
             "accuracy": float(accuracy),
             "f1_score": float(f1_score),
             "privacy_estimate": self.privacy_estimate,
-            "accuracy_mia": self.accuracy_mia
+            "accuracy_mia": self.accuracy_mia,
+            "accumulative_privacy_estimate": self.acc_privacy_estimate,
+            "accumulative_accuracy_mia": self.acc_accuracy_mia
         }
 
 
+    def evaluate_privacy(self, scores):
+        ground_truth = copy.deepcopy(self.true_in_out)
+        score_indices_sorted = np.argsort(scores)[::-1]
+        classified_in = score_indices_sorted[:int(self.n_canaries * self.k_plus + 1)]
+        classified_out = score_indices_sorted[int(self.n_canaries * (1 - self.k_min) + 1):]
+        abstained = np.setdiff1d(score_indices_sorted, np.concatenate((classified_in, classified_out)))
+        classification = np.zeros(self.n_canaries)
+        classification[classified_in] = 1
+        classification[abstained] = 2
+        ground_truth[abstained] = 2
+        W = ground_truth == classification
+        num_correct = W.sum() - len(abstained)
+        accuracy_mia = num_correct / (self.n_canaries - len(abstained))
+        
+        # tpr = np.sum(classification == true_in_out) / len(canaries_in_idx)
+        # tnr = np.sum((1 - classification) == (1 - true_in_out)) / len(canaries_out_idx)
+        # fpr = np.sum(classification == (1 - true_in_out)) / len(canaries_out_idx)
+        # fnr = np.sum((1 - classification) == true_in_out) / len(canaries_in_idx)
+
+        # compute empirical privacy estimate, which should be < epsilon w/ high probability
+        privacy_estimate = utils.get_eps_audit(
+            m=self.n_canaries,
+            r=self.n_canaries - len(abstained),
+            v=num_correct,
+            delta=cfg.delta,
+            p=0.05)
+        
+        # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
+        # privacy_estimate = np.max([np.log(1 - cfg.delta - fpr) - np.log(fnr), 
+                            # np.log(1 - cfg.delta - fnr) - np.log(fpr)])
+                            
+        return accuracy_mia, privacy_estimate
+    
+    
     def score_with_pseudograd_batch(self, samples, targets, client_update):
         '''
         Computes membership inference attack scores for a batch by 
@@ -203,11 +248,25 @@ class FlowerClient(fl.client.NumPyClient):
         for loss in losses:
             # Compute gradients for each sample
             audit_grad = torch.autograd.grad(loss, self.model.parameters(), retain_graph=True)
-            audit_grad = np.concatenate([x.cpu().flatten().numpy() for x in audit_grad])
-            score = np.dot(client_update, -audit_grad)
+            # audit_grad = parameters_to_1d(audit_grad)
+            audit_grad = np.concatenate([x.cpu().flatten() for x in audit_grad])
+            score = np.dot(client_update, - audit_grad)
             scores.append(score)
         
         return scores
+
+
+    def score_blackbox_batch(self, samples, targets, client_update):
+        with torch.no_grad():
+            self.model.to(self.device)  # Ensure model is on the correct device
+            samples = samples.to(self.device)
+            targets = targets.to(self.device)
+            
+            # Forward pass
+            predictions = self.model(samples)
+            losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none').cpu()
+
+            return -losses
 
 
 
@@ -247,11 +306,20 @@ def main()->None:
     data = torch.load(f'../data/client_datasets/IID_data_client_{args.id}.pt', weights_only=False)
     
     # Split the dataset
-    val_size = int(len(data) * 0.2)  # 20% for validation
-    train_size = len(data) - val_size  # 80% for training
+    train_size = config['client_train_samples']
+    val_size = int(train_size * 0.3) # 30% for validation
+    total_requested = train_size + val_size
+    if total_requested > len(data):
+        raise ValueError(
+            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+        )
     torch.manual_seed(cfg.seed)
-    train_dataset, val_dataset = random_split(data, [train_size, val_size])
-
+    indices = torch.randperm(len(data))[:total_requested]
+    subset_data = Subset(data, indices)
+    train_dataset, val_dataset = random_split(
+        subset_data, [train_size, val_size],
+        generator=torch.Generator().manual_seed(cfg.seed)
+)
     num_examples = {
         "train": train_size,
         "val": val_size

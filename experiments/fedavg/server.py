@@ -73,6 +73,10 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     privacy_estimate_list = [m["privacy_estimate"] for _, m in metrics]
     privacy_estimate = max(privacy_estimate_list)
     # validities = [num_examples * m["validity"] for num_examples, m in metrics]
+    acc_accuracy_mia_list = [m["accumulative_accuracy_mia"] for _, m in metrics]
+    acc_accuracy_mia = max(acc_accuracy_mia_list)
+    acc_privacy_estimate_list = [m["accumulative_privacy_estimate"] for _, m in metrics]
+    acc_privacy_estimate = max(acc_privacy_estimate_list)
     
     examples = [num_examples for num_examples, _ in metrics]
     # Aggregate and return custom metric (weighted average)
@@ -81,7 +85,9 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "f1_score": sum(f1_scores) / sum(examples),
         # "accuracy_mia": sum(accuracy_mia) / sum(examples) if accuracy_mia[0] > 0 else None,
         "accuracy_mia": accuracy_mia if accuracy_mia > 0 else None,
-        "privacy_estimate": privacy_estimate if privacy_estimate > -0.5 else None
+        "privacy_estimate": privacy_estimate if privacy_estimate > -0.5 else None,
+        "accumulative_accuracy_mia": acc_accuracy_mia if acc_accuracy_mia > 0 else None,
+        "accumulative_privacy_estimate": acc_privacy_estimate if acc_privacy_estimate > -0.5 else None
         }
 
 def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
@@ -310,7 +316,9 @@ def main() -> None:
         'accuracy': [k[1] for k in history.metrics_distributed['accuracy']],
         'f1_score': [k[1] for k in history.metrics_distributed['f1_score']],
         'accuracy_mia': [k[1] for k in history.metrics_distributed['accuracy_mia']],
-        'privacy_estimate': [k[1] for k in history.metrics_distributed['privacy_estimate']]
+        'privacy_estimate': [k[1] for k in history.metrics_distributed['privacy_estimate']],
+        'accumulative_accuracy_mia': [k[1] for k in history.metrics_distributed['accumulative_accuracy_mia']],
+        'accumulative_privacy_estimate': [k[1] for k in history.metrics_distributed['accumulative_privacy_estimate']]
     }
 
     # Save loss and accuracy to a file
