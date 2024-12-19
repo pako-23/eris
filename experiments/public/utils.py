@@ -550,7 +550,7 @@ def save_audit_metrics(round_num, accuracy, privacy_estimate, acc_accuracy, acc_
         writer = csv.writer(file)
         
         if not file_exists:
-            writer.writerow(['Round', 'Accuracy', 'Privacy', 'Accumulative Accuracy', 'Accumulative Privacy'])
+            writer.writerow(['Round', 'MIA Accuracy', 'Privacy', 'Accumulative MIA Accuracy', 'Accumulative Privacy'])
 
         # Write the metrics
         writer.writerow([round_num, accuracy, privacy_estimate, acc_accuracy, acc_privacy_estimate])

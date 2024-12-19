@@ -49,7 +49,6 @@ class FlowerClient(fl.client.NumPyClient):
                  device: torch.device,
                  privacy_audit: bool = True,
                  canary_frac: float = 0.2, 
-                 score_fn: str = 'whitebox', 
                  p_value: float = 0.05,
                  k_plus: float = 1 / 3, 
                  k_min: float = 1 / 3,
@@ -161,7 +160,6 @@ class FlowerClient(fl.client.NumPyClient):
                                     self.acc_privacy_estimate, client_id=self.client_id,
                                     history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
                                     )
-
         
         else:
             # train
@@ -347,7 +345,6 @@ def main()->None:
                         device,
                         privacy_audit=cfg.privacy_audit,
                         canary_frac=cfg.canary_frac,
-                        score_fn=cfg.score_fn,
                         p_value=cfg.p_value,
                         k_plus=cfg.k_plus,
                         k_min=cfg.k_min,

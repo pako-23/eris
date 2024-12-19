@@ -23,7 +23,7 @@ k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
 
 # Differential Privacy
-local_dp = True
+local_dp = False
 clipping_norm = 1.0 # (float) limits the L2 norm of each data point’s contribution, affecting the sensitivity of the function (default: 1.0)
 sensitivity = 1.0 # (float) defines the maximum change to the function’s output that any single input can cause (default: 1.0)
 epsilon = 70.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)

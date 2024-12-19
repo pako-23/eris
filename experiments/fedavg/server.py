@@ -339,7 +339,11 @@ def main() -> None:
     # Evaluate the model on the test set
     criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
     loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
-    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, {'f1_score'}: {metric_test*100:.2f} \033[0m\n")
+    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \
+                      Max MIA Accuracy {max(metrics_distributed["accuracy_mia"])} \
+                      Max Privacy Estimate {max(metrics_distributed["privacy_estimate"])} \
+                      Max Accumulative MIA Accuracy {max(metrics_distributed["accumulative_accuracy_mia"])} \
+                      Max Accumulative Privacy Estimate {max(metrics_distributed["accumulative_privacy_estimate"])} \033[0m\n")
 
     # Print training time in minutes (grey color)
     training_time = round((time.time() - start_time)/60, 2)
@@ -350,7 +354,11 @@ def main() -> None:
     metrics = {
         "loss": loss_test,
         "accuracy": accuracy_test,
-        'f1_score': metric_test,
+        "f1_score": metric_test,
+        "max_accuracy_mia": max(metrics_distributed["accuracy_mia"]),
+        "max_privacy_estimate": max(metrics_distributed["privacy_estimate"]),
+        "max_acc_accuracy_mia": max(metrics_distributed["accumulative_accuracy_mia"]),
+        "max_acc_privacy_estimate": max(metrics_distributed["accumulative_privacy_estimate"]),
         "time": training_time,
     }
     np.save(f'test_metrics_fold_{args.fold}.npy', metrics)

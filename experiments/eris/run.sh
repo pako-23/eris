@@ -58,9 +58,9 @@ for fold in $(seq 1 $k_folds); do
     fi
     
     # Creating dataset
-    cd ../data
-    python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-    cd ../eris
+    # cd ../data
+    # python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+    # cd ../eris
 
     echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 
