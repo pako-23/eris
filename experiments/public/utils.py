@@ -679,6 +679,131 @@ def plot_client_metrics(client_id, config, show=True):
         """
     )
 
+
+def aggregate_client_data(config):
+    """
+    Aggregates audit.csv and metrics.csv files from all clients and computes aggregated metrics per round.
+
+    """
+    # Define metric categories
+    audit_max_metrics = ['Privacy', 'Accumulative Privacy', 'MIA Accuracy', 'Accumulative MIA Accuracy']
     
+    metrics_average = ['Loss', 'Accuracy', 'f1_score']
+    
+    # Initialize dictionaries to hold metrics per round
+    aggregated_audit = {}
+    aggregated_metrics = {}
+    
+    # Iterate over each client
+    for client_id in range(1, config['clients'] + 1):
+        client_dir = f"histories/{config['model_name']}/{config['dataset']}/client_{client_id}"
+        
+        audit_path = os.path.join(client_dir, "audit.csv")
+        metrics_path = os.path.join(client_dir, "metrics.csv")
+        
+        # Check if audit.csv exists
+        if not os.path.exists(audit_path):
+            print(f"Warning: {audit_path} does not exist. Skipping this client.")
+            continue
+        
+        # Check if metrics.csv exists
+        if not os.path.exists(metrics_path):
+            print(f"Warning: {metrics_path} does not exist. Skipping metrics for this client.")
+            continue
+        
+        # Read audit.csv
+        audit_df = pd.read_csv(audit_path)
+        
+        # Read metrics.csv
+        metrics_df = pd.read_csv(metrics_path)
+        
+        # Ensure both DataFrames have the same number of rounds
+        if len(audit_df) != len(metrics_df):
+            print(f"Warning: Mismatch in number of rounds for client {client_id}. Skipping this client.")
+            continue
+        
+        # Iterate over each round
+        for idx in range(len(audit_df)):
+            round_num = audit_df.loc[idx, 'Round']
+            
+            # Initialize dictionaries for this round if not already
+            if round_num not in aggregated_audit:
+                aggregated_audit[round_num] = {metric: [] for metric in audit_max_metrics}
+            if round_num not in aggregated_metrics:
+                aggregated_metrics[round_num] = {metric: [] for metric in metrics_average}
+            
+            # Extract audit metrics
+            for metric in audit_max_metrics:
+                value = audit_df.loc[idx, metric]
+                aggregated_audit[round_num][metric].append(value)
+            
+            # Extract metrics.csv metrics
+            for metric in metrics_average:
+                value = metrics_df.loc[idx, metric]
+                aggregated_metrics[round_num][metric].append(value)
+    
+    # Now, compute aggregated metrics per round
+    aggregated_results = []
+    for round_num in sorted(aggregated_audit.keys()):
+        round_data = {'Round': round_num}
+        
+        # Aggregate audit metrics
+        for metric in audit_max_metrics:
+            values = aggregated_audit[round_num][metric]
+            round_data[metric] = max(values) if len(values) > 0 else None
+        
+        # Aggregate metrics.csv metrics
+        for metric in metrics_average:
+            values = aggregated_metrics[round_num][metric]
+            round_data[metric] = sum(values) / len(values) if len(values) > 0 else None
+        
+        aggregated_results.append(round_data)
+    
+    # Convert to DataFrame
+    aggregated_df = pd.DataFrame(aggregated_results)
+    
+    # Define the output directory and ensure it exists
+    output_folder = f"histories/{config['model_name']}/{config['dataset']}/"
+    os.makedirs(output_folder, exist_ok=True)
+    
+    # Define the output file path
+    output_path = os.path.join(output_folder, "aggregated_metrics.csv")
+    
+    # Save the aggregated DataFrame to CSV
+    aggregated_df.to_csv(output_path, index=False)
+    
+    print(f"Aggregated results saved to {output_path}")
+    
+    return aggregated_df
+
+
+def print_max_metrics(aggregated_metrics: pd.DataFrame):
+    """
+    Identifies and prints the first occurrence of the maximum values of specified audit metrics.
+
+    Args:
+        aggregated_metrics (pd.DataFrame): DataFrame containing aggregated metrics per round.
+    """
+    # Define the audit max metrics
+    audit_max_metrics = ['Privacy', 'Accumulative Privacy', 'MIA Accuracy', 'Accumulative MIA Accuracy']
+    
+    # Initialize a dictionary to hold max values and corresponding rounds
+    max_metrics_info = {}
+    print("\n")
+    
+    for metric in audit_max_metrics:
+        if metric in aggregated_metrics.columns:
+            max_value = aggregated_metrics[metric].max()
+            # Identify the first round where this max value was achieved
+            round_num = aggregated_metrics.loc[aggregated_metrics[metric] == max_value, 'Round'].iloc[0]
+            max_metrics_info[metric] = {'max_value': max_value, 'round': round_num}
+        else:
+            print(f"\033[93mWarning: Metric '{metric}' not found in the aggregated metrics.\033[0m")
+        
+    for metric, info in max_metrics_info.items():
+        print(f"\033[93mMax {metric} {info['max_value']} in round {info['round']} \033[0m")
+    
+    print("\n")
+
     
     

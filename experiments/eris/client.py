@@ -331,7 +331,13 @@ def start_node(
         
         # Check if this is client 1 to perform testing
         if client_id == 1:
+            # evaluation on the test set
             print("Client 1 is performing final model testing...")
+            time.sleep(1)
+            
+            # aggregated metrics
+            aggregated_metrics = utils.aggregate_client_data(config)
+            utils.print_max_metrics(aggregated_metrics)
             
             # Load the test set
             test_dataset = torch.load(f"../data/datasets/{config['dataset']}_test.pt", weights_only=False)
@@ -349,7 +355,7 @@ def start_node(
             # Determine the best loss round
             # You need to implement logic to retrieve `best_loss_round`
             # This could be stored in a file, returned by `client.train()`, or managed within `config`
-            best_loss_round = config['rounds']-1  # Replace with actual logic
+            best_loss_round = config['rounds'] - 1  # Replace with actual logic
 
             # Construct the checkpoint path
             checkpoint_path = f"checkpoints/{config["model_name"]}/{config['dataset']}/model_{best_loss_round}.pth"
@@ -358,12 +364,6 @@ def start_node(
             # Evaluate the model on the test set
             loss_test, accuracy_test, metric_test = evaluate_fn(test_model, device, test_loader, criterion)
             print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}%, F1 Score: {metric_test*100:.2f}%\033[0m\n")
-            
-            print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \
-                            Max MIA Accuracy {max(metrics_distributed["accuracy_mia"])} \
-                            Max Privacy Estimate {max(metrics_distributed["privacy_estimate"])} \
-                            Max Accumulative MIA Accuracy {max(metrics_distributed["accumulative_accuracy_mia"])} \
-                            Max Accumulative Privacy Estimate {max(metrics_distributed["accumulative_privacy_estimate"])} \033[0m\n")
 
             # Print training time in minutes (grey color)
             training_time = round((time.time() - start_time)/60, 2)
@@ -374,6 +374,10 @@ def start_node(
                 "loss": loss_test,
                 "accuracy": accuracy_test,
                 'f1_score': metric_test,
+                "max_accuracy_mia": aggregated_metrics["MIA Accuracy"].max(),
+                "max_privacy_estimate": aggregated_metrics["Privacy"].max(),
+                "max_acc_accuracy_mia": aggregated_metrics["Accumulative MIA Accuracy"].max(),
+                "max_acc_privacy_estimate": aggregated_metrics["Accumulative Privacy"].max(),
                 "time": training_time,
             }
             np.save(f'test_metrics_fold_{config['fold']}.npy', metrics)
