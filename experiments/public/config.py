@@ -6,12 +6,13 @@ import models
 
 # Training settings (for everyone)
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 2  # Set 1 to disable cross validation
+k_folds = 1  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
 seed = 1
 transform = None
+gpu = 3 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Privacy auditing
 privacy_audit = True

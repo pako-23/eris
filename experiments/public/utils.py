@@ -4,7 +4,6 @@ import scipy
 import math
 import matplotlib.pyplot as plt
 import seaborn as sns
-# import config as cfg
 import torch
 import os
 import csv
@@ -52,13 +51,21 @@ def create_delede_folders(config):
     
     
 # define device
-def check_gpu(seed=0, print_info=True):
+def check_gpu(seed=0, print_info=True, client_id=1):
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
+    if cfg.gpu == -1:
+        device = 'cpu'
+    elif torch.cuda.is_available():
         if print_info:
             print("CUDA is available")
-        device = 'cuda'
-        torch.cuda.manual_seed_all(seed) 
+            
+            if cfg.gpu == -2: # multiple gpu
+                # assert client_id >=0, "client_id must be passed to select the respective GPU"
+                n_total_gpus = torch.cuda.device_count()
+                device = 'cuda:' + str(int(client_id % n_total_gpus))
+            else:
+                device = 'cuda:' + str(cfg.gpu)
+            torch.cuda.manual_seed_all(seed) 
     elif torch.backends.mps.is_available():
         if print_info:
             print("MPS is available")
@@ -69,6 +76,7 @@ def check_gpu(seed=0, print_info=True):
             print("CUDA is not available")
         device = 'cpu'
     return device
+
 
 def set_seed(seed):
     # Set seed for torch

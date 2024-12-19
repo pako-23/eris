@@ -294,7 +294,7 @@ def main()->None:
     args = parser.parse_args()
 
     # check gpu and set manual seed
-    device = utils.check_gpu(seed=cfg.seed)
+    device = utils.check_gpu(seed=cfg.seed, client_id=args.id)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
 
