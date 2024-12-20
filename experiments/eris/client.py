@@ -58,6 +58,7 @@ class ExampleClient(ErisClient):
         
         # privacy audit parameters
         self.split_mask = None
+        self.n_split = None
         self.k_plus = cfg.k_plus
         self.k_min = cfg.k_min
         self.p_value = cfg.p_value
@@ -108,7 +109,7 @@ class ExampleClient(ErisClient):
     def fit(self):    
         # get initial parameters
         params_in = self.get_parameters()
-             
+
         # save previous aggregated model if client 1
         if self.client_id == 1:
             torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
@@ -138,33 +139,51 @@ class ExampleClient(ErisClient):
             else:
                 params_out = self.get_parameters()
 
-            # normalize client update vector
-            client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in)
-            client_update = client_update / np.linalg.norm(client_update)
+            # evaluation of privacy leakage per split 
+            accuracy_mia_list, acc_accuracy_mia_list = [], [] 
+            privacy_estimate_list, acc_privacy_estimate_list = [], [] 
+            for i in range(self.n_split):
+                params_in_copy = copy.deepcopy(params_in)
+                for j in range(len(params_in_copy)):
+                    mask = (self.split_mask[j] == i)
+                    params_in_copy[j][mask] = params_out[j][mask]
+                    
+                # normalize client update vector
+                client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in_copy)
+                client_update = client_update / np.linalg.norm(client_update)
 
-            # compute scores for each canary, used to predict membership            
-            scores = []
-            # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
-            if cfg.score_fn == 'whitebox':
-                self.set_parameters(params_in)
-                for samples, targets in self.canary_loader:
-                    scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
-                self.set_parameters(params_out)
-            if cfg.score_fn == 'blackbox':
-                for samples, targets in self.canary_loader:
-                    scores.extend(self.score_blackbox_batch(samples, targets, client_update))
-            else:
-                NotImplementedError(f'score function {cfg.score_fn} is not known')
+                # compute scores for each canary, used to predict membership            
+                scores = []
+                # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
+                if cfg.score_fn == 'whitebox':
+                    self.set_parameters(params_in_copy)
+                    for samples, targets in self.canary_loader:
+                        scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
+                    self.set_parameters(params_out)
+                if cfg.score_fn == 'blackbox':
+                    for samples, targets in self.canary_loader:
+                        scores.extend(self.score_blackbox_batch(samples, targets, client_update))
+                else:
+                    NotImplementedError(f'score function {cfg.score_fn} is not known')
 
-            # accumulative leakage
-            if self.acc_scores is None:
-                self.acc_scores = copy.deepcopy(scores)
-            else:
-                self.acc_scores = self.acc_scores + np.asarray(scores)
+                # accumulative leakage
+                if self.acc_scores is None:
+                    self.acc_scores = copy.deepcopy(scores)
+                else:
+                    self.acc_scores = self.acc_scores + np.asarray(scores)
 
-            # lower-bound privacy budget evaluation
-            self.accuracy_mia, self.privacy_estimate = self.evaluate_privacy(scores)
-            self.acc_accuracy_mia, self.acc_privacy_estimate = self.evaluate_privacy(self.acc_scores)
+                # lower-bound privacy budget evaluation
+                accuracy_mia, privacy_estimate = self.evaluate_privacy(scores)
+                acc_accuracy_mia, acc_privacy_estimate = self.evaluate_privacy(self.acc_scores)
+                accuracy_mia_list.append(accuracy_mia)
+                privacy_estimate_list.append(privacy_estimate)
+                acc_accuracy_mia_list.append(acc_accuracy_mia)
+                acc_privacy_estimate_list.append(acc_privacy_estimate)
+            
+            self.accuracy_mia = max(accuracy_mia_list)
+            self.privacy_estimate = max(privacy_estimate_list)
+            self.acc_accuracy_mia = max(acc_accuracy_mia_list)
+            self.acc_privacy_estimate = max(acc_privacy_estimate_list)
             
             utils.save_audit_metrics(self.current_round, self.accuracy_mia, self.privacy_estimate, self.acc_accuracy_mia, 
                                     self.acc_privacy_estimate, client_id=self.client_id,
@@ -324,6 +343,7 @@ def start_node(
     training_success = client.join()
     if training_success:
         client.split_mask = client.get_split_mask()
+        client.n_split = max(x.max() for x in client.split_mask) + 1
         training_success = client.train()
 
     if training_success:
@@ -337,8 +357,11 @@ def start_node(
             
             # aggregated metrics
             aggregated_metrics = utils.aggregate_client_data(config)
-            utils.print_max_metrics(aggregated_metrics)
+            # utils.print_max_metrics(aggregated_metrics)
             
+            # plot and print
+            best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(aggregated_metrics, config, show=False, eris=True)
+
             # Load the test set
             test_dataset = torch.load(f"../data/datasets/{config['dataset']}_test.pt", weights_only=False)
 

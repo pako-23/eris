@@ -6,7 +6,7 @@ import models
 
 # Training settings (for everyone)
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 2  # Set 1 to disable cross validation
+k_folds = 1  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
@@ -35,7 +35,7 @@ experiments = {
     "mnist": {
         "dataset": "mnist",
         "client_train_samples": 1000,
-        "rounds": 2,  # Originally 15
+        "rounds": 3,  # Originally 15
         "clients": 10,
         "batch": 64,
         "batch_test": 64,

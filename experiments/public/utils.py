@@ -98,7 +98,23 @@ def set_seed(seed):
 
 
 # plot and save plot on server side
-def plot_loss_and_accuracy(metrics_distributed, config, show=True):
+def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
+    
+    if eris:
+        m = {
+            'loss' : metrics_distributed['Loss'].values.tolist(),
+            'accuracy': metrics_distributed['Accuracy'].values.tolist(),
+            'f1_score': metrics_distributed['f1_score'].values.tolist()
+        }
+        
+        if cfg.privacy_audit:            
+            m['accuracy_mia'] = metrics_distributed['MIA Accuracy'].values.tolist()
+            m['privacy_estimate'] = metrics_distributed['Privacy'].values.tolist()
+            m['accumulative_accuracy_mia'] = metrics_distributed['Accumulative MIA Accuracy'].values.tolist()
+            m['accumulative_privacy_estimate'] = metrics_distributed['Accumulative Privacy'].values.tolist()
+        
+        metrics_distributed = m
+    
     # Read arguments
     rounds = config['rounds']
     predictor_name = config['model_name']
@@ -115,6 +131,9 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True):
         privacy_estimate = metrics_distributed['privacy_estimate']
         acc_accuracy_mia = metrics_distributed['accumulative_accuracy_mia']
         acc_privacy_estimate = metrics_distributed['accumulative_privacy_estimate']
+        
+        print(accuracy_mia)
+        print(loss)
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         
         # -------------------- Subplot 1: Loss --------------------
@@ -615,7 +634,7 @@ def plot_client_metrics(client_id, config, show=True):
 
         # Extract data from DataFrame
         rounds = df['Round']
-        accuracy = df['Accuracy']
+        accuracy = df['MIA Accuracy']
         privacy_estimate = df['Privacy']
         
         # Set up the plotting style
