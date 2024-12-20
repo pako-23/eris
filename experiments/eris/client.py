@@ -4,7 +4,7 @@ import numpy as np
 from eris import ErisClient
 import torch
 import torch.nn.functional as F
-from torch.utils.data import random_split
+from torch.utils.data import random_split, Subset
 from torch.utils.data import DataLoader
 import sys
 import os
@@ -109,11 +109,6 @@ class ExampleClient(ErisClient):
     def fit(self):    
         # get initial parameters
         params_in = self.get_parameters()
-
-        # save previous aggregated model if client 1
-        if self.client_id == 1:
-            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
-
         self.model.train(True)
         self.model.to(self.device)
         self.current_round += 1
@@ -154,6 +149,7 @@ class ExampleClient(ErisClient):
 
                 # compute scores for each canary, used to predict membership            
                 scores = []
+                # print(f"HERE {self.client_id}")
                 # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
                 if cfg.score_fn == 'whitebox':
                     self.set_parameters(params_in_copy)
@@ -180,6 +176,7 @@ class ExampleClient(ErisClient):
                 acc_accuracy_mia_list.append(acc_accuracy_mia)
                 acc_privacy_estimate_list.append(acc_privacy_estimate)
             
+            # print(f"HERE2 {self.client_id}")
             self.accuracy_mia = max(accuracy_mia_list)
             self.privacy_estimate = max(privacy_estimate_list)
             self.acc_accuracy_mia = max(acc_accuracy_mia_list)
@@ -189,7 +186,7 @@ class ExampleClient(ErisClient):
                                     self.acc_privacy_estimate, client_id=self.client_id,
                                     history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
                                     )
-        
+            # print(f"HERE3 {self.client_id}")
         else:
             # train
             for epoch in range(self.config["epochs"]):
@@ -210,6 +207,10 @@ class ExampleClient(ErisClient):
 
 
     def evaluate(self):
+        # save previous aggregated model if client 1
+        if self.client_id == 1:
+            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
+
         self.model.eval()
         self.model.to(self.device)
 
@@ -375,11 +376,6 @@ def start_node(
             # Reinitialize the model (ensure it matches the trained model architecture)
             test_model = config["model"](config["model_args"]).to(device)
 
-            # Determine the best loss round
-            # You need to implement logic to retrieve `best_loss_round`
-            # This could be stored in a file, returned by `client.train()`, or managed within `config`
-            best_loss_round = config['rounds'] - 1  # Replace with actual logic
-
             # Construct the checkpoint path
             checkpoint_path = f"checkpoints/{config["model_name"]}/{config['dataset']}/model_{best_loss_round}.pth"
             test_model.load_state_dict(torch.load(checkpoint_path,  weights_only=False))
@@ -397,12 +393,14 @@ def start_node(
                 "loss": loss_test,
                 "accuracy": accuracy_test,
                 'f1_score': metric_test,
-                "max_accuracy_mia": aggregated_metrics["MIA Accuracy"].max(),
-                "max_privacy_estimate": aggregated_metrics["Privacy"].max(),
-                "max_acc_accuracy_mia": aggregated_metrics["Accumulative MIA Accuracy"].max(),
-                "max_acc_privacy_estimate": aggregated_metrics["Accumulative Privacy"].max(),
                 "time": training_time,
             }
+            if cfg.privacy_audit:
+                metrics["max_accuracy_mia"] = aggregated_metrics["MIA Accuracy"].max()
+                metrics["max_privacy_estimate"] = aggregated_metrics["Privacy"].max()
+                metrics["max_acc_accuracy_mia"] = aggregated_metrics["Accumulative MIA Accuracy"].max()
+                metrics["max_acc_privacy_estimate"] = aggregated_metrics["Accumulative Privacy"].max()
+            
             np.save(f'test_metrics_fold_{config['fold']}.npy', metrics)
 
         return 0
@@ -466,11 +464,22 @@ def main():
     data = torch.load(args.shard, weights_only=False)
 
     # Split the dataset
-    val_size = int(len(data) * 0.2)  # 20% for validation
-    train_size = len(data) - val_size  # 80% for training
+    train_size = config['client_train_samples']
+    val_size = int(train_size * 0.3) # 30% for validation
+    total_requested = train_size + val_size
+    if total_requested > len(data):
+        raise ValueError(
+            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+        )
     torch.manual_seed(cfg.seed)
-    train_dataset, val_dataset = random_split(data, [train_size, val_size])
+    indices = torch.randperm(len(data))[:total_requested]
+    subset_data = Subset(data, indices)
+    train_dataset, val_dataset = random_split(
+        subset_data, [train_size, val_size],
+        generator=torch.Generator().manual_seed(cfg.seed)
+    )
     num_examples = {"train": train_size, "val": val_size}
+
 
     # Create the data loaders
     train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)

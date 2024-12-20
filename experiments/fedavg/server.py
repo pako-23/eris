@@ -307,7 +307,7 @@ def main() -> None:
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
         server_address="0.0.0.0:8098",   # 0.0.0.0 listens to all available interfaces
-        config=fl.server.ServerConfig(num_rounds=config['rounds'] - 1),
+        config=fl.server.ServerConfig(num_rounds=config['rounds']),
         strategy=strategy,
     )
     # convert history to list
@@ -328,7 +328,7 @@ def main() -> None:
 
     # Single Plot
     best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, config, show=False)
-    best_loss_round = config['rounds'] - 1 # take the last round model
+    # best_loss_round = config['rounds'] - 1 # take the last round model
     
     # Privacy estimate plot
     # utils.plot_audit_metrics(client_id, model_name, dataset_name, show=True):
@@ -339,8 +339,9 @@ def main() -> None:
     # Evaluate the model on the test set
     criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
     loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
-    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \
-                      Max MIA Accuracy {max(metrics_distributed["accuracy_mia"])} \
+    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \033[0m\n")
+    if cfg.privacy_audit:
+        print(f"\n\033[93mMax MIA Accuracy {max(metrics_distributed["accuracy_mia"])} \
                       Max Privacy Estimate {max(metrics_distributed["privacy_estimate"])} \
                       Max Accumulative MIA Accuracy {max(metrics_distributed["accumulative_accuracy_mia"])} \
                       Max Accumulative Privacy Estimate {max(metrics_distributed["accumulative_privacy_estimate"])} \033[0m\n")
@@ -355,12 +356,15 @@ def main() -> None:
         "loss": loss_test,
         "accuracy": accuracy_test,
         "f1_score": metric_test,
-        "max_accuracy_mia": max(metrics_distributed["accuracy_mia"]),
-        "max_privacy_estimate": max(metrics_distributed["privacy_estimate"]),
-        "max_acc_accuracy_mia": max(metrics_distributed["accumulative_accuracy_mia"]),
-        "max_acc_privacy_estimate": max(metrics_distributed["accumulative_privacy_estimate"]),
         "time": training_time,
     }
+    if cfg.privacy_audit:
+        metrics["max_accuracy_mia"] = max(metrics_distributed["accuracy_mia"])
+        metrics["max_privacy_estimate"] = max(metrics_distributed["privacy_estimate"])
+        metrics["max_acc_accuracy_mia"] = max(metrics_distributed["accumulative_accuracy_mia"])
+        metrics["max_acc_privacy_estimate"] = max(metrics_distributed["accumulative_privacy_estimate"])
+    
+
     np.save(f'test_metrics_fold_{args.fold}.npy', metrics)
     
 if __name__ == "__main__":

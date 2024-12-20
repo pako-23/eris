@@ -132,8 +132,6 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         acc_accuracy_mia = metrics_distributed['accumulative_accuracy_mia']
         acc_privacy_estimate = metrics_distributed['accumulative_privacy_estimate']
         
-        print(accuracy_mia)
-        print(loss)
         fig, axs = plt.subplots(2, 2, figsize=(14, 10))
         
         # -------------------- Subplot 1: Loss --------------------
@@ -704,11 +702,10 @@ def aggregate_client_data(config):
     Aggregates audit.csv and metrics.csv files from all clients and computes aggregated metrics per round.
 
     """
-    # Define metric categories
-    audit_max_metrics = ['Privacy', 'Accumulative Privacy', 'MIA Accuracy', 'Accumulative MIA Accuracy']
-    
+    # Define metric categories    
     metrics_average = ['Loss', 'Accuracy', 'f1_score']
-    
+    audit_max_metrics = ['Privacy', 'Accumulative Privacy', 'MIA Accuracy', 'Accumulative MIA Accuracy']
+
     # Initialize dictionaries to hold metrics per round
     aggregated_audit = {}
     aggregated_metrics = {}
@@ -717,44 +714,49 @@ def aggregate_client_data(config):
     for client_id in range(1, config['clients'] + 1):
         client_dir = f"histories/{config['model_name']}/{config['dataset']}/client_{client_id}"
         
-        audit_path = os.path.join(client_dir, "audit.csv")
         metrics_path = os.path.join(client_dir, "metrics.csv")
-        
-        # Check if audit.csv exists
-        if not os.path.exists(audit_path):
-            print(f"Warning: {audit_path} does not exist. Skipping this client.")
-            continue
         
         # Check if metrics.csv exists
         if not os.path.exists(metrics_path):
             print(f"Warning: {metrics_path} does not exist. Skipping metrics for this client.")
             continue
         
-        # Read audit.csv
-        audit_df = pd.read_csv(audit_path)
-        
         # Read metrics.csv
         metrics_df = pd.read_csv(metrics_path)
         
-        # Ensure both DataFrames have the same number of rounds
-        if len(audit_df) != len(metrics_df):
-            print(f"Warning: Mismatch in number of rounds for client {client_id}. Skipping this client.")
-            continue
+        if cfg.privacy_audit:
+            audit_path = os.path.join(client_dir, "audit.csv")
+            
+            # Check if audit.csv exists
+            if not os.path.exists(audit_path):
+                print(f"Warning: {audit_path} does not exist. Skipping this client.")
+                raise KeyError
+            
+            # Read audit.csv
+            audit_df = pd.read_csv(audit_path)
+
+            # Ensure both DataFrames have the same number of rounds
+            if len(audit_df) != len(metrics_df):
+                print(f"Warning: Mismatch in number of rounds for client {client_id}. Skipping this client.")
+                continue
+
         
         # Iterate over each round
-        for idx in range(len(audit_df)):
-            round_num = audit_df.loc[idx, 'Round']
+        for idx in range(len(metrics_df)):
+            round_num = metrics_df.loc[idx, 'Round']
             
             # Initialize dictionaries for this round if not already
-            if round_num not in aggregated_audit:
-                aggregated_audit[round_num] = {metric: [] for metric in audit_max_metrics}
+            if cfg.privacy_audit:
+                if round_num not in aggregated_audit:
+                    aggregated_audit[round_num] = {metric: [] for metric in audit_max_metrics}
             if round_num not in aggregated_metrics:
                 aggregated_metrics[round_num] = {metric: [] for metric in metrics_average}
             
             # Extract audit metrics
-            for metric in audit_max_metrics:
-                value = audit_df.loc[idx, metric]
-                aggregated_audit[round_num][metric].append(value)
+            if cfg.privacy_audit:
+                for metric in audit_max_metrics:
+                    value = audit_df.loc[idx, metric]
+                    aggregated_audit[round_num][metric].append(value)
             
             # Extract metrics.csv metrics
             for metric in metrics_average:
@@ -763,13 +765,14 @@ def aggregate_client_data(config):
     
     # Now, compute aggregated metrics per round
     aggregated_results = []
-    for round_num in sorted(aggregated_audit.keys()):
+    for round_num in sorted(aggregated_metrics.keys()):
         round_data = {'Round': round_num}
         
         # Aggregate audit metrics
-        for metric in audit_max_metrics:
-            values = aggregated_audit[round_num][metric]
-            round_data[metric] = max(values) if len(values) > 0 else None
+        if cfg.privacy_audit:
+            for metric in audit_max_metrics:
+                values = aggregated_audit[round_num][metric]
+                round_data[metric] = max(values) if len(values) > 0 else None
         
         # Aggregate metrics.csv metrics
         for metric in metrics_average:
