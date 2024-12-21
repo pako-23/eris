@@ -156,10 +156,19 @@ class FlowerClient(fl.client.NumPyClient):
             self.accuracy_mia, self.privacy_estimate = self.evaluate_privacy(scores)
             self.acc_accuracy_mia, self.acc_privacy_estimate = self.evaluate_privacy(self.acc_scores)
             
-            utils.save_audit_metrics(config["current_round"], self.accuracy_mia, self.privacy_estimate, self.acc_accuracy_mia, 
-                                    self.acc_privacy_estimate, client_id=self.client_id,
-                                    history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
-                                    )
+            utils.save_audit_metrics(
+                config["current_round"], 
+                self.accuracy_mia, 
+                self.privacy_estimate, 
+                self.acc_accuracy_mia, 
+                self.acc_privacy_estimate, 
+                self.accuracy_mia, 
+                self.privacy_estimate, 
+                self.acc_accuracy_mia, 
+                self.acc_privacy_estimate, 
+                client_id=self.client_id,
+                history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
+                )
         
         else:
             # train
@@ -189,7 +198,11 @@ class FlowerClient(fl.client.NumPyClient):
             "privacy_estimate": self.privacy_estimate,
             "accuracy_mia": self.accuracy_mia,
             "accumulative_privacy_estimate": self.acc_privacy_estimate,
-            "accumulative_accuracy_mia": self.acc_accuracy_mia
+            "accumulative_accuracy_mia": self.acc_accuracy_mia,
+            "privacy_estimate_mean": self.privacy_estimate,
+            "accuracy_mia_mean": self.accuracy_mia,
+            "accumulative_privacy_estimate_mean": self.acc_privacy_estimate,
+            "accumulative_accuracy_mia_mean": self.acc_accuracy_mia
         }
 
 

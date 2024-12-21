@@ -17,7 +17,7 @@ gpu = 3 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 # Privacy auditing
 privacy_audit = True
 canary_frac = 0.5  # Fraction of canary samples per client
-score_fn = "whitebox"  # Options: "whitebox", "blackbox"
+score_fn = "blackbox"  # Options: "whitebox", "blackbox"
 p_value = 0.05  # Significance level for hypothesis testing
 k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
@@ -40,7 +40,7 @@ experiments = {
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
-        "splits": 5,
+        "splits": 10,
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.LeNet5,

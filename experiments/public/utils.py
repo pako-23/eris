@@ -112,6 +112,10 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
             m['privacy_estimate'] = metrics_distributed['Privacy'].values.tolist()
             m['accumulative_accuracy_mia'] = metrics_distributed['Accumulative MIA Accuracy'].values.tolist()
             m['accumulative_privacy_estimate'] = metrics_distributed['Accumulative Privacy'].values.tolist()
+            m['accuracy_mia_mean'] = metrics_distributed['MIA Accuracy Mean'].values.tolist()
+            m['privacy_estimate_mean'] = metrics_distributed['Privacy Mean'].values.tolist()
+            m['accumulative_accuracy_mia_mean'] = metrics_distributed['Accumulative MIA Accuracy Mean'].values.tolist()
+            m['accumulative_privacy_estimate_mean'] = metrics_distributed['Accumulative Privacy Mean'].values.tolist()
         
         metrics_distributed = m
     
@@ -131,8 +135,12 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         privacy_estimate = metrics_distributed['privacy_estimate']
         acc_accuracy_mia = metrics_distributed['accumulative_accuracy_mia']
         acc_privacy_estimate = metrics_distributed['accumulative_privacy_estimate']
+        accuracy_mia_mean = metrics_distributed['accuracy_mia_mean']
+        privacy_estimate_mean = metrics_distributed['privacy_estimate_mean']
+        acc_accuracy_mia_mean = metrics_distributed['accumulative_accuracy_mia_mean']
+        acc_privacy_estimate_mean = metrics_distributed['accumulative_privacy_estimate_mean']
         
-        fig, axs = plt.subplots(2, 2, figsize=(14, 10))
+        fig, axs = plt.subplots(3, 2, figsize=(21, 10))
         
         # -------------------- Subplot 1: Loss --------------------
         ax = axs[0, 0]
@@ -170,7 +178,7 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         # -------------------- Subplot 3: MIA Accuracy --------------------
         ax = axs[1, 0]
         ax.plot(accuracy_mia, label='MIA Accuracy', color='red')
-        ax.plot(acc_accuracy_mia, label='Accumulative MIA Accuracy', color='black')
+        ax.plot(acc_accuracy_mia, label='Acc. MIA Accuracy', color='black')
         
         # Identify and plot the maximum MIA accuracy point
         max_accuracy_mia_index = accuracy_mia.index(max(accuracy_mia))
@@ -178,7 +186,6 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         ax.scatter(max_accuracy_mia_index, accuracy_mia[max_accuracy_mia_index], color='red', marker='*', s=150, label='Max MIA Accuracy')
         ax.scatter(max_acc_accuracy_mia_index, acc_accuracy_mia[max_acc_accuracy_mia_index], color='black', marker='*', s=150, label='Max Acc. MIA Accuracy')
 
-        
         # Set labels and title
         ax.set_xlabel('Rounds')
         ax.set_ylabel('MIA Accuracy')
@@ -203,6 +210,42 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         ax.set_title('Privacy Estimate over Rounds')
         ax.legend()
         ax.grid(True)
+
+        # -------------------- Subplot 5: MIA Accuracy Mean --------------------
+        ax = axs[2, 0]
+        ax.plot(accuracy_mia_mean, label='MIA Accuracy Mean', color='red')
+        ax.plot(acc_accuracy_mia_mean, label='Acc. MIA Accuracy Mean', color='black')
+        
+        # Identify and plot the maximum MIA accuracy point
+        max_accuracy_mia_index_mean = accuracy_mia_mean.index(max(accuracy_mia_mean))
+        max_acc_accuracy_mia_index_mean = acc_accuracy_mia_mean.index(max(acc_accuracy_mia_mean))
+        ax.scatter(max_accuracy_mia_index_mean, accuracy_mia_mean[max_accuracy_mia_index_mean], color='red', marker='*', s=150, label='Max MIA Accuracy Mean')
+        ax.scatter(max_acc_accuracy_mia_index_mean, acc_accuracy_mia_mean[max_acc_accuracy_mia_index_mean], color='black', marker='*', s=150, label='Max Acc. MIA Accuracy Mean')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('MIA Accuracy Mean')
+        ax.set_title('MIA Accuracy Mean over Rounds')
+        ax.legend()
+        ax.grid(True)
+        
+        # -------------------- Subplot 6: Privacy Estimate Mean --------------------
+        ax = axs[2, 1]
+        ax.plot(privacy_estimate_mean, label='Privacy Estimate (Epsilon)', color='purple')
+        ax.plot(acc_privacy_estimate_mean, label='Acc. Privacy Estimate (Epsilon)', color='blue')
+        
+        # Identify and plot the maximum privacy estimate point
+        max_privacy_index_mean = privacy_estimate_mean.index(max(privacy_estimate_mean))
+        max_acc_privacy_index_mean = acc_privacy_estimate_mean.index(max(acc_privacy_estimate_mean))
+        ax.scatter(max_privacy_index_mean, privacy_estimate_mean[max_privacy_index_mean], color='purple', marker='*', s=150, label='Max Privacy Leakage')
+        ax.scatter(max_acc_privacy_index_mean, acc_privacy_estimate_mean[max_acc_privacy_index_mean], color='blue', marker='*', s=150, label='Max Acc. Privacy Leakage')
+        
+        # Set labels and title
+        ax.set_xlabel('Rounds')
+        ax.set_ylabel('Epsilon')
+        ax.set_title('Privacy Estimate Mean over Rounds')
+        ax.legend()
+        ax.grid(True)
         
         # Adjust layout to prevent overlap
         plt.tight_layout()
@@ -217,7 +260,12 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
             Maximum MIA Accuracy: round {max_accuracy_mia_index + 1}, value {accuracy_mia[max_accuracy_mia_index] * 100:.2f}%
             Maximum Epsilon (Privacy): round {max_privacy_index + 1}, value {privacy_estimate[max_privacy_index]:.3f}
             Maximum Accumulative MIA Accuracy: round {max_acc_accuracy_mia_index + 1}, value {acc_accuracy_mia[max_acc_accuracy_mia_index] * 100:.2f}%
-            Maximum Accumulative Epsilon (Privacy): round {max_acc_privacy_index + 1}, value {acc_privacy_estimate[max_acc_privacy_index]:.3f}\n
+            Maximum Accumulative Epsilon (Privacy): round {max_acc_privacy_index + 1}, value {acc_privacy_estimate[max_acc_privacy_index]:.3f}
+            Maximum MIA Accuracy Mean: round {max_accuracy_mia_index_mean + 1}, value {accuracy_mia_mean[max_accuracy_mia_index_mean] * 100:.2f}%
+            Maximum Epsilon (Privacy) Mean: round {max_privacy_index_mean + 1}, value {privacy_estimate_mean[max_privacy_index_mean]:.3f}
+            Maximum Accumulative MIA Accuracy Mean: round {max_acc_accuracy_mia_index_mean + 1}, value {acc_accuracy_mia_mean[max_acc_accuracy_mia_index_mean] * 100:.2f}%
+            Maximum Accumulative Epsilon (Privacy) Mean: round {max_acc_privacy_index_mean + 1}, value {acc_privacy_estimate_mean[max_acc_privacy_index_mean]:.3f} 
+            \n
             """
         )
         
@@ -552,7 +600,18 @@ def parameters_to_1d(parameters):
 
 
 # save some auditing metrics
-def save_audit_metrics(round_num, accuracy, privacy_estimate, acc_accuracy, acc_privacy_estimate, client_id=1, history_folder="histories/"):
+def save_audit_metrics(
+    round_num, 
+    accuracy, 
+    privacy_estimate, 
+    acc_accuracy, 
+    acc_privacy_estimate,
+    accuracy_mean, 
+    privacy_estimate_mean, 
+    acc_accuracy_mean, 
+    acc_privacy_estimate_mean,  
+    client_id=1, 
+    history_folder="histories/"):
 
     # Create folder for client
     folder = history_folder + f"client_{client_id}/"
@@ -567,10 +626,22 @@ def save_audit_metrics(round_num, accuracy, privacy_estimate, acc_accuracy, acc_
         writer = csv.writer(file)
         
         if not file_exists:
-            writer.writerow(['Round', 'MIA Accuracy', 'Privacy', 'Accumulative MIA Accuracy', 'Accumulative Privacy'])
+            writer.writerow(['Round', 'MIA Accuracy', 'Privacy', 'Accumulative MIA Accuracy',
+                             'Accumulative Privacy', 'MIA Accuracy Mean', 'Privacy Mean', 
+                             'Accumulative MIA Accuracy Mean', 'Accumulative Privacy Mean'])
 
         # Write the metrics
-        writer.writerow([round_num, accuracy, privacy_estimate, acc_accuracy, acc_privacy_estimate])
+        writer.writerow([
+            round_num, 
+            accuracy, 
+            privacy_estimate, 
+            acc_accuracy, 
+            acc_privacy_estimate,
+            accuracy_mean, 
+            privacy_estimate_mean, 
+            acc_accuracy_mean, 
+            acc_privacy_estimate_mean, 
+            ])
 
 
 # plot and save plot on client side
@@ -704,10 +775,12 @@ def aggregate_client_data(config):
     """
     # Define metric categories    
     metrics_average = ['Loss', 'Accuracy', 'f1_score']
+    audit_mean_metrics = ['Privacy Mean', 'Accumulative Privacy Mean', 'MIA Accuracy Mean', 'Accumulative MIA Accuracy Mean']
     audit_max_metrics = ['Privacy', 'Accumulative Privacy', 'MIA Accuracy', 'Accumulative MIA Accuracy']
 
     # Initialize dictionaries to hold metrics per round
     aggregated_audit = {}
+    aggregated_audit_mean = {}
     aggregated_metrics = {}
     
     # Iterate over each client
@@ -749,6 +822,8 @@ def aggregate_client_data(config):
             if cfg.privacy_audit:
                 if round_num not in aggregated_audit:
                     aggregated_audit[round_num] = {metric: [] for metric in audit_max_metrics}
+                if round_num not in aggregated_audit_mean:
+                    aggregated_audit_mean[round_num] = {metric: [] for metric in audit_mean_metrics}
             if round_num not in aggregated_metrics:
                 aggregated_metrics[round_num] = {metric: [] for metric in metrics_average}
             
@@ -757,6 +832,9 @@ def aggregate_client_data(config):
                 for metric in audit_max_metrics:
                     value = audit_df.loc[idx, metric]
                     aggregated_audit[round_num][metric].append(value)
+                for metric in audit_mean_metrics:
+                    value = audit_df.loc[idx, metric]
+                    aggregated_audit_mean[round_num][metric].append(value)
             
             # Extract metrics.csv metrics
             for metric in metrics_average:
@@ -773,6 +851,9 @@ def aggregate_client_data(config):
             for metric in audit_max_metrics:
                 values = aggregated_audit[round_num][metric]
                 round_data[metric] = max(values) if len(values) > 0 else None
+            for metric in audit_mean_metrics:
+                values = aggregated_audit_mean[round_num][metric]
+                round_data[metric] = sum(values) / len(values) if len(values) > 0 else None
         
         # Aggregate metrics.csv metrics
         for metric in metrics_average:

@@ -77,7 +77,12 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
     acc_accuracy_mia = max(acc_accuracy_mia_list)
     acc_privacy_estimate_list = [m["accumulative_privacy_estimate"] for _, m in metrics]
     acc_privacy_estimate = max(acc_privacy_estimate_list)
-    
+    # mean privacy metrics
+    accuracy_mia_mean = [m["accuracy_mia_mean"] for _, m in metrics]
+    privacy_estimate_mean = [m["privacy_estimate_mean"] for _, m in metrics]
+    accumulative_accuracy_mia_mean = [m["accumulative_accuracy_mia_mean"] for _, m in metrics]
+    accumulative_privacy_estimate_mean = [m["accumulative_privacy_estimate_mean"] for _, m in metrics]
+
     examples = [num_examples for num_examples, _ in metrics]
     # Aggregate and return custom metric (weighted average)
     return {
@@ -87,7 +92,11 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "accuracy_mia": accuracy_mia if accuracy_mia > 0 else None,
         "privacy_estimate": privacy_estimate if privacy_estimate > -0.5 else None,
         "accumulative_accuracy_mia": acc_accuracy_mia if acc_accuracy_mia > 0 else None,
-        "accumulative_privacy_estimate": acc_privacy_estimate if acc_privacy_estimate > -0.5 else None
+        "accumulative_privacy_estimate": acc_privacy_estimate if acc_privacy_estimate > -0.5 else None,
+        "accuracy_mia_mean": sum(accuracy_mia_mean) / sum(accuracy_mia_mean),
+        "privacy_estimate_mean": sum(privacy_estimate_mean) / sum(privacy_estimate_mean),
+        "accumulative_accuracy_mia_mean": sum(accumulative_accuracy_mia_mean) / sum(accumulative_accuracy_mia_mean),
+        "accumulative_privacy_estimate_mean": sum(accumulative_privacy_estimate_mean) / sum(accumulative_privacy_estimate_mean),
         }
 
 def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
@@ -318,7 +327,11 @@ def main() -> None:
         'accuracy_mia': [k[1] for k in history.metrics_distributed['accuracy_mia']],
         'privacy_estimate': [k[1] for k in history.metrics_distributed['privacy_estimate']],
         'accumulative_accuracy_mia': [k[1] for k in history.metrics_distributed['accumulative_accuracy_mia']],
-        'accumulative_privacy_estimate': [k[1] for k in history.metrics_distributed['accumulative_privacy_estimate']]
+        'accumulative_privacy_estimate': [k[1] for k in history.metrics_distributed['accumulative_privacy_estimate']],
+        'accuracy_mia_mean': [k[1] for k in history.metrics_distributed['accuracy_mia_mean']],
+        'privacy_estimate_mean': [k[1] for k in history.metrics_distributed['privacy_estimate_mean']],
+        'accumulative_accuracy_mia_mean': [k[1] for k in history.metrics_distributed['accumulative_accuracy_mia_mean']],
+        'accumulative_privacy_estimate_mean': [k[1] for k in history.metrics_distributed['accumulative_privacy_estimate_mean']]
     }
 
     # Save loss and accuracy to a file
@@ -344,7 +357,12 @@ def main() -> None:
         print(f"\n\033[93mMax MIA Accuracy {max(metrics_distributed["accuracy_mia"])} \
                       Max Privacy Estimate {max(metrics_distributed["privacy_estimate"])} \
                       Max Accumulative MIA Accuracy {max(metrics_distributed["accumulative_accuracy_mia"])} \
-                      Max Accumulative Privacy Estimate {max(metrics_distributed["accumulative_privacy_estimate"])} \033[0m\n")
+                      Max Accumulative Privacy Estimate {max(metrics_distributed["accumulative_privacy_estimate"])} 
+                      Max MIA Accuracy Mean {max(metrics_distributed["accuracy_mia_mean"])} \
+                      Max Privacy Estimate Mean {max(metrics_distributed["privacy_estimate_mean"])} \
+                      Max Accumulative MIA Accuracy Mean {max(metrics_distributed["accumulative_accuracy_mia_mean"])} \
+                      Max Accumulative Privacy Estimate Mean {max(metrics_distributed["accumulative_privacy_estimate_mean"])} 
+                      \033[0m\n")
 
     # Print training time in minutes (grey color)
     training_time = round((time.time() - start_time)/60, 2)
@@ -363,7 +381,10 @@ def main() -> None:
         metrics["max_privacy_estimate"] = max(metrics_distributed["privacy_estimate"])
         metrics["max_acc_accuracy_mia"] = max(metrics_distributed["accumulative_accuracy_mia"])
         metrics["max_acc_privacy_estimate"] = max(metrics_distributed["accumulative_privacy_estimate"])
-    
+        metrics["max_accuracy_mia_mean"] = max(metrics_distributed["accuracy_mia_mean"])
+        metrics["max_privacy_estimate_mean"] = max(metrics_distributed["privacy_estimate_mean"])
+        metrics["max_acc_accuracy_mia_mean"] = max(metrics_distributed["accumulative_accuracy_mia_mean"])
+        metrics["max_acc_privacy_estimate_mean"] = max(metrics_distributed["accumulative_privacy_estimate_mean"])
 
     np.save(f'test_metrics_fold_{args.fold}.npy', metrics)
     

@@ -68,6 +68,10 @@ class ExampleClient(ErisClient):
         self.accuracy_mia = -1
         self.acc_privacy_estimate = -1
         self.acc_accuracy_mia = -1
+        self.privacy_estimate_mean = -1
+        self.accuracy_mia_mean = -1
+        self.acc_privacy_estimate_mean = -1
+        self.acc_accuracy_mia_mean = -1
         self.acc_scores = None
 
         # prepare dataset auditing
@@ -138,27 +142,30 @@ class ExampleClient(ErisClient):
             accuracy_mia_list, acc_accuracy_mia_list = [], [] 
             privacy_estimate_list, acc_privacy_estimate_list = [], [] 
             for i in range(self.n_split):
-                params_in_copy = copy.deepcopy(params_in)
-                for j in range(len(params_in_copy)):
+                params_out_only = copy.deepcopy(params_in)
+                for j in range(len(params_out_only)):
                     mask = (self.split_mask[j] == i)
-                    params_in_copy[j][mask] = params_out[j][mask]
+                    params_out_only[j][mask] = params_out[j][mask]
+                # params_out_only = copy.deepcopy(params_out) 
+                print("here")
+                # set params to the model
+                self.set_parameters(params_out_only)
                     
                 # normalize client update vector
-                client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in_copy)
+                client_update = utils.parameters_to_1d(params_out_only) - utils.parameters_to_1d(params_in)
                 client_update = client_update / np.linalg.norm(client_update)
 
                 # compute scores for each canary, used to predict membership            
                 scores = []
-                # print(f"HERE {self.client_id}")
                 # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
                 if cfg.score_fn == 'whitebox':
-                    self.set_parameters(params_in_copy)
+                    self.set_parameters(params_in)
                     for samples, targets in self.canary_loader:
                         scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
-                    self.set_parameters(params_out)
+                    self.set_parameters(params_out_only)
                 if cfg.score_fn == 'blackbox':
                     for samples, targets in self.canary_loader:
-                        scores.extend(self.score_blackbox_batch(samples, targets, client_update))
+                        scores.extend(self.score_blackbox_batch(samples, targets))
                 else:
                     NotImplementedError(f'score function {cfg.score_fn} is not known')
 
@@ -176,17 +183,32 @@ class ExampleClient(ErisClient):
                 acc_accuracy_mia_list.append(acc_accuracy_mia)
                 acc_privacy_estimate_list.append(acc_privacy_estimate)
             
-            # print(f"HERE2 {self.client_id}")
+            # max metrics
             self.accuracy_mia = max(accuracy_mia_list)
             self.privacy_estimate = max(privacy_estimate_list)
             self.acc_accuracy_mia = max(acc_accuracy_mia_list)
             self.acc_privacy_estimate = max(acc_privacy_estimate_list)
             
-            utils.save_audit_metrics(self.current_round, self.accuracy_mia, self.privacy_estimate, self.acc_accuracy_mia, 
-                                    self.acc_privacy_estimate, client_id=self.client_id,
-                                    history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
-                                    )
-            # print(f"HERE3 {self.client_id}")
+            # mean
+            self.accuracy_mia_mean = np.mean(accuracy_mia_list)
+            self.privacy_estimate_mean = np.mean(privacy_estimate_list)
+            self.acc_accuracy_mia_mean = np.mean(acc_accuracy_mia_list)
+            self.acc_privacy_estimate_mean = np.mean(acc_privacy_estimate_list)
+            
+            utils.save_audit_metrics(
+                round_num=self.current_round, 
+                accuracy=self.accuracy_mia, 
+                privacy_estimate=self.privacy_estimate, 
+                acc_accuracy=self.acc_accuracy_mia, 
+                acc_privacy_estimate=self.acc_privacy_estimate,
+                accuracy_mean=self.accuracy_mia_mean, 
+                privacy_estimate_mean=self.privacy_estimate_mean, 
+                acc_accuracy_mean=self.acc_accuracy_mia_mean, 
+                acc_privacy_estimate_mean=self.acc_privacy_estimate_mean, 
+                client_id=self.client_id,
+                history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
+                )
+ 
         else:
             # train
             for epoch in range(self.config["epochs"]):
@@ -290,7 +312,7 @@ class ExampleClient(ErisClient):
         return scores
 
 
-    def score_blackbox_batch(self, samples, targets, client_update):
+    def score_blackbox_batch(self, samples, targets):
         with torch.no_grad():
             self.model.to(self.device)  # Ensure model is on the correct device
             samples = samples.to(self.device)
@@ -400,6 +422,10 @@ def start_node(
                 metrics["max_privacy_estimate"] = aggregated_metrics["Privacy"].max()
                 metrics["max_acc_accuracy_mia"] = aggregated_metrics["Accumulative MIA Accuracy"].max()
                 metrics["max_acc_privacy_estimate"] = aggregated_metrics["Accumulative Privacy"].max()
+                metrics["max_accuracy_mia_mean"] = aggregated_metrics["MIA Accuracy Mean"].max()
+                metrics["max_privacy_estimate_mean"] = aggregated_metrics["Privacy Mean"].max()
+                metrics["max_acc_accuracy_mia_mean"] = aggregated_metrics["Accumulative MIA Accuracy Mean"].max()
+                metrics["max_acc_privacy_estimate_mean"] = aggregated_metrics["Accumulative Privacy Mean"].max()
             
             np.save(f'test_metrics_fold_{config['fold']}.npy', metrics)
 
