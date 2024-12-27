@@ -93,10 +93,10 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
         "privacy_estimate": privacy_estimate if privacy_estimate > -0.5 else None,
         "accumulative_accuracy_mia": acc_accuracy_mia if acc_accuracy_mia > 0 else None,
         "accumulative_privacy_estimate": acc_privacy_estimate if acc_privacy_estimate > -0.5 else None,
-        "accuracy_mia_mean": sum(accuracy_mia_mean) / sum(accuracy_mia_mean),
-        "privacy_estimate_mean": sum(privacy_estimate_mean) / sum(privacy_estimate_mean),
-        "accumulative_accuracy_mia_mean": sum(accumulative_accuracy_mia_mean) / sum(accumulative_accuracy_mia_mean),
-        "accumulative_privacy_estimate_mean": sum(accumulative_privacy_estimate_mean) / sum(accumulative_privacy_estimate_mean),
+        "accuracy_mia_mean": sum(accuracy_mia_mean) / len(accuracy_mia_mean),
+        "privacy_estimate_mean": sum(privacy_estimate_mean) / len(privacy_estimate_mean),
+        "accumulative_accuracy_mia_mean": sum(accumulative_accuracy_mia_mean) / len(accumulative_accuracy_mia_mean),
+        "accumulative_privacy_estimate_mean": sum(accumulative_privacy_estimate_mean) / len(accumulative_privacy_estimate_mean),
         }
 
 def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
@@ -352,17 +352,21 @@ def main() -> None:
     # Evaluate the model on the test set
     criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
     loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
-    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \033[0m\n")
+    print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \033[0m")
+    
     if cfg.privacy_audit:
-        print(f"\n\033[93mMax MIA Accuracy {max(metrics_distributed["accuracy_mia"])} \
-                      Max Privacy Estimate {max(metrics_distributed["privacy_estimate"])} \
-                      Max Accumulative MIA Accuracy {max(metrics_distributed["accumulative_accuracy_mia"])} \
-                      Max Accumulative Privacy Estimate {max(metrics_distributed["accumulative_privacy_estimate"])} 
-                      Max MIA Accuracy Mean {max(metrics_distributed["accuracy_mia_mean"])} \
-                      Max Privacy Estimate Mean {max(metrics_distributed["privacy_estimate_mean"])} \
-                      Max Accumulative MIA Accuracy Mean {max(metrics_distributed["accumulative_accuracy_mia_mean"])} \
-                      Max Accumulative Privacy Estimate Mean {max(metrics_distributed["accumulative_privacy_estimate_mean"])} 
-                      \033[0m\n")
+        metrics_to_print = [
+            ("Max MIA Accuracy", "accuracy_mia"),
+            ("Max Privacy Estimate", "privacy_estimate"),
+            ("Max Accumulative MIA Accuracy", "accumulative_accuracy_mia"),
+            ("Max Accumulative Privacy Estimate", "accumulative_privacy_estimate"),
+            ("Max MIA Accuracy Mean", "accuracy_mia_mean"),
+            ("Max Privacy Estimate Mean", "privacy_estimate_mean"),
+            ("Max Accumulative MIA Accuracy Mean", "accumulative_accuracy_mia_mean"),
+            ("Max Accumulative Privacy Estimate Mean", "accumulative_privacy_estimate_mean")
+        ]
+        output = "\n".join([f"{label} {max(metrics_distributed[key])}" for label, key in metrics_to_print])
+        print(f'\n\033[93m{output}\033[0m\n')
 
     # Print training time in minutes (grey color)
     training_time = round((time.time() - start_time)/60, 2)

@@ -147,7 +147,7 @@ class ExampleClient(ErisClient):
                     mask = (self.split_mask[j] == i)
                     params_out_only[j][mask] = params_out[j][mask]
                 # params_out_only = copy.deepcopy(params_out) 
-                print("here")
+
                 # set params to the model
                 self.set_parameters(params_out_only)
                     
@@ -404,12 +404,9 @@ def start_node(
 
             # Evaluate the model on the test set
             loss_test, accuracy_test, metric_test = evaluate_fn(test_model, device, test_loader, criterion)
-            print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}%, F1 Score: {metric_test*100:.2f}%\033[0m\n")
-
-            # Print training time in minutes (grey color)
             training_time = round((time.time() - start_time)/60, 2)
-            print(f"\033[90mTraining time: {training_time} minutes\033[0m")
-    
+            print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}%, F1 Score: {metric_test*100:.2f}%\033[0m")
+
             # Save metrics as numpy array
             metrics = {
                 "loss": loss_test,
@@ -426,7 +423,23 @@ def start_node(
                 metrics["max_privacy_estimate_mean"] = aggregated_metrics["Privacy Mean"].max()
                 metrics["max_acc_accuracy_mia_mean"] = aggregated_metrics["Accumulative MIA Accuracy Mean"].max()
                 metrics["max_acc_privacy_estimate_mean"] = aggregated_metrics["Accumulative Privacy Mean"].max()
+
+                metrics_to_print = [
+                    ("Max MIA Accuracy", "max_accuracy_mia"),
+                    ("Max Privacy Estimate", "max_privacy_estimate"),
+                    ("Max Accumulative MIA Accuracy", "max_acc_accuracy_mia"),
+                    ("Max Accumulative Privacy Estimate", "max_acc_privacy_estimate"),
+                    ("Max MIA Accuracy Mean", "max_accuracy_mia_mean"),
+                    ("Max Privacy Estimate Mean", "max_privacy_estimate_mean"),
+                    ("Max Accumulative MIA Accuracy Mean", "max_acc_accuracy_mia_mean"),
+                    ("Max Accumulative Privacy Estimate Mean", "max_acc_privacy_estimate_mean")
+                ]
+                output = "\n".join([f"{label} {metrics[key]}" for label, key in metrics_to_print])
+                print(f'\n\033[93m{output}\033[0m\n')
             
+            # Print training time in minutes (grey color)
+            print(f"\033[90mTraining time: {training_time} minutes\033[0m")
+    
             np.save(f'test_metrics_fold_{config['fold']}.npy', metrics)
 
         return 0
