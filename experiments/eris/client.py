@@ -208,6 +208,9 @@ class ExampleClient(ErisClient):
                 client_id=self.client_id,
                 history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
                 )
+            
+            # reset client model 
+            self.set_parameters(params_out)
  
         else:
             # train
@@ -518,6 +521,7 @@ def main():
         generator=torch.Generator().manual_seed(cfg.seed)
     )
     num_examples = {"train": train_size, "val": val_size}
+    print(f"Num samples: {num_examples}")
 
 
     # Create the data loaders

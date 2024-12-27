@@ -312,7 +312,6 @@ def main()->None:
     # model and history folder
     model = config["model"](config["model_args"]).to(device)
 
-
     # Load data
     data = torch.load(f'../data/client_datasets/IID_data_client_{args.id}.pt', weights_only=False)
     
@@ -331,10 +330,9 @@ def main()->None:
         subset_data, [train_size, val_size],
         generator=torch.Generator().manual_seed(cfg.seed)
 )
-    num_examples = {
-        "train": train_size,
-        "val": val_size
-    }
+    num_examples = {"train": train_size,"val": val_size}
+    print(f"Num samples: {num_examples}")
+
 
     # Create the data loaders
     train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)
