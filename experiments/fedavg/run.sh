@@ -55,7 +55,7 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 # Cycle through the folds
-for fold in $(seq 1 $k_folds); do
+for fold in $(seq 3 $k_folds); do
     if [ $k_folds -gt 1 ]; then
         echo -e "\n\033[1;36mFold $fold\033[0m"
     fi
