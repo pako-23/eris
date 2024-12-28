@@ -115,10 +115,11 @@ public:
    * @return If the training is successful, it returns true; otherwise, it
    * returns false.
    */
-  bool set_aggregator_config(const std::string &address, uint16_t submit_port,
-                             uint16_t publish_port) noexcept {
-    if (!valid_ipv4(address) || address == "0.0.0.0" || submit_port == 0 ||
-        publish_port == 0 || submit_port == publish_port) {
+  bool set_aggregator_config(const std::string &address,
+                             uint16_t submit_port = 0,
+                             uint16_t publish_port = 0) noexcept {
+    if (!valid_ipv4(address) || address == "0.0.0.0" ||
+        (submit_port == publish_port && submit_port != 0)) {
       return false;
     }
 
@@ -152,11 +153,11 @@ public:
     zmq_msg_t msg, reply;
 
     if (!aggr_address_.empty()) {
-      join_req.set_submit_address("tcp://" + aggr_address_ + ":" +
-                                  std::to_string(aggr_submit_port_));
-      join_req.set_publish_address("tcp://" + aggr_address_ + ":" +
-                                   std::to_string(aggr_publish_port_));
       setup_aggregator();
+
+      aggregator_->get_publisher();
+      join_req.set_submit_address(aggregator_->get_router().get_endpoint());
+      join_req.set_publish_address(aggregator_->get_publisher().get_endpoint());
     }
 
     *req.mutable_join() = join_req;

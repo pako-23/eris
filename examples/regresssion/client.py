@@ -3,6 +3,7 @@
 import numpy as np
 from eris import ErisClient
 import torch
+import argparse
 from torch import nn, optim
 from torch.utils.data import DataLoader, TensorDataset
 import sys
@@ -93,11 +94,11 @@ class ExampleClient(ErisClient):
         pass
 
 
-def start_node(aggr_rpc_port=None, aggr_publish_port=None):
+def start_node(aggregator=False):
     client = ExampleClient("tcp://127.0.0.1:50051", "tcp://127.0.0.1:5555")
 
-    if aggr_rpc_port is not None and aggr_publish_port is not None:
-        client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
+    if aggregator:
+        client.set_aggregator_config("127.0.0.1")
 
     if not client.join():
         print("Client failed to join the training")
@@ -111,16 +112,16 @@ def start_node(aggr_rpc_port=None, aggr_publish_port=None):
 
 
 def main():
-    if len(sys.argv) == 1:
-        return start_node()
-    elif len(sys.argv) == 3:
-        return start_node(int(sys.argv[1]), int(sys.argv[2]))
-    else:
-        print(
-            f"Usage: {sys.argv[0]} [<aggregator submit port> <aggregator publish port>]",
-            file=sys.stderr,
-        )
-        return 1
+    parser = argparse.ArgumentParser(
+        description="Start an Eris client configured with the options"
+    )
+    parser.add_argument(
+        "--aggregator",
+        action=argparse.BooleanOptionalAction,
+        help="Start node as aggregator",
+    )
+    args = parser.parse_args()
+    start_node(aggregator=args.aggregator)
 
 
 if __name__ == "__main__":

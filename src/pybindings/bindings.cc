@@ -123,8 +123,9 @@ public:
 
   void fit(void) override { PYBIND11_OVERRIDE_PURE(void, PyErisClient, fit, ); }
 
-  bool set_aggregator_config(const std::string &address, uint16_t submit_port,
-                             uint16_t publish_port) {
+  bool set_aggregator_config(const std::string &address,
+                             uint16_t submit_port = 0,
+                             uint16_t publish_port = 0) {
     return client_.set_aggregator_config(address, submit_port, publish_port);
   }
 
@@ -271,5 +272,6 @@ PYBIND11_MODULE(eris, m) {
       .def("evaluate", &PyErisClient::evaluate,
            py::call_guard<py::gil_scoped_release>())
       .def("set_aggregator_config", &PyErisClient::set_aggregator_config,
-           py::arg("address"), py::arg("submit_port"), py::arg("publish_port"));
+           py::arg("address"), py::arg("submit_port") = 0,
+           py::arg("publish_port") = 0);
 }

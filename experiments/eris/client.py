@@ -329,8 +329,7 @@ class ExampleClient(ErisClient):
 
 
 def start_node(
-    aggr_rpc_port=None,
-    aggr_publish_port=None,
+    is_aggr=False,
     model=None,
     train_loader=None,
     val_loader=None,
@@ -361,8 +360,8 @@ def start_node(
     )
 
     # Configure aggregator if ports are provided
-    if aggr_rpc_port is not None and aggr_publish_port is not None:
-        client.set_aggregator_config("127.0.0.1", aggr_rpc_port, aggr_publish_port)
+    if is_aggr:
+        client.set_aggregator_config("127.0.0.1")
 
     # Start training
     start_time = time.time()
@@ -463,14 +462,9 @@ def main():
         help="Specifies the artificial data partition",
     )
     parser.add_argument(
-        "--submit-port",
-        type=int,
-        help="Aggregator submit port",
-    )
-    parser.add_argument(
-        "--publish-port",
-        type=int,
-        help="Aggregator publish port",
+        "--aggregator",
+        action=argparse.BooleanOptionalAction,
+        help="Start node as aggregator",
     )
     parser.add_argument(
         "--dataset",
@@ -536,10 +530,9 @@ def main():
     if args.id == 1:
         utils.create_delede_folders(config)
 
-    if args.submit_port and args.publish_port:
+    if args.aggregator:
         return start_node(
-            aggr_rpc_port=args.submit_port,
-            aggr_publish_port=args.publish_port,
+            is_aggr=True,
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,

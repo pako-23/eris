@@ -72,8 +72,7 @@ for fold in $(seq 1 $k_folds); do
 
     for i in $(seq 1 "$n_clients"); do
 	if [ "$i" -le "$aggregators" ]; then
-            ./client.py --submit-port "$((50051 + i))" \
-			--publish-port "$((5555 + i))" \
+            ./client.py --aggregator                   \
 			--id "$i"                      \
 			--dataset "$dataset_name"      \
 			--shard "../data/client_datasets/IID_data_client_$i.pt" \

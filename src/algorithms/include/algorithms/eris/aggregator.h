@@ -73,6 +73,9 @@ public:
    */
   void stop(void) { service_.stop(); }
 
+  inline Socket &get_publisher(void) { return service_.get_publisher(); }
+  inline Socket &get_router(void) { return service_.get_router(); }
+
 private:
   /**
    * Handles the submission of new model weights from a client.
