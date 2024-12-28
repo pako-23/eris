@@ -6,6 +6,7 @@
 #include "util/networking.h"
 #include "zmq.h"
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <future>
 #include <optional>
@@ -27,10 +28,14 @@ public:
   explicit ErisService(const ErisServiceConfig *config)
       : publisher_{ZMQ_PUB}, router_{ZMQ_ROUTER}, running_{false} {
     if (!publisher_.bind(config->get_publisher().get_endpoint()))
-      throw std::invalid_argument{"failed to bind publisher address"};
+      throw std::invalid_argument{"failed to bind publisher address " +
+                                  config->get_publisher().get_endpoint() +
+                                  ": " + strerror(errno)};
 
     if (!router_.bind(config->get_router().get_endpoint()))
-      throw std::invalid_argument{"failed to bind router address"};
+      throw std::invalid_argument{"failed to bind router address " +
+                                  config->get_router().get_endpoint() + ": " +
+                                  strerror(errno)};
 
     const int timeout = 100;
     router_.setsockopt(ZMQ_RCVTIMEO, &timeout, sizeof(timeout));
