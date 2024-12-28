@@ -494,7 +494,7 @@ def main():
     args = parser.parse_args()
     
     # Check GPU and set manual seed
-    device = utils.check_gpu(seed=cfg.seed)
+    device = utils.check_gpu(seed=cfg.seed, client_id=args.id)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
     config['fold'] = args.fold

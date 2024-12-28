@@ -4,6 +4,8 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import models
 
+# ADD DP TO REACH 0 MIA ACC
+
 # Training settings (for everyone)
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 k_folds = 5  # Set 1 to disable cross validation
@@ -12,7 +14,7 @@ lr = 0.01
 momentum = 0.9
 seed = 1
 transform = None
-gpu = 2 # select the gpu, -1 use cpu, -2 multiple distributed gpus
+gpu = -2 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Privacy auditing
 privacy_audit = True
@@ -34,13 +36,13 @@ delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is use
 experiments = {
     "mnist": {
         "dataset": "mnist",
-        "client_train_samples": 1024,
-        "rounds": 20,  # Originally 15
-        "clients": 10,
+        "client_train_samples": 32,
+        "rounds": 200,  # Originally 15
+        "clients": 50,
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
-        "splits": 10,
+        "splits": 50,
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.LeNet5,

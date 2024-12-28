@@ -42,7 +42,6 @@ k_folds=$(extract_config_var "k_folds")
 dataset_name=$(extract_config_var "dataset_name")
 n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
 
-
 # Print the number of clients
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
 

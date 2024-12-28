@@ -60,6 +60,6 @@ result = calculate_mean_std_metrics(metrics, model_name=config["model_name"])
 
 # Save the mean metrics to a file
 result_pd = pd.DataFrame(result, index=[0])
-result_pd.to_excel(f'../{args.strategy}/results/{default_path}/mean_std_test_metrics.xlsx', index=False)
+result_pd.to_excel(f'../{args.strategy}/results/{default_path}/metrics_{args.strategy}_S{config["client_train_samples"]}_R{config["rounds"]}.xlsx', index=False)
 
 

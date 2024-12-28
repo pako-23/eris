@@ -39,6 +39,7 @@ k_folds=$(extract_config_var "k_folds")
 dataset_name=$(extract_config_var "dataset_name")
 n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
 aggregators=$(extract_config_var "experiments.${dataset_name}.splits")
+experiments=$(extract_config_var "experiments.${dataset_name}")
 
 # Print the number of clients
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
@@ -66,7 +67,8 @@ for fold in $(seq 1 $k_folds); do
 
     # Start training
     ./coordinator.py --dataset_name "$dataset_name" &
-    sleep 0.5
+    # sleep 0.5
+    sleep 1
 
     for i in $(seq 1 "$n_clients"); do
 	if [ "$i" -le "$aggregators" ]; then
@@ -81,7 +83,8 @@ for fold in $(seq 1 $k_folds); do
 			--dataset "$dataset_name" \
 			--shard "../data/client_datasets/IID_data_client_$i.pt" &
 	fi
-	sleep 0.2
+	# sleep 0.2
+    sleep 7
     done
 
     while pgrep -f ./client.py >/dev/null; do

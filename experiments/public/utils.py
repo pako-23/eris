@@ -31,10 +31,6 @@ def create_delede_folders(config):
     # Results
     if not os.path.exists(f"results/{predictor_name}/{dataset_name}"):
         os.makedirs(f"results/{predictor_name}/{dataset_name}")
-    else:
-        # remove the directory and create a new one
-        os.system(f"rm -r results/{predictor_name}/{dataset_name}")
-        os.makedirs(f"results/{predictor_name}/{dataset_name}")
     # Histories
     if not os.path.exists(f"histories/{predictor_name}/{dataset_name}"):
         os.makedirs(f"histories/{predictor_name}/{dataset_name}")
