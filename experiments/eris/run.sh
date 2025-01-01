@@ -82,8 +82,8 @@ for fold in $(seq 1 $k_folds); do
 			--dataset "$dataset_name" \
 			--shard "../data/client_datasets/IID_data_client_$i.pt" &
 	fi
-	# sleep 0.2
-    sleep 7
+	sleep 0.2
+    # sleep 2
     done
 
     while pgrep -f ./client.py >/dev/null; do
@@ -98,8 +98,8 @@ done
 if [ $k_folds -gt 1 ]; then
     echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
     cd ../public
-    python average_results.py --strategy "eris" 
+    python average_results.py --strategy "eris" --dataset $dataset_name
     sleep 1
 fi
 
-# echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
+echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"

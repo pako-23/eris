@@ -142,8 +142,10 @@ class FlowerClient(fl.client.NumPyClient):
                     scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
                 self.set_parameters(params_out)
             if cfg.score_fn == 'blackbox':
+                # self.set_parameters(params_in)  # TO REMOVE
                 for samples, targets in self.canary_loader:
                     scores.extend(self.score_blackbox_batch(samples, targets, client_update))
+                # self.set_parameters(params_out) # TO REMOVE
             else:
                 NotImplementedError(f'score function {cfg.score_fn} is not known')
 

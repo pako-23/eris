@@ -90,7 +90,7 @@ done
 if [ $k_folds -gt 1 ]; then
     echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
     cd ../public
-    python average_results.py --strategy "fedavg" 
+    python average_results.py --strategy "fedavg" --dataset $dataset_name
     sleep 1
 fi
 

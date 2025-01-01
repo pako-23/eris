@@ -7,7 +7,7 @@ import models
 # ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
-dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+dataset_name = "cifar10"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 k_folds = 5  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
@@ -36,8 +36,8 @@ delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is use
 experiments = {
     "mnist": {
         "dataset": "mnist",
-        "client_train_samples": 32, #fai 32
-        "rounds": 200,  # Originally 15
+        "client_train_samples": 512, 
+        "rounds": 100,  # Originally 15
         "clients": 50,
         "batch": 64,
         "batch_test": 64,
@@ -56,13 +56,13 @@ experiments = {
     },
     "cifar10": {
         "dataset": "cifar10",
-        "client_train_samples": 1000,
-        "rounds": 2, # Originally 20
-        "clients": 10,
+        "client_train_samples": 512,
+        "rounds": 150, # Originally 20 150
+        "clients": 50,
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
-        "splits": 5,
+        "splits": 50,
         "lr": 0.01,
         "momentum": 0.9,
         "model": models.ResNet9,
