@@ -22,6 +22,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 from public import utils
+import lpips
 
 def download_and_extract_lfw(data_dir='../data'):
     """
@@ -285,7 +286,9 @@ def process_and_save_metrics(best_metrics, method_name, result_path='results'):
         'psnr_mean': avg_metrics.get('psnr', None),
         'psnr_std': std_metrics.get('psnr', None),
         'ssim_mean': avg_metrics.get('ssim', None),
-        'ssim_std': std_metrics.get('ssim', None)
+        'ssim_std': std_metrics.get('ssim', None),
+        'lpips_mean': avg_metrics.get('lpips', None),
+        'lpips_std': std_metrics.get('lpips', None)
     }
     
     # Convert result dictionary to DataFrame
@@ -311,8 +314,8 @@ def main(dataset='MNIST', splits=1):
 
     lr = 1.0
     num_dummy = 1
-    Iteration = 300
-    num_exp = 1000
+    Iteration = 30
+    num_exp = 2 #1000
     
     root_path = '.'
     data_path = os.path.join(root_path, 'data').replace('\\', '/')
@@ -329,7 +332,10 @@ def main(dataset='MNIST', splits=1):
     tt = transforms.Compose([transforms.ToTensor()])
     tp = transforms.Compose([transforms.ToPILImage()])
     
-
+    # Choose the desired backbone: 'alex', 'vgg', or 'squeeze'
+    lpips_model = lpips.LPIPS(net='alex') 
+    lpips_model = lpips_model.to(device) 
+    lpips_model.eval() 
 
     ''' load data '''
     if dataset == 'MNIST':
@@ -491,13 +497,35 @@ def main(dataset='MNIST', splits=1):
                         
                     # Calculate typical metrics to evaluate the quality of the reconstruction
                     mse = torch.mean((dummy_data - gt_data) ** 2).item()
-                    # Convert tensors to NumPy arrays for metric calculations
+                    
+                    # Calculate LPIPS
+                    # Min-Max Normalization for dummy_data to [0, 1]
+                    # Perform per-image min-max scaling
+                    dummy_min = dummy_data.view(dummy_data.size(0), -1).min(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
+                    dummy_max = dummy_data.view(dummy_data.size(0), -1).max(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
+                    dummy_data_normalized = (dummy_data - dummy_min) / (dummy_max - dummy_min + 1e-8)
+                    
+                    # Scale normalized data to [-1, 1] for LPIPS
+                    recon_lpips = dummy_data_normalized * 2 - 1
+                    gt_lpips = gt_data * 2 - 1  # Assuming gt_data is already in [0, 1]
+                    
+                    # Ensure recon_lpips and gt_lpips are on the same device as lpips_model
+                    recon_lpips = recon_lpips.to(device)
+                    gt_lpips = gt_lpips.to(device)
+                    
+                    # Compute LPIPS
+                    with torch.no_grad():
+                        lpips_values = lpips_model(recon_lpips, gt_lpips)
+                        lpips_total = lpips_values.sum().item()
+                    
+                    # Convert tensors to NumPy arrays for PSNR SSIM calculations
                     gt_np = gt_data.detach().cpu().numpy()
-                    recon_np = dummy_data.detach().cpu().numpy()
+                    recon_np = dummy_data_normalized.detach().cpu().numpy()
 
                     # Initialize metric accumulators
                     psnr_total = 0
                     ssim_total = 0
+
                     for imidx in range(num_dummy):
                         gt_img = gt_np[imidx]
                         recon_img = recon_np[imidx]
@@ -514,27 +542,22 @@ def main(dataset='MNIST', splits=1):
                         else:
                             raise ValueError(f"Unsupported number of channels in ground truth image: {gt_img.shape[0]}")
 
-                        # Normalize images to [0, 1] for metric calculations
-                        # gt_img = (gt_img - gt_img.min()) / (gt_img.max() - gt_img.min() + 1e-8)
-                        # recon_img = (recon_img - recon_img.min()) / (recon_img.max() - recon_img.min() + 1e-8)
-
-                        # psnr_val = compare_psnr(gt_img, recon_img, data_range=1.0)
-                        psnr_val = compare_psnr(gt_img, recon_img, data_range=255.0)
+                        # Compute psnr
+                        psnr_val = compare_psnr(gt_img, recon_img, data_range=1.0)
                         
                         # Compute SSIM
                         if multichannel:
-                            # Use channel_axis for newer scikit-image versions
-                            # ssim_val = compare_ssim(gt_img, recon_img, channel_axis=-1, data_range=1.0)
-                            ssim_val = compare_ssim(gt_img, recon_img, channel_axis=-1, data_range=255.0)
+                            ssim_val = compare_ssim(gt_img, recon_img, channel_axis=-1, data_range=1.0)
                         else:
-                            # ssim_val = compare_ssim(gt_img, recon_img, data_range=1.0)
-                            ssim_val = compare_ssim(gt_img, recon_img, data_range=255.0)
-    
+                            ssim_val = compare_ssim(gt_img, recon_img, data_range=1.0)
+                    
                         psnr_total += psnr_val
                         ssim_total += ssim_val
-
+                        
+                        
                     avg_psnr = psnr_total / num_dummy
                     avg_ssim = ssim_total / num_dummy
+                    avg_lpips = lpips_total / num_dummy
 
                     # Update best_metrics
                     if method == 'DLG':
@@ -542,14 +565,16 @@ def main(dataset='MNIST', splits=1):
                                 'best_loss': best_loss,
                                 'mse': mse,
                                 'psnr': avg_psnr,
-                                'ssim': avg_ssim
+                                'ssim': avg_ssim,
+                                'lpips': avg_lpips
                             } 
                     elif method == 'iDLG':
                         best_metrics_iDLG[idx_net] = {
                                 'best_loss': best_loss,
                                 'mse': mse,
                                 'psnr': avg_psnr,
-                                'ssim': avg_ssim
+                                'ssim': avg_ssim,
+                                'lpips': avg_lpips
                             } 
                     else:
                         raise KeyError                             
@@ -601,6 +626,7 @@ def main(dataset='MNIST', splits=1):
     # Average 
     process_and_save_metrics(best_metrics_DLG, f'DLG', result_path)
     process_and_save_metrics(best_metrics_iDLG, f'iDLG', result_path)
+    print('   -------------------   \n\n\n')
 
 
 
@@ -616,7 +642,6 @@ if __name__ == '__main__':
     main(dataset='MNIST', splits=1.2) # 2238
     main(dataset='MNIST', splits=1.4) # 3836
     main(dataset='MNIST', splits=2.0) # 6713
-
 
 
     # CIFAR10

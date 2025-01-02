@@ -57,7 +57,7 @@ experiments = {
     "cifar10": {
         "dataset": "cifar10",
         "client_train_samples": 256,
-        "rounds": 180, # Originally 20 
+        "rounds": 120, # Originally 20 
         "clients": 50,
         "batch": 64,
         "batch_test": 64,
