@@ -6,6 +6,9 @@ __pycache__/
 *$py.class
 trash.ipynb
 
+# Folder 
+experiments/dlk_attacks/data
+
 # C extensions
 *.so
 
