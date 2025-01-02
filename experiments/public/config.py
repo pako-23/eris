@@ -36,8 +36,8 @@ delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is use
 experiments = {
     "mnist": {
         "dataset": "mnist",
-        "client_train_samples": 512, 
-        "rounds": 100,  # Originally 15
+        "client_train_samples": 256, 
+        "rounds": 150,  # Originally 15
         "clients": 50,
         "batch": 64,
         "batch_test": 64,
@@ -56,8 +56,8 @@ experiments = {
     },
     "cifar10": {
         "dataset": "cifar10",
-        "client_train_samples": 512,
-        "rounds": 150, # Originally 20 150
+        "client_train_samples": 256,
+        "rounds": 180, # Originally 20 
         "clients": 50,
         "batch": 64,
         "batch_test": 64,
