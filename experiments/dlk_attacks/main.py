@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
+import torch.nn.functional as F 
 from torchvision import datasets, transforms
 import pickle
 import PIL.Image as Image
@@ -314,8 +315,8 @@ def main(dataset='MNIST', splits=1):
 
     lr = 1.0
     num_dummy = 1
-    Iteration = 30
-    num_exp = 2 #1000
+    Iteration = 300
+    num_exp = 200
     
     root_path = '.'
     data_path = os.path.join(root_path, 'data').replace('\\', '/')
@@ -508,6 +509,18 @@ def main(dataset='MNIST', splits=1):
                     # Scale normalized data to [-1, 1] for LPIPS
                     recon_lpips = dummy_data_normalized * 2 - 1
                     gt_lpips = gt_data * 2 - 1  # Assuming gt_data is already in [0, 1]
+    
+                    # Convert 1-channel to 3-channel by repeating the channel
+                    if dataset == 'MNIST':
+                        if recon_lpips.shape[1] == 1:
+                            recon_lpips = recon_lpips.repeat(1, 3, 1, 1)  # Shape: (batch_size, 3, H, W)
+                        if gt_lpips.shape[1] == 1:
+                            gt_lpips = gt_lpips.repeat(1, 3, 1, 1)        # Shape: (batch_size, 3, H, W)
+                        
+                        # Resize images to 64x64 for LPIPS
+                        target_size = (32, 32)  # You can choose 64 or 128 based on your preference
+                        recon_lpips = F.interpolate(recon_lpips, size=target_size, mode='bilinear', align_corners=False)
+                        gt_lpips = F.interpolate(gt_lpips, size=target_size, mode='bilinear', align_corners=False)
                     
                     # Ensure recon_lpips and gt_lpips are on the same device as lpips_model
                     recon_lpips = recon_lpips.to(device)
@@ -632,42 +645,54 @@ def main(dataset='MNIST', splits=1):
 
     
 if __name__ == '__main__':
-    # MNIST
-    main(dataset='MNIST', splits=1.0)
-    main(dataset='MNIST', splits=1.00001) # 1
-    main(dataset='MNIST', splits=1.0001) # 2
-    main(dataset='MNIST', splits=1.001) # 14
-    main(dataset='MNIST', splits=1.01) # 133
-    main(dataset='MNIST', splits=1.1) # 1221
-    main(dataset='MNIST', splits=1.2) # 2238
-    main(dataset='MNIST', splits=1.4) # 3836
-    main(dataset='MNIST', splits=2.0) # 6713
+    # # MNIST
+    # main(dataset='MNIST', splits=1.0)
+    # main(dataset='MNIST', splits=1.00001) # 1
+    # main(dataset='MNIST', splits=1.0001) # 2
+    # main(dataset='MNIST', splits=1.001) # 14
+    # main(dataset='MNIST', splits=1.01) # 133
+    # main(dataset='MNIST', splits=1.1) # 1221
+    # main(dataset='MNIST', splits=1.2) # 2238
+    # main(dataset='MNIST', splits=1.4) # 3836
+    # main(dataset='MNIST', splits=2.0) # 6713
+    # main(dataset='MNIST', splits=4.0) # 10070
+    # main(dataset='MNIST', splits=8.0) # 11748
+    # main(dataset='MNIST', splits=16.0) # 12587
+    # main(dataset='MNIST', splits=32.0) # 13007  (only 419 real params)
 
 
-    # CIFAR10
-    main(dataset='cifar10', splits=1.0)
-    main(dataset='cifar10', splits=1.00001) # 1
-    main(dataset='cifar10', splits=1.0001) # 2
-    main(dataset='cifar10', splits=1.001) # 16
-    main(dataset='cifar10', splits=1.01) # 157
-    main(dataset='cifar10', splits=1.1) # 1439
-    main(dataset='cifar10', splits=1.2) # 2638
-    main(dataset='cifar10', splits=1.4) # 4522
-    main(dataset='cifar10', splits=2.0) # 7913
+    # # CIFAR10
+    # main(dataset='cifar10', splits=1.0)
+    # main(dataset='cifar10', splits=1.00001) # 1
+    # main(dataset='cifar10', splits=1.0001) # 2
+    # main(dataset='cifar10', splits=1.001) # 16
+    # main(dataset='cifar10', splits=1.01) # 157
+    # main(dataset='cifar10', splits=1.1) # 1439
+    # main(dataset='cifar10', splits=1.2) # 2638
+    # main(dataset='cifar10', splits=1.4) # 4522
+    # main(dataset='cifar10', splits=2.0) # 7913
+    # main(dataset='cifar10', splits=4.0) # 11870
+    # main(dataset='cifar10', splits=8.0) # 13848
+    # main(dataset='cifar10', splits=16.0) # 14837
+    # main(dataset='cifar10', splits=32.0) # 15332  (only 494 real params)
 
     
     # LFW
-    main(dataset='lfw', splits=1.0) 
-    main(dataset='lfw', splits=1.0000001) # 1    
-    main(dataset='lfw', splits=1.000001) # 5
-    main(dataset='lfw', splits=1.00001) # 45
-    main(dataset='lfw', splits=1.0001) # 443
-    main(dataset='lfw', splits=1.001) # 4425
-    main(dataset='lfw', splits=1.01) # 43853
-    main(dataset='lfw', splits=1.1) # 402648
-    main(dataset='lfw', splits=1.2) # 738187
-    main(dataset='lfw', splits=1.4) # 1265462
-    main(dataset='lfw', splits=2.0) # 2214559
+    # main(dataset='lfw', splits=1.0) 
+    # main(dataset='lfw', splits=1.0000001) # 1    
+    # main(dataset='lfw', splits=1.000001) # 5
+    # main(dataset='lfw', splits=1.00001) # 45
+    # main(dataset='lfw', splits=1.0001) # 443
+    # main(dataset='lfw', splits=1.001) # 4425
+    # main(dataset='lfw', splits=1.01) # 43853
+    # main(dataset='lfw', splits=1.1) # 402648
+    # main(dataset='lfw', splits=1.2) # 738187
+    # main(dataset='lfw', splits=1.4) # 1265462
+    # main(dataset='lfw', splits=2.0) # 2214559
+    main(dataset='lfw', splits=4.0) # 3321838
+    main(dataset='lfw', splits=8.0) # 3875478
+    main(dataset='lfw', splits=16.0) # 4152298
+    main(dataset='lfw', splits=32.0) # 4290708  (only 138409 real params)
 
 
 
