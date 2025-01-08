@@ -405,34 +405,11 @@ def main(dataset='MNIST', splits=1):
                     gt_data = torch.cat((gt_data, tmp_datum), dim=0)
                     gt_label = torch.cat((gt_label, tmp_label), dim=0)
 
-
-            # compute original gradient
-            out = net(gt_data)
-            y = criterion(out, gt_label)
-            dy_dx = torch.autograd.grad(y, net.parameters())
-            original_dy_dx = list((_.detach().clone() for _ in dy_dx))
-
-            if eris:
-                print(f"Evaluate only 1 split")
-                gradient_list = []
-                for param in original_dy_dx:
-                    gradient_list.append(param.cpu().data.numpy())
-
-                # Flat and select only one split, zeroing out the others
-                w, s = concatenate_weights(gradient_list, n_splits=splits, random_seed=seed)
-                r = deconcatenate_weights(w,s)
-
-                # update gradient
-                update_model_parameters(original_dy_dx, r)
-                total_zero, total_non_zero = count_zero_nonzero(original_dy_dx)
-            else:
-                total_zero = 0
-                total_non_zero = sum(param.numel() for param in original_dy_dx)
-
-            if flag:
-                flag = False
-                image_path = os.path.join(root_path, f'images/{dataset}/{total_zero}_{total_non_zero}_E{num_exp}_I{Iteration}')
-                result_path = os.path.join(root_path, f'results/{dataset}/{total_zero}_{total_non_zero}_E{num_exp}_I{Iteration}')
+            # no optimization 
+            if splits == 'random':
+                # path
+                image_path = os.path.join(root_path, f'images/{dataset}/{'random'}_E{num_exp}_I{Iteration}')
+                result_path = os.path.join(root_path, f'results/{dataset}/{'random'}_E{num_exp}_I{Iteration}')
 
                 os.makedirs(image_path, exist_ok=True)
                 os.makedirs(result_path, exist_ok=True)
@@ -440,198 +417,326 @@ def main(dataset='MNIST', splits=1):
                 print(dataset, 'root_path:', root_path)
                 print(dataset, 'data_path:', data_path)
                 print(dataset, 'image_path:', image_path)
-            
-            
-            # generate dummy data and label
-            dummy_data = torch.randn(gt_data.size()).to(device).requires_grad_(True)
-            dummy_label = torch.randn((gt_data.shape[0], num_classes)).to(device).requires_grad_(True)
-
-            if method == 'DLG':
-                optimizer = torch.optim.LBFGS([dummy_data, dummy_label], lr=lr)
-            elif method == 'iDLG':
-                optimizer = torch.optim.LBFGS([dummy_data, ], lr=lr)
-                # predict the ground-truth label
-                label_pred = torch.argmin(torch.sum(original_dy_dx[-2], dim=-1), dim=-1).detach().reshape((1,)).requires_grad_(False)
-
-            history = []
-            history_iters = []
-            losses = []
-            mses = []
-            train_iters = []
-            best_loss = 100000
-
-            print('lr =', lr)
-            for iters in range(Iteration):
-
-                def closure():
-                    optimizer.zero_grad()
-                    pred = net(dummy_data)
-                    if method == 'DLG':
-                        dummy_loss = - torch.mean(torch.sum(torch.softmax(dummy_label, -1) * torch.log(torch.softmax(pred, -1)), dim=-1))
-                        # dummy_loss = criterion(pred, gt_label)
-                    elif method == 'iDLG':
-                        dummy_loss = criterion(pred, label_pred)
-
-                    dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True)
-
-                    grad_diff = 0
-                    for gx, gy in zip(dummy_dy_dx, original_dy_dx):
-                        grad_diff += ((gx - gy) ** 2).sum()
-                    grad_diff.backward()
-                    return grad_diff
-
-                optimizer.step(closure)
-                current_loss = closure().item()
-                train_iters.append(iters)
-                losses.append(current_loss)
-                mses.append(torch.mean((dummy_data-gt_data)**2).item())
                 
-                # save best 
-                if current_loss < best_loss:
-                    best_loss = current_loss
-                    # Save best reconstructed image in result_path
-                    for imidx in range(num_dummy):
-                        
-                        img = tp(dummy_data[imidx].cpu())
-                        img_filename = f'best_recon_{method}_exp{idx_net}_img{imidx}.png'
-                        img.save(os.path.join(result_path, img_filename))
-                        
-                    # Calculate typical metrics to evaluate the quality of the reconstruction
-                    mse = torch.mean((dummy_data - gt_data) ** 2).item()
+                # Generate a random reconstructed image
+                dummy_data = torch.rand(gt_data.size()).to(device).requires_grad_(True)
+                dummy_label = torch.rand((gt_data.shape[0], num_classes)).to(device).requires_grad_(True)
+
+                # save random image
+                for imidx in range(num_dummy):
                     
-                    # Calculate LPIPS
-                    # Min-Max Normalization for dummy_data to [0, 1]
-                    # Perform per-image min-max scaling
-                    dummy_min = dummy_data.view(dummy_data.size(0), -1).min(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
-                    dummy_max = dummy_data.view(dummy_data.size(0), -1).max(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
-                    dummy_data_normalized = (dummy_data - dummy_min) / (dummy_max - dummy_min + 1e-8)
+                    img = tp(dummy_data[imidx].cpu())
+                    img_filename = f'best_recon_{method}_exp{idx_net}_img{imidx}.png'
+                    img.save(os.path.join(result_path, img_filename))
+                
+                # Directly calculate metrics for the random reconstruction
+                mse = torch.mean((dummy_data - gt_data) ** 2).item()
+
+                # Min-Max Normalization for dummy_data to [0, 1]
+                dummy_min = dummy_data.view(dummy_data.size(0), -1).min(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
+                dummy_max = dummy_data.view(dummy_data.size(0), -1).max(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
+                dummy_data_normalized = (dummy_data - dummy_min) / (dummy_max - dummy_min + 1e-8)
+
+                # Scale normalized data to [-1, 1] for LPIPS
+                recon_lpips = dummy_data_normalized * 2 - 1
+                gt_lpips = gt_data * 2 - 1  # Assuming gt_data is already in [0, 1]
+
+                # Repeat channel for MNIST dataset and resize for LPIPS
+                if dataset == 'MNIST':
+                    if recon_lpips.shape[1] == 1:
+                        recon_lpips = recon_lpips.repeat(1, 3, 1, 1)
+                    if gt_lpips.shape[1] == 1:
+                        gt_lpips = gt_lpips.repeat(1, 3, 1, 1)
+                    target_size = (32, 32)  # Resize for LPIPS
+                    recon_lpips = F.interpolate(recon_lpips, size=target_size, mode='bilinear', align_corners=False)
+                    gt_lpips = F.interpolate(gt_lpips, size=target_size, mode='bilinear', align_corners=False)
+
+                # Compute LPIPS
+                recon_lpips = recon_lpips.to(device)
+                gt_lpips = gt_lpips.to(device)
+                with torch.no_grad():
+                    lpips_values = lpips_model(recon_lpips, gt_lpips)
+                    lpips_total = lpips_values.sum().item()
+
+                # Convert tensors to NumPy arrays for PSNR and SSIM calculations
+                gt_np = gt_data.detach().cpu().numpy()
+                recon_np = dummy_data_normalized.detach().cpu().numpy()
+
+                psnr_total = 0
+                ssim_total = 0
+                for imidx in range(num_dummy):
+                    gt_img = gt_np[imidx]
+                    recon_img = recon_np[imidx]
+
+                    if gt_img.shape[0] == 1:
+                        gt_img = gt_img.squeeze(0)
+                        recon_img = recon_img.squeeze(0)
+                        multichannel = False
+                    elif gt_img.shape[0] == 3:
+                        gt_img = np.transpose(gt_img, (1, 2, 0))
+                        recon_img = np.transpose(recon_img, (1, 2, 0))
+                        multichannel = True
+
+                    psnr_val = compare_psnr(gt_img, recon_img, data_range=1.0)
+                    ssim_val = compare_ssim(gt_img, recon_img, channel_axis=-1, data_range=1.0) if multichannel else compare_ssim(gt_img, recon_img, data_range=1.0)
+
+                    psnr_total += psnr_val
+                    ssim_total += ssim_val
+
+                avg_psnr = psnr_total / num_dummy
+                avg_ssim = ssim_total / num_dummy
+                avg_lpips = lpips_total / num_dummy
+
+                # Log or save the metrics
+                print(f"Random Reconstruction Metrics: MSE = {mse:.4f}, PSNR = {avg_psnr:.4f}, SSIM = {avg_ssim:.4f}, LPIPS = {avg_lpips:.4f}")
+            
+                # Update best_metrics
+                if method == 'DLG':
+                    best_metrics_DLG[idx_net] = {
+                            'best_loss': 0,
+                            'mse': mse,
+                            'psnr': avg_psnr,
+                            'ssim': avg_ssim,
+                            'lpips': avg_lpips
+                        } 
+                elif method == 'iDLG':
+                    best_metrics_iDLG[idx_net] = {
+                            'best_loss': 0,
+                            'mse': mse,
+                            'psnr': avg_psnr,
+                            'ssim': avg_ssim,
+                            'lpips': avg_lpips
+                        } 
+                else:
+                    raise KeyError  
+            
+            else:
+                # compute original gradient
+                out = net(gt_data)
+                y = criterion(out, gt_label)
+                dy_dx = torch.autograd.grad(y, net.parameters())
+                original_dy_dx = list((_.detach().clone() for _ in dy_dx))
+
+                if eris:
+                    print(f"Evaluate only 1 split")
+                    gradient_list = []
+                    for param in original_dy_dx:
+                        gradient_list.append(param.cpu().data.numpy())
+
+                    # Flat and select only one split, zeroing out the others
+                    w, s = concatenate_weights(gradient_list, n_splits=splits, random_seed=seed)
+                    r = deconcatenate_weights(w,s)
+
+                    # update gradient
+                    update_model_parameters(original_dy_dx, r)
+                    total_zero, total_non_zero = count_zero_nonzero(original_dy_dx)
+                else:
+                    total_zero = 0
+                    total_non_zero = sum(param.numel() for param in original_dy_dx)
+
+
+                if flag:
+                    flag = False
+                    image_path = os.path.join(root_path, f'images/{dataset}/{total_zero}_{total_non_zero}_E{num_exp}_I{Iteration}')
+                    result_path = os.path.join(root_path, f'results/{dataset}/{total_zero}_{total_non_zero}_E{num_exp}_I{Iteration}')
+
+                    os.makedirs(image_path, exist_ok=True)
+                    os.makedirs(result_path, exist_ok=True)
                     
-                    # Scale normalized data to [-1, 1] for LPIPS
-                    recon_lpips = dummy_data_normalized * 2 - 1
-                    gt_lpips = gt_data * 2 - 1  # Assuming gt_data is already in [0, 1]
-    
-                    # Convert 1-channel to 3-channel by repeating the channel
-                    if dataset == 'MNIST':
-                        if recon_lpips.shape[1] == 1:
-                            recon_lpips = recon_lpips.repeat(1, 3, 1, 1)  # Shape: (batch_size, 3, H, W)
-                        if gt_lpips.shape[1] == 1:
-                            gt_lpips = gt_lpips.repeat(1, 3, 1, 1)        # Shape: (batch_size, 3, H, W)
-                        
-                        # Resize images to 64x64 for LPIPS
-                        target_size = (32, 32)  # You can choose 64 or 128 based on your preference
-                        recon_lpips = F.interpolate(recon_lpips, size=target_size, mode='bilinear', align_corners=False)
-                        gt_lpips = F.interpolate(gt_lpips, size=target_size, mode='bilinear', align_corners=False)
-                    
-                    # Ensure recon_lpips and gt_lpips are on the same device as lpips_model
-                    recon_lpips = recon_lpips.to(device)
-                    gt_lpips = gt_lpips.to(device)
-                    
-                    # Compute LPIPS
-                    with torch.no_grad():
-                        lpips_values = lpips_model(recon_lpips, gt_lpips)
-                        lpips_total = lpips_values.sum().item()
-                    
-                    # Convert tensors to NumPy arrays for PSNR SSIM calculations
-                    gt_np = gt_data.detach().cpu().numpy()
-                    recon_np = dummy_data_normalized.detach().cpu().numpy()
+                    print(dataset, 'root_path:', root_path)
+                    print(dataset, 'data_path:', data_path)
+                    print(dataset, 'image_path:', image_path)
+                
+                
+                # generate dummy data and label
+                dummy_data = torch.randn(gt_data.size()).to(device).requires_grad_(True)
+                dummy_label = torch.randn((gt_data.shape[0], num_classes)).to(device).requires_grad_(True)
 
-                    # Initialize metric accumulators
-                    psnr_total = 0
-                    ssim_total = 0
+                if method == 'DLG':
+                    optimizer = torch.optim.LBFGS([dummy_data, dummy_label], lr=lr)
+                elif method == 'iDLG':
+                    optimizer = torch.optim.LBFGS([dummy_data, ], lr=lr)
+                    # predict the ground-truth label
+                    label_pred = torch.argmin(torch.sum(original_dy_dx[-2], dim=-1), dim=-1).detach().reshape((1,)).requires_grad_(False)
 
-                    for imidx in range(num_dummy):
-                        gt_img = gt_np[imidx]
-                        recon_img = recon_np[imidx]
-                        
-                        # Handle channels
-                        if gt_img.shape[0] == 1:
-                            gt_img = gt_img.squeeze(0)  # (H, W)
-                            recon_img = recon_img.squeeze(0)
-                            multichannel = False
-                        elif gt_img.shape[0] == 3:
-                            gt_img = np.transpose(gt_img, (1, 2, 0))  # (H, W, C)
-                            recon_img = np.transpose(recon_img, (1, 2, 0))
-                            multichannel = True
-                        else:
-                            raise ValueError(f"Unsupported number of channels in ground truth image: {gt_img.shape[0]}")
+                history = []
+                history_iters = []
+                losses = []
+                mses = []
+                train_iters = []
+                best_loss = 100000
+                print('lr =', lr)
+                for iters in range(Iteration):
 
-                        # Compute psnr
-                        psnr_val = compare_psnr(gt_img, recon_img, data_range=1.0)
-                        
-                        # Compute SSIM
-                        if multichannel:
-                            ssim_val = compare_ssim(gt_img, recon_img, channel_axis=-1, data_range=1.0)
-                        else:
-                            ssim_val = compare_ssim(gt_img, recon_img, data_range=1.0)
-                    
-                        psnr_total += psnr_val
-                        ssim_total += ssim_val
-                        
-                        
-                    avg_psnr = psnr_total / num_dummy
-                    avg_ssim = ssim_total / num_dummy
-                    avg_lpips = lpips_total / num_dummy
-
-                    # Update best_metrics
-                    if method == 'DLG':
-                        best_metrics_DLG[idx_net] = {
-                                'best_loss': best_loss,
-                                'mse': mse,
-                                'psnr': avg_psnr,
-                                'ssim': avg_ssim,
-                                'lpips': avg_lpips
-                            } 
-                    elif method == 'iDLG':
-                        best_metrics_iDLG[idx_net] = {
-                                'best_loss': best_loss,
-                                'mse': mse,
-                                'psnr': avg_psnr,
-                                'ssim': avg_ssim,
-                                'lpips': avg_lpips
-                            } 
-                    else:
-                        raise KeyError                             
-
-
-                if iters % int(Iteration / 30) == 0:
-                    current_time = str(time.strftime("[%Y-%m-%d %H:%M:%S]", time.localtime()))
-                    print(current_time, iters, 'loss = %.8f, mse = %.8f' %(current_loss, mses[-1]))
-                    history.append([tp(dummy_data[imidx].cpu()) for imidx in range(num_dummy)])
-                    history_iters.append(iters)
-
-                    for imidx in range(num_dummy):
-                        plt.figure(figsize=(12, 8))
-                        plt.subplot(3, 10, 1)
-                        plt.imshow(tp(gt_data[imidx].cpu()))
-                        for i in range(min(len(history), 29)):
-                            plt.subplot(3, 10, i + 2)
-                            plt.imshow(history[i][imidx])
-                            plt.title('iter=%d' % (history_iters[i]))
-                            plt.axis('off')
+                    def closure():
+                        optimizer.zero_grad()
+                        pred = net(dummy_data)
                         if method == 'DLG':
-                            plt.savefig('%s/DLG_on_%s_%05d.png' % (image_path, imidx_list, imidx_list[imidx]))
-                            plt.close()
+                            dummy_loss = - torch.mean(torch.sum(torch.softmax(dummy_label, -1) * torch.log(torch.softmax(pred, -1)), dim=-1))
+                            # dummy_loss = criterion(pred, gt_label)
                         elif method == 'iDLG':
-                            plt.savefig('%s/iDLG_on_%s_%05d.png' % (image_path, imidx_list, imidx_list[imidx]))
-                            plt.close()
+                            dummy_loss = criterion(pred, label_pred)
 
-                    if current_loss < 0.000001: # converge
-                        break
+                        dummy_dy_dx = torch.autograd.grad(dummy_loss, net.parameters(), create_graph=True)
 
-            if method == 'DLG':
-                loss_DLG = losses
-                label_DLG = torch.argmax(dummy_label, dim=-1).detach().item()
-                mse_DLG = mses
-            elif method == 'iDLG':
-                loss_iDLG = losses
-                label_iDLG = label_pred.item()
-                mse_iDLG = mses
+                        grad_diff = 0
+                        for gx, gy in zip(dummy_dy_dx, original_dy_dx):
+                            grad_diff += ((gx - gy) ** 2).sum()
+                        grad_diff.backward()
+                        return grad_diff
+
+                    optimizer.step(closure)
+                    current_loss = closure().item()
+                    train_iters.append(iters)
+                    losses.append(current_loss)
+                    mses.append(torch.mean((dummy_data-gt_data)**2).item())
+                    
+                    # save best 
+                    if current_loss < best_loss:
+                        best_loss = current_loss
+                        # Save best reconstructed image in result_path
+                        for imidx in range(num_dummy):
+                            
+                            img = tp(dummy_data[imidx].cpu())
+                            img_filename = f'best_recon_{method}_exp{idx_net}_img{imidx}.png'
+                            img.save(os.path.join(result_path, img_filename))
+                            
+                        # Calculate typical metrics to evaluate the quality of the reconstruction
+                        mse = torch.mean((dummy_data - gt_data) ** 2).item()
+                        
+                        # Calculate LPIPS
+                        # Min-Max Normalization for dummy_data to [0, 1]
+                        # Perform per-image min-max scaling
+                        dummy_min = dummy_data.view(dummy_data.size(0), -1).min(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
+                        dummy_max = dummy_data.view(dummy_data.size(0), -1).max(dim=1, keepdim=True)[0].unsqueeze(-1).unsqueeze(-1)
+                        dummy_data_normalized = (dummy_data - dummy_min) / (dummy_max - dummy_min + 1e-8)
+                        
+                        # Scale normalized data to [-1, 1] for LPIPS
+                        recon_lpips = dummy_data_normalized * 2 - 1
+                        gt_lpips = gt_data * 2 - 1  # Assuming gt_data is already in [0, 1]
+        
+                        # Convert 1-channel to 3-channel by repeating the channel
+                        if dataset == 'MNIST':
+                            if recon_lpips.shape[1] == 1:
+                                recon_lpips = recon_lpips.repeat(1, 3, 1, 1)  # Shape: (batch_size, 3, H, W)
+                            if gt_lpips.shape[1] == 1:
+                                gt_lpips = gt_lpips.repeat(1, 3, 1, 1)        # Shape: (batch_size, 3, H, W)
+                            
+                            # Resize images to 64x64 for LPIPS
+                            target_size = (32, 32)  # You can choose 64 or 128 based on your preference
+                            recon_lpips = F.interpolate(recon_lpips, size=target_size, mode='bilinear', align_corners=False)
+                            gt_lpips = F.interpolate(gt_lpips, size=target_size, mode='bilinear', align_corners=False)
+                        
+                        # Ensure recon_lpips and gt_lpips are on the same device as lpips_model
+                        recon_lpips = recon_lpips.to(device)
+                        gt_lpips = gt_lpips.to(device)
+                        
+                        # Compute LPIPS
+                        with torch.no_grad():
+                            lpips_values = lpips_model(recon_lpips, gt_lpips)
+                            lpips_total = lpips_values.sum().item()
+                        
+                        # Convert tensors to NumPy arrays for PSNR SSIM calculations
+                        gt_np = gt_data.detach().cpu().numpy()
+                        recon_np = dummy_data_normalized.detach().cpu().numpy()
+
+                        # Initialize metric accumulators
+                        psnr_total = 0
+                        ssim_total = 0
+
+                        for imidx in range(num_dummy):
+                            gt_img = gt_np[imidx]
+                            recon_img = recon_np[imidx]
+                            
+                            # Handle channels
+                            if gt_img.shape[0] == 1:
+                                gt_img = gt_img.squeeze(0)  # (H, W)
+                                recon_img = recon_img.squeeze(0)
+                                multichannel = False
+                            elif gt_img.shape[0] == 3:
+                                gt_img = np.transpose(gt_img, (1, 2, 0))  # (H, W, C)
+                                recon_img = np.transpose(recon_img, (1, 2, 0))
+                                multichannel = True
+                            else:
+                                raise ValueError(f"Unsupported number of channels in ground truth image: {gt_img.shape[0]}")
+
+                            # Compute psnr
+                            psnr_val = compare_psnr(gt_img, recon_img, data_range=1.0)
+                            
+                            # Compute SSIM
+                            if multichannel:
+                                ssim_val = compare_ssim(gt_img, recon_img, channel_axis=-1, data_range=1.0)
+                            else:
+                                ssim_val = compare_ssim(gt_img, recon_img, data_range=1.0)
+                        
+                            psnr_total += psnr_val
+                            ssim_total += ssim_val
+                            
+                            
+                        avg_psnr = psnr_total / num_dummy
+                        avg_ssim = ssim_total / num_dummy
+                        avg_lpips = lpips_total / num_dummy
+
+                        # Update best_metrics
+                        if method == 'DLG':
+                            best_metrics_DLG[idx_net] = {
+                                    'best_loss': best_loss,
+                                    'mse': mse,
+                                    'psnr': avg_psnr,
+                                    'ssim': avg_ssim,
+                                    'lpips': avg_lpips
+                                } 
+                        elif method == 'iDLG':
+                            best_metrics_iDLG[idx_net] = {
+                                    'best_loss': best_loss,
+                                    'mse': mse,
+                                    'psnr': avg_psnr,
+                                    'ssim': avg_ssim,
+                                    'lpips': avg_lpips
+                                } 
+                        else:
+                            raise KeyError                             
 
 
-        print('imidx_list:', imidx_list)
-        print('loss_DLG:', loss_DLG[-1], 'loss_iDLG:', loss_iDLG[-1])
-        print('mse_DLG:', mse_DLG[-1], 'mse_iDLG:', mse_iDLG[-1])
-        print('gt_label:', gt_label.detach().cpu().data.numpy(), 'lab_DLG:', label_DLG, 'lab_iDLG:', label_iDLG)
+                    if iters % int(Iteration / 30) == 0:
+                        current_time = str(time.strftime("[%Y-%m-%d %H:%M:%S]", time.localtime()))
+                        print(current_time, iters, 'loss = %.8f, mse = %.8f' %(current_loss, mses[-1]))
+                        history.append([tp(dummy_data[imidx].cpu()) for imidx in range(num_dummy)])
+                        history_iters.append(iters)
+
+                        for imidx in range(num_dummy):
+                            plt.figure(figsize=(12, 8))
+                            plt.subplot(3, 10, 1)
+                            plt.imshow(tp(gt_data[imidx].cpu()))
+                            for i in range(min(len(history), 29)):
+                                plt.subplot(3, 10, i + 2)
+                                plt.imshow(history[i][imidx])
+                                plt.title('iter=%d' % (history_iters[i]))
+                                plt.axis('off')
+                            if method == 'DLG':
+                                plt.savefig('%s/DLG_on_%s_%05d.png' % (image_path, imidx_list, imidx_list[imidx]))
+                                plt.close()
+                            elif method == 'iDLG':
+                                plt.savefig('%s/iDLG_on_%s_%05d.png' % (image_path, imidx_list, imidx_list[imidx]))
+                                plt.close()
+
+                        if current_loss < 0.000001: # converge
+                            break
+
+                if method == 'DLG':
+                    loss_DLG = losses
+                    label_DLG = torch.argmax(dummy_label, dim=-1).detach().item()
+                    mse_DLG = mses
+                elif method == 'iDLG':
+                    loss_iDLG = losses
+                    label_iDLG = label_pred.item()
+                    mse_iDLG = mses
+
+        if not isinstance(splits, str):
+            print('imidx_list:', imidx_list)
+            print('loss_DLG:', loss_DLG[-1], 'loss_iDLG:', loss_iDLG[-1])
+            print('mse_DLG:', mse_DLG[-1], 'mse_iDLG:', mse_iDLG[-1])
+            print('gt_label:', gt_label.detach().cpu().data.numpy(), 'lab_DLG:', label_DLG, 'lab_iDLG:', label_iDLG)
 
         print('----------------------\n\n')
 
@@ -659,6 +764,7 @@ if __name__ == '__main__':
     # main(dataset='MNIST', splits=8.0) # 11748
     # main(dataset='MNIST', splits=16.0) # 12587
     # main(dataset='MNIST', splits=32.0) # 13007  (only 419 real params)
+    main(dataset='MNIST', splits='random')
 
 
     # # CIFAR10
@@ -675,7 +781,7 @@ if __name__ == '__main__':
     # main(dataset='cifar10', splits=8.0) # 13848
     # main(dataset='cifar10', splits=16.0) # 14837
     # main(dataset='cifar10', splits=32.0) # 15332  (only 494 real params)
-
+    main(dataset='cifar10', splits='random')
     
     # LFW
     # main(dataset='lfw', splits=1.0) 
@@ -689,10 +795,11 @@ if __name__ == '__main__':
     # main(dataset='lfw', splits=1.2) # 738187
     # main(dataset='lfw', splits=1.4) # 1265462
     # main(dataset='lfw', splits=2.0) # 2214559
-    main(dataset='lfw', splits=4.0) # 3321838
-    main(dataset='lfw', splits=8.0) # 3875478
-    main(dataset='lfw', splits=16.0) # 4152298
-    main(dataset='lfw', splits=32.0) # 4290708  (only 138409 real params)
+    # main(dataset='lfw', splits=4.0) # 3321838
+    # main(dataset='lfw', splits=8.0) # 3875478
+    # main(dataset='lfw', splits=16.0) # 4152298
+    # main(dataset='lfw', splits=32.0) # 4290708  (only 138409 real params)
+    main(dataset='lfw', splits='random')
 
 
 
