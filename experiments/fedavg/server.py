@@ -293,6 +293,10 @@ def main() -> None:
 
     # model and history folder    
     model = config["model"](config["model_args"]).to(device)
+    
+    # Define the number of parameters in the model
+    num_params = sum(p.numel() for p in model.parameters())
+    print(f"\033[93mTotal number of parameters in the model: {num_params}\033[0m")
 
     # Create directories and delede old files
     utils.create_delede_folders(config)

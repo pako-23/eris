@@ -403,6 +403,10 @@ def start_node(
             # Construct the checkpoint path
             checkpoint_path = f"checkpoints/{config["model_name"]}/{config['dataset']}/model_{best_loss_round}.pth"
             test_model.load_state_dict(torch.load(checkpoint_path,  weights_only=False))
+            
+            # Define the number of parameters in the model
+            num_params = sum(p.numel() for p in test_model.parameters())
+            print(f"\033[93mTotal number of parameters in the model: {num_params}\033[0m")
 
             # Evaluate the model on the test set
             loss_test, accuracy_test, metric_test = evaluate_fn(test_model, device, test_loader, criterion)
