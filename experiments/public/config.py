@@ -7,14 +7,14 @@ import models
 # ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
-dataset_name = "cifar10"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 k_folds = 5  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
 seed = 1
 transform = None
-gpu = -2 # select the gpu, -1 use cpu, -2 multiple distributed gpus
+gpu = 0 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Privacy auditing
 privacy_audit = True
@@ -31,13 +31,17 @@ sensitivity = 1.0 # (float) defines the maximum change to the function’s outpu
 epsilon = 70.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
 delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is used to account for the probability of the privacy guarantee not holding (default: 1e-5)
 
+# Pruning
+pruning = True
+pruning_rate = 0.1  # Fraction of weights to prune
+
 
 # Experiments config
 experiments = {
     "mnist": {
         "dataset": "mnist",
-        "client_train_samples": 256, 
-        "rounds": 150,  # Originally 15
+        "client_train_samples": 64, 
+        "rounds": 200,  # Originally 15
         "clients": 50,
         "batch": 64,
         "batch_test": 64,
@@ -56,7 +60,7 @@ experiments = {
     },
     "cifar10": {
         "dataset": "cifar10",
-        "client_train_samples": 256,
+        "client_train_samples": 512,
         "rounds": 120, # Originally 20 
         "clients": 50,
         "batch": 64,

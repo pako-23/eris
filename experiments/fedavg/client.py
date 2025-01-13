@@ -126,6 +126,10 @@ class FlowerClient(fl.client.NumPyClient):
             if cfg.local_dp:
                 params_out = self.dp_funtion(params_in, self.get_parameters(config))
                 self.set_parameters(params_out)
+            elif cfg.pruning:
+                params_in = self.get_parameters(config)
+                params_out = self.prune_parameters(params_in, pruning_rate=cfg.pruning_rate)
+                self.set_parameters(params_out)
             else:
                 params_out = self.get_parameters(config)
 
@@ -281,6 +285,42 @@ class FlowerClient(fl.client.NumPyClient):
             losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none').cpu()
 
             return -losses
+
+    def prune_parameters(self, params, pruning_rate=0.3):
+        """
+        Prunes the largest weights in the parameters based on the pruning rate.
+
+        Args:
+            params (List[np.ndarray]): List of NumPy arrays representing model parameters.
+            pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
+
+        Returns:
+            List[np.ndarray]: Pruned parameters with the largest weights set to zero.
+        """
+        pruned_params = []
+        for idx, param in enumerate(params):
+            if param.ndim == 0:
+                # Skip scalar parameters if any
+                pruned_params.append(param)
+                continue
+
+            # Compute the absolute values and flatten the array
+            abs_param = np.abs(param)
+            flat_param = abs_param.flatten()
+
+            # Determine the threshold for pruning
+            threshold = np.percentile(flat_param, 100 * (1 - pruning_rate))
+
+            # Create a mask for weights above the threshold
+            mask = abs_param >= threshold
+
+            # Apply the mask to set pruned weights to zero
+            pruned_param = param * mask
+
+            pruned_params.append(pruned_param)
+            # print(f"Layer {idx}: Pruned {pruning_rate * 100}% of weights.")
+
+        return pruned_params
 
 
 

@@ -53,7 +53,58 @@ class LeNet5(nn.Module):
         x_rec = F.relu(self.fc2(x))  # Apply ReLU after fc2
         logits = self.fc3(x_rec)    # Output: num_classes
         return logits
-    
+
+
+# class LeNet5(nn.Module):
+#     def __init__(self, model_args):
+#         """
+#         Initializes the LeNet-5 model with a scaling factor for the network size.
+
+#         Args:
+#             model_args (dict): A dictionary containing:
+#                 - in_channels (int): Number of input channels.
+#                 - num_classes (int): Number of classes in the dataset.
+#                 - input_size (tuple): Size of the input images (H, W).
+#                 - scale_factor (float): Factor by which to scale the network parameters.
+#         """
+#         super(LeNet5, self).__init__()
+        
+#         in_channels = model_args["in_channels"]
+#         num_classes = model_args["num_classes"]
+#         input_size = model_args["input_size"]
+#         scale_factor = 0.5
+
+#         # Convert original layer sizes to scaled versions
+#         # Round or cast to int to avoid fractional channel sizes
+#         conv1_out = int(6 * scale_factor)
+#         conv2_out = int(16 * scale_factor)
+#         fc1_out = int(120 * scale_factor)
+#         fc2_out = int(84 * scale_factor)
+
+#         self.conv1 = nn.Conv2d(in_channels, conv1_out, kernel_size=5, stride=1, padding=2)
+#         self.pool1 = nn.AvgPool2d(kernel_size=2, stride=2)
+#         self.conv2 = nn.Conv2d(conv1_out, conv2_out, kernel_size=5, stride=1)
+#         self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
+
+#         # Dynamically calculate the size of the features after the convolutional layers
+#         dummy_input = torch.zeros(1, in_channels, *input_size)
+#         dummy_output = self.pool2(self.conv2(self.pool1(self.conv1(dummy_input))))
+#         feature_size = prod(dummy_output.size()[1:])
+
+#         self.fc1 = nn.Linear(feature_size, fc1_out)
+#         self.fc2 = nn.Linear(fc1_out, fc2_out)
+#         self.fc3 = nn.Linear(fc2_out, num_classes)
+
+#     def forward(self, x):
+#         x = F.relu(self.conv1(x))
+#         x = self.pool1(x)
+#         x = F.relu(self.conv2(x))
+#         x = self.pool2(x)
+#         x = x.view(x.size(0), -1)  # Flatten
+#         x = F.relu(self.fc1(x))
+#         x = F.relu(self.fc2(x))
+#         logits = self.fc3(x)
+#         return logits
 
 
 # 2) Resnet-9 model 
