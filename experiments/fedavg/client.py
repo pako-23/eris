@@ -167,8 +167,10 @@ class FlowerClient(fl.client.NumPyClient):
                     self.train_fn(self.model, self.device, self.subsampled_train_loader, self.optimizer, self.criterion, epoch, self.client_id)
                 
             if cfg.pruning:
-                params_in = self.get_parameters(config)
-                params_out = self.prune_parameters(params_in, pruning_rate=cfg.pruning_rate)
+                params_out = self.prune_parameters(
+                    self.get_parameters(config), 
+                    pruning_rate=cfg.pruning_rate
+                    )
                 self.set_parameters(params_out)
             else:
                 params_out = self.get_parameters(config)
@@ -242,8 +244,10 @@ class FlowerClient(fl.client.NumPyClient):
                         )
                     
             if cfg.pruning:
-                params_in = self.get_parameters(config)
-                params_out = self.prune_parameters(params_in, pruning_rate=cfg.pruning_rate)
+                params_out = self.prune_parameters(
+                    self.get_parameters(config), 
+                    pruning_rate=cfg.pruning_rate
+                    )
                 self.set_parameters(params_out)
             else:
                 params_out = self.get_parameters(config)
