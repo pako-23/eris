@@ -164,7 +164,15 @@ class FlowerClient(fl.client.NumPyClient):
                     )
             else:
                 for epoch in range(config["local_epochs"]):
-                    self.train_fn(self.model, self.device, self.subsampled_train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+                    self.train_fn(
+                        self.model, 
+                        self.device, 
+                        self.subsampled_train_loader, 
+                        self.optimizer, 
+                        self.criterion, 
+                        epoch, 
+                        self.client_id
+                        )
                 
             if cfg.pruning:
                 params_out = self.prune_parameters(
