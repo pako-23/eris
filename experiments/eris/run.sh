@@ -52,54 +52,60 @@ elif [ "$k_folds" -eq 1 ]; then # if k_folds = 1, print "No cross validation"
 fi
 
 
-# Cycle through the folds
-for fold in $(seq 1 $k_folds); do
+for exp_n in $(seq 0 6); do
+
+    # Cycle through the folds
+    for fold in $(seq 1 $k_folds); do
+        if [ $k_folds -gt 1 ]; then
+            echo -e "\n\033[1;36mFold $fold\033[0m"
+        fi
+        
+        # Creating dataset
+        cd ../data
+        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+        cd ../eris
+
+        echo -e "\n\033[1;36mStarting server with model \033[0m\n"
+
+        # Start training
+        ./coordinator.py --dataset_name "$dataset_name" &
+        # sleep 0.5
+        sleep 1
+
+        for i in $(seq 1 "$n_clients"); do
+        if [ "$i" -le "$aggregators" ]; then
+                ./client.py --aggregator                   \
+                --id "$i"                      \
+                --dataset "$dataset_name"      \
+                --shard "../data/client_datasets/IID_data_client_$i.pt" \
+                --fold "$fold" \
+                --exp_n "$exp_n" &
+        else
+            ./client.py --id "$i"                 \
+                --dataset "$dataset_name" \
+                --shard "../data/client_datasets/IID_data_client_$i.pt" \
+                --exp_n "$exp_n" &
+        fi
+        sleep 0.2
+        # sleep 2
+        done
+
+        while pgrep -f ./client.py >/dev/null; do
+            sleep 5
+        done
+
+        pkill -9 -f coordinator.py
+        sleep 2
+    done
+
+    # Aggregate results
     if [ $k_folds -gt 1 ]; then
-        echo -e "\n\033[1;36mFold $fold\033[0m"
+        echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
+        cd ../public
+        python average_results.py --strategy "eris" --dataset $dataset_name --exp_n "$exp_n"
+        sleep 1
     fi
-    
-    # Creating dataset
-    cd ../data
-    python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-    cd ../eris
 
-    echo -e "\n\033[1;36mStarting server with model \033[0m\n"
+    echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
 
-    # Start training
-    ./coordinator.py --dataset_name "$dataset_name" &
-    # sleep 0.5
-    sleep 1
-
-    for i in $(seq 1 "$n_clients"); do
-	if [ "$i" -le "$aggregators" ]; then
-            ./client.py --aggregator                   \
-			--id "$i"                      \
-			--dataset "$dataset_name"      \
-			--shard "../data/client_datasets/IID_data_client_$i.pt" \
-            --fold "$fold" &
-	else
-	    ./client.py --id "$i"                 \
-			--dataset "$dataset_name" \
-			--shard "../data/client_datasets/IID_data_client_$i.pt" &
-	fi
-	sleep 0.2
-    # sleep 2
-    done
-
-    while pgrep -f ./client.py >/dev/null; do
-        sleep 5
-    done
-
-    pkill -9 -f coordinator.py
-    sleep 2
 done
-
-# Aggregate results
-if [ $k_folds -gt 1 ]; then
-    echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
-    cd ../public
-    python average_results.py --strategy "eris" --dataset $dataset_name
-    sleep 1
-fi
-
-echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
