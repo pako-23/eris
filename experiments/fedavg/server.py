@@ -275,6 +275,12 @@ def main() -> None:
         default="mnist",
         choices=list(cfg.experiments.keys()),
     )
+    parser.add_argument(
+        "--exp_n",
+        type=int,
+        help="exp number",
+        default=0,
+    )
     args = parser.parse_args()
     
     # Start time
@@ -292,8 +298,9 @@ def main() -> None:
     utils.set_seed(cfg.seed)
 
     # model and history folder    
-    model = config["model"](config["model_args"]).to(device)
-    
+    # model = config["model"](config["model_args"]).to(device)
+    model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
+
     # Define the number of parameters in the model
     num_params = sum(p.numel() for p in model.parameters())
     print(f"\033[93mTotal number of parameters in the model: {num_params}\033[0m")
@@ -320,7 +327,7 @@ def main() -> None:
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
         server_address="0.0.0.0:8098",   # 0.0.0.0 listens to all available interfaces
-        config=fl.server.ServerConfig(num_rounds=config['rounds']),
+        config=fl.server.ServerConfig(num_rounds=config['rounds'][args.exp_n]),
         strategy=strategy,
     )
     # convert history to list

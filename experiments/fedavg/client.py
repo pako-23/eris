@@ -32,7 +32,8 @@ sys.path.append(parent_dir)
 from public import models
 from public import utils
 from public import config as cfg
-
+import opacus
+import gc
 
 
 # Define Flower client 
@@ -96,12 +97,42 @@ class FlowerClient(fl.client.NumPyClient):
         self.subsampled_train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
         self.canary_loader = DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
 
-        # local differential privacy
+        # local differential privacy initialization
         if cfg.local_dp:
-            self.dp_funtion = utils.LocalDpMod(cfg.clipping_norm, cfg.epsilon, cfg.delta, self.client_id)
-            noise_value_sd = (cfg.sensitivity * np.sqrt(2 * np.log(1.25 / cfg.delta)) / cfg.epsilon)
+            # Calculate sample rate = (batch_size / total_number_of_samples)
+            if cfg.privacy_audit:
+                sample_rate = min(1.0, self.subsampled_train_loader.batch_size / len(self.subsampled_train_loader.dataset))
+            else:
+                sample_rate = min(1.0, self.train_loader.batch_size / len(self.train_loader.dataset))
+
+            self.sigma = opacus.accountants.utils.get_noise_multiplier(
+                target_epsilon=cfg.epsilon,
+                target_delta=cfg.delta,
+                sample_rate=sample_rate,
+                epochs=int(self.config['epochs']), 
+                accountant='rdp',  
+            ) 
+
+            self.privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
+            if cfg.privacy_audit:
+                self.model, self.optimizer, self.subsampled_train_loader = self.privacy_engine.make_private(
+                    module=self.model,
+                    optimizer=self.optimizer,
+                    data_loader=self.subsampled_train_loader,
+                    noise_multiplier=self.sigma,
+                    max_grad_norm=cfg.sensitivity,
+                    )
+            else:
+                self.model, self.optimizer, self.train_loader = self.privacy_engine.make_private(
+                    module=self.model,
+                    optimizer=self.optimizer,
+                    data_loader=self.train_loader,
+                    noise_multiplier=self.sigma,
+                    max_grad_norm=cfg.sensitivity,
+                    )           
+            
             if client_id == 1:
-                print(f"\n\033[94mLocal Differential Privacy with noise_value_sd: {noise_value_sd}\033[0m\n")
+                print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
 
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
@@ -118,15 +149,24 @@ class FlowerClient(fl.client.NumPyClient):
 
         # privacy auditing
         if self.privacy_audit:
-            # train
-            for epoch in range(config["local_epochs"]):
-                self.train_fn(self.model, self.device, self.subsampled_train_loader, self.optimizer, self.criterion, epoch, self.client_id)
-            
+
             # Local Differential Privacy
             if cfg.local_dp:
-                params_out = self.dp_funtion(params_in, self.get_parameters(config))
-                self.set_parameters(params_out)
-            elif cfg.pruning:
+                models.train_with_opacus(
+                    self.model, 
+                    self.device, 
+                    self.subsampled_train_loader, 
+                    self.optimizer, 
+                    self.criterion, 
+                    self.sigma, 
+                    config["local_epochs"], 
+                    self.client_id
+                    )
+            else:
+                for epoch in range(config["local_epochs"]):
+                    self.train_fn(self.model, self.device, self.subsampled_train_loader, self.optimizer, self.criterion, epoch, self.client_id)
+                
+            if cfg.pruning:
                 params_in = self.get_parameters(config)
                 params_out = self.prune_parameters(params_in, pruning_rate=cfg.pruning_rate)
                 self.set_parameters(params_out)
@@ -177,17 +217,41 @@ class FlowerClient(fl.client.NumPyClient):
                 history_folder=f"histories/{self.config['model_name']}/{self.config['dataset']}/"
                 )
         
-        else:
-            # train
-            for epoch in range(config["local_epochs"]):
-                self.train_fn(self.model, self.device, self.train_loader, self.optimizer, self.criterion, epoch, self.client_id)
-            
-            # Local Differential Privacy
-            if cfg.local_dp:
-                params_out = self.dp_funtion(params_in, self.get_parameters(config))
+        else: # NO AUDITING
+            if cfg.local_dp:   
+                # Local Differential Privacy
+                models.train_with_opacus(self.model, 
+                    self.device, 
+                    self.train_loader, 
+                    self.optimizer, 
+                    self.criterion, 
+                    self.sigma, 
+                    config["local_epochs"], 
+                    self.client_id
+                    )
+            else:
+                for epoch in range(config["local_epochs"]):
+                    self.train_fn(
+                        self.model, 
+                        self.device, 
+                        self.train_loader, 
+                        self.optimizer, 
+                        self.criterion, 
+                        epoch, 
+                        self.client_id
+                        )
+                    
+            if cfg.pruning:
+                params_in = self.get_parameters(config)
+                params_out = self.prune_parameters(params_in, pruning_rate=cfg.pruning_rate)
+                self.set_parameters(params_out)
             else:
                 params_out = self.get_parameters(config)
-                    
+        
+        gc.collect() 
+        torch.cuda.empty_cache() 
+        if self.client_id == 1:
+            print(f"\033[91mTraining Round: {config["current_round"]}\033[0m")
         return params_out, self.num_examples["train"], {}
     
     
@@ -345,6 +409,12 @@ def main()->None:
         default="mnist",
         choices=list(cfg.experiments.keys()),
     )
+    parser.add_argument(
+        "--exp_n",
+        type=int,
+        help="exp number",
+        default=0,
+    )
     args = parser.parse_args()
 
     # check gpu and set manual seed
@@ -353,13 +423,14 @@ def main()->None:
     config = cfg.experiments[args.dataset]
 
     # model and history folder
-    model = config["model"](config["model_args"]).to(device)
-
+    model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
+    if args.id == 1:
+        utils.print_num_parameters(model)
     # Load data
     data = torch.load(f'../data/client_datasets/IID_data_client_{args.id}.pt', weights_only=False)
     
     # Split the dataset
-    train_size = config['client_train_samples']
+    train_size = config['client_train_samples'][args.exp_n]
     val_size = int(train_size * 0.3) # 30% for validation
     total_requested = train_size + val_size
     if total_requested > len(data):
