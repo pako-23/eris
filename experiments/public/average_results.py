@@ -36,6 +36,7 @@ def calculate_mean_std_metrics(metrics, model_name=None):
 parser = argparse.ArgumentParser(description='Average results')
 parser.add_argument('--strategy', type=str, default='fedavg', help='Strategy to use')
 parser.add_argument('--dataset', type=str, default='mnist', help='Dataset to use')
+parser.add_argument("--exp_n", type=int, help="exp number", default=0)
 args = parser.parse_args()
 config = cfg.experiments[args.dataset]
 
@@ -60,7 +61,7 @@ result = calculate_mean_std_metrics(metrics, model_name=config["model_name"])
 
 # Save the mean metrics to a file
 result_pd = pd.DataFrame(result, index=[0])
-print(f'../{args.strategy}/results/{default_path}/metrics_{args.strategy}_S{config["client_train_samples"]}_R{config["rounds"]}_C{config["clients"]}_A{config["splits"]}.xlsx')
-result_pd.to_excel(f'../{args.strategy}/results/{default_path}/metrics_{args.strategy}_S{config["client_train_samples"]}_R{config["rounds"]}_C{config["clients"]}_A{config["splits"]}.xlsx', index=False)
+print(f'../{args.strategy}/results/{default_path}/metrics_{args.strategy}_S{config["client_train_samples"][args.exp_n]}_R{config["rounds"][args.exp_n]}_C{config["clients"]}_A{config["splits"]}.xlsx')
+result_pd.to_excel(f'../{args.strategy}/results/{default_path}/metrics_{args.strategy}_S{config["client_train_samples"][args.exp_n]}_R{config["rounds"][args.exp_n]}_C{config["clients"]}_A{config["splits"]}.xlsx', index=False)
 
 

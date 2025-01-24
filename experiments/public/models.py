@@ -4,8 +4,30 @@ import torch.nn.functional as F
 from math import prod
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import opacus 
 
-
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+from public import config as cfg
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="Secure RNG turned off.*",
+    module="opacus.privacy_engine"
+)
+# Suppress the "Optimal order is the largest alpha" warning
+warnings.filterwarnings(
+    "ignore",
+    message="Optimal order is the largest alpha. Please consider expanding the range of alphas to get a tighter privacy bound."
+)
+warnings.filterwarnings(
+    "ignore",
+    message="Using a non-full backward hook when the forward contains multiple autograd Nodes is deprecated",
+    module="torch.nn.modules.module"
+)
 
 
 #############################################################################################################
@@ -111,7 +133,7 @@ class LeNet5(nn.Module):
 def residual_block(in_channels, out_channels, pool=False):
     layers = [
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1),
-        nn.BatchNorm2d(out_channels),
+        # nn.BatchNorm2d(out_channels),
         nn.ReLU(inplace=True)
     ]
     if pool:
@@ -133,13 +155,14 @@ class ResNet9(nn.Module):
         in_channels = model_args["in_channels"]
         num_classes = model_args["num_classes"]
         input_size = model_args["input_size"]
+        scaling = 2
         
-        self.prep = residual_block(in_channels, 64)
-        self.layer1_head = residual_block(64, 128, pool=True)
-        self.layer1_residual = nn.Sequential(residual_block(128, 128), residual_block(128, 128))
-        self.layer2 = residual_block(128, 256, pool=True)
-        self.layer3_head = residual_block(256, 512, pool=True)
-        self.layer3_residual = nn.Sequential(residual_block(512, 512), residual_block(512, 512))
+        self.prep = residual_block(in_channels, 64//scaling)
+        self.layer1_head = residual_block(64//scaling, 128//scaling, pool=True)
+        self.layer1_residual = nn.Sequential(residual_block(128//scaling, 128//scaling), residual_block(128//scaling, 128//scaling))
+        self.layer2 = residual_block(128//scaling, 256//scaling, pool=True)
+        self.layer3_head = residual_block(256//scaling, 512//scaling, pool=True)
+        self.layer3_residual = nn.Sequential(residual_block(512//scaling, 512//scaling), residual_block(512//scaling, 512//scaling))
         # self.avgpool = nn.AdaptiveAvgPool2d((1, 1))  # Changed to adaptive average pooling:         self.MaxPool2d = nn.Sequential(nn.MaxPool2d(4))
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -292,6 +315,44 @@ def simple_train(model, device, train_loader, optimizer, criterion, epoch, clien
         loss_list.append(loss.item())
     # print(f'Client: {client_id} - Train Epoch: {epoch} \tLoss: {sum(loss_list)/len(loss_list):.6f}')
 
+
+def train_with_opacus(model, device, train_loader, optimizer, criterion, sigma, epochs=1, client_id=None): 
+    model.train()
+
+    privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
+    model, optimizer, train_loader = privacy_engine.make_private(
+        module=model,
+        optimizer=optimizer,
+        data_loader=train_loader,
+        noise_multiplier=sigma,
+        max_grad_norm=cfg.sensitivity,
+        )
+
+    # 4) Training loop
+    for epoch in range(epochs):
+        epoch_loss = 0.0
+        for batch_idx, (data, target) in enumerate(train_loader):
+            data, target = data.to(device), target.to(device)
+            
+            optimizer.zero_grad()
+            outputs = model(data)
+            loss = criterion(outputs, target)
+            loss.backward()
+            
+            # Opacus will do the clipping + noise under the hood
+            optimizer.step()
+            
+            epoch_loss += loss.item()
+        
+        avg_loss = epoch_loss / len(train_loader)
+        
+        # 5) Check the privacy budget (epsilon) at the end of each epoch
+        cur_epsilon = privacy_engine.get_epsilon(delta=cfg.delta)
+        # print(f"Client {client_id} - Epoch {epoch+1}/{epochs} | Loss: {avg_loss:.4f} | ε = {cur_epsilon:.2f} (δ={cfg.delta})")
+
+    print(f"Client {client_id} - Epoch {epoch+1}/{epochs} | Loss: {avg_loss:.4f} | ε = {cur_epsilon:.2f} (δ={cfg.delta})")
+
+    del privacy_engine
 
 # simple test function
 def simple_test(model, device, test_loader, criterion, client_id=None):

@@ -56,17 +56,19 @@ def check_gpu(seed=0, print_info=True, client_id=1):
             print("CUDA is available")
             
             if cfg.gpu == -2: # multiple gpu
-                # assert client_id >=0, "client_id must be passed to select the respective GPU"
-                # n_total_gpus = torch.cuda.device_count() # uncomment
-                # device = 'cuda:' + str(int(client_id % n_total_gpus)) # uncomment
+                assert client_id >=0, "client_id must be passed to select the respective GPU"
+                n_total_gpus = torch.cuda.device_count() # uncomment
+                device = 'cuda:' + str(int(client_id % n_total_gpus)) # uncomment
                 
                 # with only few gpus
-                if client_id % 2:
-                    device = 'cuda:0'
-                else:
-                    device = 'cuda:3'
-            else:
-                device = 'cuda:' + str(cfg.gpu)
+            #     if client_id % 3 == 0:
+            #         device = 'cuda:1'
+            #     elif client_id % 3 == 1:
+            #         device = 'cuda:2'
+            #     else:
+            #         device = 'cuda:3'
+            # else:
+            #     device = 'cuda:' + str(cfg.gpu)
             torch.cuda.manual_seed_all(seed) 
     elif torch.backends.mps.is_available():
         if print_info:
@@ -79,6 +81,13 @@ def check_gpu(seed=0, print_info=True, client_id=1):
         device = 'cpu'
     return device
 
+
+def print_num_parameters(model):
+    # Sum the number of trainable parameters
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    # Print in red color
+    print(f"\033[91mNumber of trainable parameters: {total_params}\033[0m")
 
 def set_seed(seed):
     # Set seed for torch
@@ -392,10 +401,15 @@ def my_compute_clip_model_update(
     # clip_inputs_inplace(model_update, clipping_norm)
     
     input_norm = get_norm(model_update)
+    # print(f"L2 norm BEFORE clipping: {input_norm:.4f}")
+
     scaling_factor = min(1, clipping_norm / input_norm)
     
     for ii in range(len(model_update)):
         model_update[ii] *= scaling_factor
+    
+    # input_norm_after = get_norm(model_update)
+    # print(f"L2 norm AFTER  clipping: {input_norm_after:.4f}")
 
     for i, _ in enumerate(param2):
         param1[i] = param2[i] + model_update[i]
@@ -460,9 +474,11 @@ class LocalDpMod:
         )
 
         # Add noise to model params        
-        std_dev = self.sensitivity * np.sqrt(2 * np.log(1.25 / self.delta)) / self.epsilon        
+        # std_dev = self.sensitivity * np.sqrt(2 * np.log(1.25 / self.delta)) / self.epsilon 
+        scale = self.sensitivity / self.epsilon       
         for ii in range(len(params_clipped)):
-            params_clipped[ii] += np.random.normal(0, std_dev, params_clipped[ii].shape)
+            # params_clipped[ii] += np.random.normal(0, std_dev, params_clipped[ii].shape)
+            params_clipped[ii] += np.random.laplace(loc=0.0, scale=scale, size=params_clipped[ii].shape)
                 
         return params_clipped
 
