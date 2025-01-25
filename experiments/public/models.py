@@ -155,7 +155,7 @@ class ResNet9(nn.Module):
         in_channels = model_args["in_channels"]
         num_classes = model_args["num_classes"]
         input_size = model_args["input_size"]
-        scaling = 2
+        scaling = 4
         
         self.prep = residual_block(in_channels, 64//scaling)
         self.layer1_head = residual_block(64//scaling, 128//scaling, pool=True)

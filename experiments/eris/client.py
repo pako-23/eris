@@ -150,9 +150,10 @@ class ExampleClient(ErisClient):
         
         # privacy auditing
         if self.privacy_audit:
-            
-            # Local Differential Privacy
             if cfg.local_dp:
+                """
+                Local Differential Privacy (DP) training
+                """
                 models.train_with_opacus(
                     self.model, 
                     self.device, 
@@ -163,22 +164,62 @@ class ExampleClient(ErisClient):
                     self.config["epochs"], 
                     self.client_id
                     )
-            else: # Traditional training
+            else:
+                """
+                Traditional training without DP
+                """
                 for epoch in range(self.config["epochs"]):
                     self.train_fn(
-                        self.model,
-                        self.device,
-                        self.subsampled_train_loader,
-                        self.optimizer,
-                        self.criterion,
-                        epoch,
-                        self.client_id,
-                    )
+                        self.model, 
+                        self.device, 
+                        self.subsampled_train_loader, 
+                        self.optimizer, 
+                        self.criterion, 
+                        epoch, 
+                        self.client_id
+                        )
+                
             if cfg.pruning:
-                params_out = self.prune_parameters(
-                    self.get_parameters(), 
-                    pruning_rate=cfg.pruning_rate)
+                """
+                prune k% of the largest gradients [PriPrune FL] 
+                """
+                # calculate gradients
+                params_out = self.get_parameters()
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                
+                # prune the largest gradients
+                pruned_grads = self.prune_largest_grads(
+                    grads=grads,
+                    pruning_rate = cfg.pruning_rate
+                    )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
+            
+                # update model weights
                 self.set_parameters(params_out)
+                
+            elif cfg.k_sparsification:
+                """
+                k-random sparsification on the gradients [Part of SOTERIAFL]
+                """
+                # calculate gradients
+                params_out = self.get_parameters()
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                    
+                # k-sparsification on the gradients
+                sparse_grads = self.compress_parameters(
+                    grads,
+                    # k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))  # as in SoteriaFL
+                    k = int(self.n_params * cfg.k_sparsity)
+                    )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
+                
+                # update model weights
+                self.set_parameters(params_out)
+            
             else:
                 params_out = self.get_parameters()
 
@@ -256,10 +297,10 @@ class ExampleClient(ErisClient):
             # reset client model 
             self.set_parameters(params_out)
  
-        else:
-            if cfg.local_dp:
-                models.train_with_opacus(
-                    self.model, 
+        else: # NO AUDITING
+            if cfg.local_dp:   
+                # Local Differential Privacy
+                models.train_with_opacus(self.model, 
                     self.device, 
                     self.train_loader, 
                     self.optimizer, 
@@ -268,22 +309,59 @@ class ExampleClient(ErisClient):
                     self.config["epochs"], 
                     self.client_id
                     )
-            else: # Traditional training
+            else:
                 for epoch in range(self.config["epochs"]):
                     self.train_fn(
-                        self.model,
-                        self.device,
-                        self.train_loader,
-                        self.optimizer,
-                        self.criterion,
-                        epoch,
-                        self.client_id,
-                    )
+                        self.model, 
+                        self.device, 
+                        self.train_loader, 
+                        self.optimizer, 
+                        self.criterion, 
+                        epoch, 
+                        self.client_id
+                        )
+                    
             if cfg.pruning:
-                params_out = self.prune_parameters(
-                    self.get_parameters(), 
-                    pruning_rate=cfg.pruning_rate)
+                """
+                prune k% of the largest gradients [PriPrune FL] 
+                """
+                # calculate gradients
+                params_out = self.get_parameters()
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                
+                # prune the largest gradients
+                pruned_grads = self.prune_largest_grads(
+                    grads=grads,
+                    pruning_rate = cfg.pruning_rate
+                    )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
+            
+                # update model weights
                 self.set_parameters(params_out)
+
+            elif cfg.k_sparsification:
+                """
+                k-random sparsification on the gradients [Part of SOTERIAFL]
+                """
+                # calculate gradients
+                params_out = self.get_parameters()
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                    
+                # k-sparsification on the gradients
+                sparse_grads = self.compress_parameters(
+                    grads,
+                    # k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))  # as in SoteriaFL
+                    k = int(self.n_params * cfg.k_sparsity)
+                    )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
+                
+                # update model weights
+                self.set_parameters(params_out)
+            
             else:
                 params_out = self.get_parameters()
 

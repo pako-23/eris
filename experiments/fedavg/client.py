@@ -19,10 +19,9 @@ import argparse
 from torch.utils.data import Subset, random_split
 import torch.nn.functional as F
 import numpy as np
-import math
-import scipy 
 import copy
-import json
+import opacus
+import gc
 
 import sys
 import os
@@ -32,8 +31,7 @@ sys.path.append(parent_dir)
 from public import models
 from public import utils
 from public import config as cfg
-import opacus
-import gc
+
 
 
 # Define Flower client 
@@ -55,8 +53,8 @@ class FlowerClient(fl.client.NumPyClient):
                  k_plus: float = 1 / 3, 
                  k_min: float = 1 / 3,
                  config: dict = {'dataset':'mnist', 'batch':64},
+                 exp_n: int = 0
                 ):
-        
         
         # Define the client
         self.model = model
@@ -80,6 +78,8 @@ class FlowerClient(fl.client.NumPyClient):
         self.acc_accuracy_mia = -1
         self.config = config
         self.acc_scores = None
+        self.n_params = sum(p.numel() for p in self.model.parameters())
+        self.exp_n = exp_n
  
         # prepare dataset auditing
         canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
@@ -134,6 +134,7 @@ class FlowerClient(fl.client.NumPyClient):
             if client_id == 1:
                 print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
 
+
     def get_parameters(self, config):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
 
@@ -149,9 +150,10 @@ class FlowerClient(fl.client.NumPyClient):
 
         # privacy auditing
         if self.privacy_audit:
-
-            # Local Differential Privacy
             if cfg.local_dp:
+                """
+                Local Differential Privacy (DP) training
+                """
                 models.train_with_opacus(
                     self.model, 
                     self.device, 
@@ -163,6 +165,9 @@ class FlowerClient(fl.client.NumPyClient):
                     self.client_id
                     )
             else:
+                """
+                Traditional training without DP
+                """
                 for epoch in range(config["local_epochs"]):
                     self.train_fn(
                         self.model, 
@@ -175,11 +180,47 @@ class FlowerClient(fl.client.NumPyClient):
                         )
                 
             if cfg.pruning:
-                params_out = self.prune_parameters(
-                    self.get_parameters(config), 
-                    pruning_rate=cfg.pruning_rate
+                """
+                prune k% of the largest gradients [PriPrune FL] 
+                """
+                # calculate gradients
+                params_out = self.get_parameters(config)
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                
+                # prune the largest gradients
+                pruned_grads = self.prune_largest_grads(
+                    grads=grads,
+                    pruning_rate = cfg.pruning_rate
                     )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
+            
+                # update model weights
                 self.set_parameters(params_out)
+
+                
+            elif cfg.k_sparsification:
+                """
+                k-random sparsification on the gradients [Part of SOTERIAFL]
+                """
+                # calculate gradients
+                params_out = self.get_parameters(config)
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                    
+                # k-sparsification on the gradients
+                sparse_grads = self.compress_parameters(
+                    grads,
+                    # k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))  # as in SoteriaFL
+                    k = int(self.n_params * cfg.k_sparsity)
+                    )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
+                
+                # update model weights
+                self.set_parameters(params_out)
+            
             else:
                 params_out = self.get_parameters(config)
 
@@ -252,11 +293,46 @@ class FlowerClient(fl.client.NumPyClient):
                         )
                     
             if cfg.pruning:
-                params_out = self.prune_parameters(
-                    self.get_parameters(config), 
-                    pruning_rate=cfg.pruning_rate
+                """
+                prune k% of the largest gradients [PriPrune FL] 
+                """
+                # calculate gradients
+                params_out = self.get_parameters(config)
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                
+                # prune the largest gradients
+                pruned_grads = self.prune_largest_grads(
+                    grads=grads,
+                    pruning_rate = cfg.pruning_rate
                     )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
+            
+                # update model weights
                 self.set_parameters(params_out)
+                
+            elif cfg.k_sparsification:
+                """
+                k-random sparsification on the gradients [Part of SOTERIAFL]
+                """
+                # calculate gradients
+                params_out = self.get_parameters(config)
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                    
+                # k-sparsification on the gradients
+                sparse_grads = self.compress_parameters(
+                    grads,
+                    # k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))  # as in SoteriaFL
+                    k = int(self.n_params * cfg.k_sparsity)
+                    )
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
+                
+                # update model weights
+                self.set_parameters(params_out)
+            
             else:
                 params_out = self.get_parameters(config)
         
@@ -362,42 +438,181 @@ class FlowerClient(fl.client.NumPyClient):
 
             return -losses
 
-    def prune_parameters(self, params, pruning_rate=0.3):
+
+    def compress_parameters(self, params, k):
         """
-        Prunes the largest weights in the parameters based on the pruning rate.
+        Compresses the model parameters using random-k sparsification.
 
         Args:
+            params (List[np.ndarray]): List of NumPy arrays representing model parameters.
+            k (int): Number of coordinates to retain during compression.
+
+        Returns:
+            List[np.ndarray]: Compressed parameters where only k coordinates are retained
+                            (and scaled by d/k according to the random-k operator).
+        """
+        # Flatten all parameters (excluding scalars) into a single array
+        flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
+        d = flattened_params.size
+
+        # If k >= d, no compression happens (just return original parameters)
+        if k >= d:
+            print(f"No compression applied: k ({k}) >= d ({d}).")
+            return params
+        assert k > 0, "k must be a positive integer."
+
+        # Randomly select k indices out of d
+        indices = np.random.choice(d, k, replace=False)
+
+        # Create a boolean mask of size d with exactly k entries as True
+        mask = np.zeros(d, dtype=bool)
+        mask[indices] = True
+
+        # Apply the mask and scale by d/k
+        scaling_factor = d / k
+        compressed_flattened = scaling_factor * flattened_params * mask
+
+        # Reconstruct the parameter shapes
+        sparsified_params = []
+        start_idx = 0
+        for p in params:
+            if p.ndim == 0:
+                # If it's a scalar, just keep it uncompressed
+                sparsified_params.append(p)
+            else:
+                flat_len = p.size
+                sliced = compressed_flattened[start_idx:start_idx + flat_len]
+                sparsified_params.append(sliced.reshape(p.shape))
+                start_idx += flat_len
+
+        return sparsified_params
+
+
+    def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
+        """
+        Prunes 'pruning_rate' fraction (e.g., 0.3) of the weights with the largest gradients.
+        Args:
+            grads (List[np.ndarray]): List of NumPy arrays representing gradients.
             params (List[np.ndarray]): List of NumPy arrays representing model parameters.
             pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
 
         Returns:
             List[np.ndarray]: Pruned parameters with the largest weights set to zero.
         """
-        pruned_params = []
-        for idx, param in enumerate(params):
-            if param.ndim == 0:
-                # Skip scalar parameters if any
-                pruned_params.append(param)
-                continue
+        
+        assert len(grads) == len(params), "Number of gradients and parameters must match."
+        assert pruning_rate > 0 and pruning_rate < 1, "Pruning rate must be in (0, 1)."
+        
+        # Flatten all parameters (excluding scalars) into a single array
+        flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
+        flattened_grads = np.concatenate([np.abs(g.flatten()) for g in grads if g.ndim > 0])
 
-            # Compute the absolute values and flatten the array
-            abs_param = np.abs(param)
-            flat_param = abs_param.flatten()
+        # Determine the threshold for pruning
+        threshold = np.percentile(flattened_grads, 100 * (1 - pruning_rate))
 
-            # Determine the threshold for pruning
-            threshold = np.percentile(flat_param, 100 * (1 - pruning_rate))
+        # Create a mask for weights below the threshold
+        mask = flattened_grads <= threshold  # Keep small or midrange gradients
+        # print(f"Pruned parameters: {np.sum(mask)} out of {len(flattened_params)}, pruning rate {pruning_rate}.")
 
-            # Create a mask for weights above the threshold
-            mask = abs_param >= threshold
+        # Apply the mask to set pruned weights to zero
+        pruned_params = flattened_params * mask
 
-            # Apply the mask to set pruned weights to zero
-            pruned_param = param * mask
+        # Reconstruct the parameter shapes
+        pruned_params_list = []
+        start_idx = 0
+        for p in params:
+            if p.ndim == 0:
+                # If it's a scalar, just keep it uncompressed
+                pruned_params_list.append(p)
+            else:
+                flat_len = p.size
+                sliced = pruned_params[start_idx:start_idx + flat_len]
+                pruned_params_list.append(sliced.reshape(p.shape))
+                start_idx += flat_len
 
-            pruned_params.append(pruned_param)
-            # print(f"Layer {idx}: Pruned {pruning_rate * 100}% of weights.")
+        return pruned_params_list
 
-        return pruned_params
 
+    def prune_largest_grads(self, grads, pruning_rate=0.3):
+        """
+        Prunes 'pruning_rate' fraction (e.g., 0.3) of the largest gradients.
+        Args:
+            grads (List[np.ndarray]): List of NumPy arrays representing gradients.
+            pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
+
+        Returns:
+            List[np.ndarray]: Pruned parameters with the largest weights set to zero.
+        """
+        
+        assert pruning_rate > 0 and pruning_rate < 1, "Pruning rate must be in (0, 1)."
+        
+        # Flatten all parameters (excluding scalars) into a single array
+        flattened_grads = np.concatenate([g.flatten() for g in grads if g.ndim > 0])
+        flattened_abs_grads = np.concatenate([np.abs(g.flatten()) for g in grads if g.ndim > 0])
+
+        # Determine the threshold for pruning
+        threshold = np.percentile(flattened_abs_grads, 100 * (1 - pruning_rate))
+
+        # Create a mask for weights below the threshold
+        mask = flattened_abs_grads <= threshold  # Keep small or midrange gradients
+        # print(f"Pruned parameters: {np.sum(mask)} out of {len(flattened_params)}, pruning rate {pruning_rate}.")
+
+        # Apply the mask to set pruned weights to zero
+        pruned_grads = flattened_grads * mask
+
+        # Reconstruct the parameter shapes
+        pruned_grads_list = []
+        start_idx = 0
+        for g in grads:
+            if g.ndim == 0:
+                # If it's a scalar, just keep it uncompressed
+                pruned_grads_list.append(g)
+            else:
+                flat_len = g.size
+                sliced = pruned_grads[start_idx:start_idx + flat_len]
+                pruned_grads_list.append(sliced.reshape(g.shape))
+                start_idx += flat_len
+
+        return pruned_grads_list
+
+
+    # def prune_parameters(self, params, pruning_rate=0.3):
+    #     """
+    #     Prunes the largest weights in the parameters based on the pruning rate.
+
+    #     Args:
+    #         params (List[np.ndarray]): List of NumPy arrays representing model parameters.
+    #         pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
+
+    #     Returns:
+    #         List[np.ndarray]: Pruned parameters with the largest weights set to zero.
+    #     """
+    #     pruned_params = []
+    #     for idx, param in enumerate(params):
+    #         if param.ndim == 0:
+    #             # Skip scalar parameters if any
+    #             pruned_params.append(param)
+    #             continue
+
+    #         # Compute the absolute values and flatten the array
+    #         abs_param = np.abs(param)
+    #         flat_param = abs_param.flatten()
+
+    #         # Determine the threshold for pruning
+    #         threshold = np.percentile(flat_param, 100 * (1 - pruning_rate))
+
+    #         # Create a mask for weights above the threshold
+    #         mask = abs_param <= threshold
+
+    #         # Apply the mask to set pruned weights to zero
+    #         pruned_param = param * mask
+
+    #         pruned_params.append(pruned_param)
+    #         # print(f"Layer {idx}: Pruned {pruning_rate * 100}% of weights.")
+
+    #     return pruned_params
+    
+    
 
 
 
@@ -485,7 +700,8 @@ def main()->None:
                         p_value=cfg.p_value,
                         k_plus=cfg.k_plus,
                         k_min=cfg.k_min,
-                        config=config,                         
+                        config=config, 
+                        exp_n=args.exp_n                        
                           ).to_client()
     fl.client.start_client(server_address="[::]:8098", client=client) # local host
     
