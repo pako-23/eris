@@ -33,6 +33,10 @@ delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is use
 pruning = False
 pruning_rate = 0.2  # Fraction of weights to prune
 
+# k-sparsification
+k_sparsification = True
+k_sparsity = 0.01  # Fraction of weights to keep
+
 # Experiments config
 experiments = {
     "mnist": {
