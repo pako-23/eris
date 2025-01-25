@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from math import prod
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-import opacus 
+import opacus # type: ignore
 
 import sys
 import os

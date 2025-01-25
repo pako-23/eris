@@ -20,7 +20,7 @@ from torch.utils.data import Subset, random_split
 import torch.nn.functional as F
 import numpy as np
 import copy
-import opacus
+import opacus # type: ignore
 import gc
 
 import sys
