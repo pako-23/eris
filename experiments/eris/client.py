@@ -370,6 +370,8 @@ class ExampleClient(ErisClient):
             else:
                 params_out = self.get_parameters()
 
+            return params_out, self.num_examples["train"]
+
 
     def evaluate(self):
         # save previous aggregated model if client 1
