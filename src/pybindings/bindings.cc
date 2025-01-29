@@ -134,6 +134,11 @@ public:
     return client_.set_aggregator_config(address, submit_port, publish_port);
   }
 
+  void set_aggregation_strategy(
+      std::shared_ptr<AggregationStrategy> strategy) noexcept {
+    client_.set_aggregation_strategy(std::move(strategy));
+  }
+
   void evaluate(void) override {
     PYBIND11_OVERRIDE_PURE(void, PyErisClient, evaluate, );
   }
@@ -266,6 +271,18 @@ PYBIND11_MODULE(eris, m) {
       .def("start", [](ErisCoordinator<ZMQSocket> &self) { self.start(); })
       .def("stop", &ErisCoordinator<ZMQSocket>::stop);
 
+  py::class_<AggregationStrategy, std::shared_ptr<AggregationStrategy>>(
+      m, "AggregationStrategy")
+      .def("aggregate", &AggregationStrategy::aggregate);
+
+  py::class_<WeightedAverage, AggregationStrategy,
+             std::shared_ptr<WeightedAverage>>(m, "WeightedAverage")
+      .def(py::init<>());
+
+  py::class_<Soteria, AggregationStrategy, std::shared_ptr<Soteria>>(m,
+                                                                     "Soteria")
+      .def(py::init<float>());
+
   py::class_<PyClientBase, PyClient, std::shared_ptr<PyClientBase>>(m, "Client")
       .def(py::init<>())
       .def("join", &PyClientBase::join)
@@ -293,5 +310,7 @@ PYBIND11_MODULE(eris, m) {
            py::call_guard<py::gil_scoped_release>())
       .def("set_aggregator_config", &PyErisClient::set_aggregator_config,
            py::arg("address"), py::arg("submit_port") = 0,
-           py::arg("publish_port") = 0);
+           py::arg("publish_port") = 0)
+      .def("set_aggregation_strategy", &PyErisClient::set_aggregation_strategy,
+           py::arg("strategy"));
 }

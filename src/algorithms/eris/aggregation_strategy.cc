@@ -1,6 +1,6 @@
 #include "algorithms/eris/aggregation_strategy.h"
 #include "algorithms/eris/aggregator.pb.h"
-#include <algorithm>
+#include "spdlog/spdlog.h"
 #include <cstdint>
 #include <numeric>
 
@@ -30,7 +30,6 @@ Soteria::Soteria(float gamma) : reference_{}, prev_{}, gamma_{gamma} {}
 eris::WeightUpdate
 Soteria::aggregate(uint32_t round,
                    const std::vector<eris::WeightSubmissionRequest> &updates) {
-
   eris::WeightUpdate update;
   uint32_t samples = std::accumulate(
       updates.begin(), updates.end(), 0,
