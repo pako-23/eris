@@ -5,7 +5,6 @@
 #include "algorithms/eris/common.pb.h"
 #include "algorithms/eris/config.h"
 #include "algorithms/eris/service.h"
-#include "spdlog/spdlog.h"
 #include "zmq.h"
 #include <cmath>
 #include <cstddef>
@@ -29,9 +28,11 @@ public:
    *
    * @param config The configuration used to build the ErisAggregator.
    */
-  explicit ErisAggregator(const ErisServiceConfig &config) noexcept
-      : service_{&config}, aggregation_{std::make_unique<WeightedAverage>()},
-        round_{0}, weights_{}, fragment_size_{0}, min_clients_{0} {}
+  explicit ErisAggregator(
+      const ErisServiceConfig &config,
+      std::shared_ptr<AggregationStrategy> aggregation) noexcept
+      : service_{&config}, aggregation_{std::move(aggregation)}, round_{0},
+        weights_{}, fragment_size_{0}, min_clients_{0} {}
 
   /**
    * Deletes an instance of an ErisAggregator object.
@@ -131,7 +132,7 @@ private:
   ErisService<Socket> service_; /**< The eris service handling the
                                   communications */
 
-  std::unique_ptr<AggregationStrategy> aggregation_; /**< The strategy used for
+  std::shared_ptr<AggregationStrategy> aggregation_; /**< The strategy used for
                                                         aggregating weights
                                                         received from clients */
 

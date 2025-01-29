@@ -1,5 +1,6 @@
 #pragma once
 
+#include "algorithms/eris/aggregation_strategy.h"
 #include "algorithms/eris/aggregator.h"
 #include "algorithms/eris/aggregator.pb.h"
 #include "algorithms/eris/common.pb.h"
@@ -9,6 +10,7 @@
 #include "spdlog/spdlog.h"
 #include "util/networking.h"
 #include "zmq.h"
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
@@ -48,8 +50,9 @@ public:
                       const std::string &subscribe_address)
       : dealer_{ZMQ_DEALER}, subscriber_{ZMQ_SUB}, running_{false},
         aggr_address_{}, aggr_submit_port_{0}, aggr_publish_port_{0},
-        options_{}, splitter_{}, mu_{}, cv_{}, submit_{}, publish_{},
-        coordinator_updates_{}, aggregator_{nullptr}, aggregator_thread_{} {
+        aggr_strategy_{nullptr}, options_{}, splitter_{}, mu_{}, cv_{},
+        submit_{}, publish_{}, coordinator_updates_{}, aggregator_{nullptr},
+        aggregator_thread_{} {
     const int timeout = 100;
 
     if (!valid_zmq_endpoint(router_address))
@@ -128,6 +131,11 @@ public:
     aggr_submit_port_ = submit_port;
     aggr_publish_port_ = publish_port;
     return true;
+  }
+
+  void set_aggregation_strategy(
+      std::shared_ptr<AggregationStrategy> strategy) noexcept {
+    aggr_strategy_ = std::move(strategy);
   }
 
   /**
@@ -311,7 +319,12 @@ private:
     config.set_publish_address(aggr_address_);
     config.set_publish_port(aggr_publish_port_);
 
-    aggregator_ = std::make_shared<ErisAggregator<Socket>>(config);
+    if (aggr_strategy_)
+      aggregator_ = std::make_shared<ErisAggregator<Socket>>(
+          config, std::move(aggr_strategy_));
+    else
+      aggregator_ = std::make_shared<ErisAggregator<Socket>>(
+          config, std::make_shared<WeightedAverage>());
   }
 
   /**
@@ -458,6 +471,8 @@ private:
                                   should be receiving weights submissions */
   uint16_t aggr_publish_port_; /**< The port number on which the aggregator
                                  should publish weight updates */
+  std::shared_ptr<AggregationStrategy> aggr_strategy_; /**< The strategy used
+                        for aggregating weights from a client */
 
   eris::TrainingOptions options_; /**< The training configurations coming from
                                      the ErisCoordinator */
