@@ -1,15 +1,17 @@
 #pragma once
 
+#include "algorithms/eris/aggregation_strategy.h"
 #include "algorithms/eris/aggregator.pb.h"
 #include "algorithms/eris/common.pb.h"
 #include "algorithms/eris/config.h"
 #include "algorithms/eris/service.h"
+#include "spdlog/spdlog.h"
 #include "zmq.h"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <future>
-#include <netdb.h>
+#include <memory>
 #include <optional>
 
 /**
@@ -28,8 +30,8 @@ public:
    * @param config The configuration used to build the ErisAggregator.
    */
   explicit ErisAggregator(const ErisServiceConfig &config) noexcept
-      : service_{&config}, round_{0}, weights_{}, contributors_{0},
-        fragment_size_{0}, min_clients_{0} {}
+      : service_{&config}, aggregation_{std::make_unique<WeightedAverage>()},
+        round_{0}, weights_{}, fragment_size_{0}, min_clients_{0} {}
 
   /**
    * Deletes an instance of an ErisAggregator object.
@@ -46,7 +48,7 @@ public:
    * weight update.
    */
   void configure(uint32_t fragment_size, uint32_t min_clients) noexcept {
-    weights_.resize(fragment_size, 0.0);
+    weights_.reserve(min_clients);
     fragment_size_ = fragment_size;
     min_clients_ = min_clients;
   }
@@ -101,8 +103,7 @@ private:
       return;
     }
 
-    for (int i = 0; i < req.weight_size(); ++i)
-      weights_[i] += req.weight(i);
+    weights_.emplace_back(req);
 
     service_.route_msg(identity, res);
     publish_model();
@@ -116,17 +117,12 @@ private:
   void publish_model(void) noexcept {
     eris::WeightUpdate update;
 
-    if (++contributors_ < min_clients_)
+    if (weights_.size() < min_clients_)
       return;
 
-    update.set_round(round_);
-    update.set_contributors(contributors_);
-    for (const float val : weights_)
-      update.add_weight(val);
-
+    update = aggregation_->aggregate(round_, weights_);
     service_.publish_event(update);
-    std::fill(weights_.begin(), weights_.end(), 0.0);
-    contributors_ = 0;
+    weights_.clear();
     ++round_;
   }
 
@@ -135,12 +131,15 @@ private:
   ErisService<Socket> service_; /**< The eris service handling the
                                   communications */
 
-  uint32_t round_;             /**< The current round of the training */
-  std::vector<float> weights_; /**< The accumulated weights shared by the
-                                  clients */
+  std::unique_ptr<AggregationStrategy> aggregation_; /**< The strategy used for
+                                                        aggregating weights
+                                                        received from clients */
 
-  uint32_t contributors_; /**< The number of contributing clients */
-  size_t fragment_size_;  /**< The size of the assigned fragment */
-  uint32_t min_clients_;  /**< The minimum number of weight contributions
-                                  required before sharing an update */
+  uint32_t round_; /**< The current round of the training */
+  std::vector<eris::WeightSubmissionRequest> weights_; /**< The weights sent by
+                                                          the clients */
+
+  size_t fragment_size_; /**< The size of the assigned fragment */
+  uint32_t min_clients_; /**< The minimum number of weight contributions
+                                 required before sharing an update */
 };

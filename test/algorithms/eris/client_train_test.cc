@@ -9,6 +9,7 @@
 #include <future>
 #include <gtest/gtest.h>
 #include <string>
+#include <utility>
 
 class TrainSocket : public MockZMQSocket {
 public:
@@ -31,7 +32,10 @@ public:
     parameters_ = parameters;
   }
 
-  void fit(void) { ++fit_calls_; }
+  fit_result fit(void) {
+    ++fit_calls_;
+    return std::make_pair(get_parameters(), 1);
+  }
 
   void evaluate(void) { ++evaluate_calls_; };
 

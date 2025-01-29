@@ -45,7 +45,6 @@ protected:
     for (size_t i = 0; i < requests.size(); ++i) {
       eris::WeightUpdate update;
 
-      update.set_contributors(1);
       for (int j = 0; j < requests[i].weight_size(); ++j)
         update.add_weight(requests[i].weight(j));
 
