@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 class MockClient final : public ErisClient<MockZMQSocket> {
@@ -26,7 +27,7 @@ public:
     parameters_ = parameters;
   }
 
-  void fit(void) {}
+  fit_result fit(void) { return std::make_pair(get_parameters(), 1); }
   void evaluate(void) {}
 
   inline MockZMQSocket &get_dealer(void) { return dealer_; }
@@ -39,7 +40,8 @@ public:
     return receive_weights(round);
   }
   inline bool mock_submit_weights(uint32_t round) {
-    return submit_weights(round);
+
+    return submit_weights(round, std::make_pair(get_parameters(), 1));
   }
   inline const std::string &get_aggr_address(void) const noexcept {
     return aggr_address_;

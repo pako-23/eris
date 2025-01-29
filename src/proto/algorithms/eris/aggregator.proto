@@ -6,7 +6,8 @@ import "algorithms/eris/common.proto";
 
 message WeightSubmissionRequest {
     uint32 round = 1;
-    repeated float weight = 2;
+    uint32 samples = 2;
+    repeated float weight = 3;
 }
 
 
@@ -17,6 +18,5 @@ message WeightSubmissionResponse {
 
 message WeightUpdate {
     uint32 round = 1;
-    uint32 contributors = 2;
     repeated float weight = 3;
 }

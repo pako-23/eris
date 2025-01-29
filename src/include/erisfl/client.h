@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <utility>
 #include <vector>
 
 /**
@@ -8,6 +10,8 @@
  */
 class Client {
 public:
+  using fit_result = std::pair<std::vector<float>, uint32_t>;
+
   /**
    * Deletes an instance of a Client object.
    */
@@ -37,8 +41,12 @@ public:
 
   /**
    * Performs a training round of the model.
+   *
+   * @return It returns a tuple where the first element consists of
+   * the new model parameters, and the second element is the number of
+   * samples used for the training.
    */
-  virtual void fit(void) = 0;
+  virtual fit_result fit(void) = 0;
 
   /**
    * Evaluates the model performance.

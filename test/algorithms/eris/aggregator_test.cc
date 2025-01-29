@@ -68,6 +68,10 @@ protected:
 
       weights.emplace_back(client_weights);
     }
+
+    for (size_t j = 0; j < fragment_size; ++j) {
+      expected[j] /= min_clients;
+    }
   }
 
   void WeightSubmit(std::vector<float>::const_iterator begin,
@@ -86,6 +90,7 @@ protected:
         GetRouter().recv_enqueue(std::move(identity))};
 
     req.set_round(round);
+    req.set_samples(1);
     for (; begin != end; ++begin)
       req.add_weight(*begin);
 
@@ -146,7 +151,6 @@ TEST_F(ErisAggregatorTest, WeightSubmission) {
   EXPECT_TRUE(GetPublisher().send_dequeue(&msg));
   EXPECT_TRUE(update.ParseFromArray(zmq_msg_data(&msg), zmq_msg_size(&msg)));
   EXPECT_EQ(update.round(), 0);
-  EXPECT_EQ(update.contributors(), min_clients);
   EXPECT_EQ(update.weight_size(), fragment_size);
   for (int i = 0; i < update.weight_size(); ++i)
     EXPECT_NEAR(update.weight(i), expected[i],
@@ -203,7 +207,6 @@ TEST_F(ErisAggregatorTest, MultipleRounds) {
     EXPECT_TRUE(GetPublisher().send_dequeue(&msg));
     EXPECT_TRUE(update.ParseFromArray(zmq_msg_data(&msg), zmq_msg_size(&msg)));
     EXPECT_EQ(update.round(), round);
-    EXPECT_EQ(update.contributors(), min_clients);
     EXPECT_EQ(update.weight_size(), fragment_size);
     for (int i = 0; i < update.weight_size(); ++i)
       EXPECT_NEAR(update.weight(i), expected[i],

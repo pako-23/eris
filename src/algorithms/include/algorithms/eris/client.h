@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /**
@@ -95,9 +96,9 @@ public:
       return false;
 
     while (round != options_.rounds()) {
-      fit();
+      std::pair<std::vector<float>, uint32_t> result = fit();
 
-      if (!submit_weights(round) || !receive_weights(&round))
+      if (!submit_weights(round, result) || !receive_weights(&round))
         return false;
 
       evaluate();
@@ -321,9 +322,8 @@ private:
    * @return If it manages to succesfully submit the weights, it returns true;
    * otherwise, it returns false.
    */
-  bool submit_weights(uint32_t round) noexcept {
+  bool submit_weights(uint32_t round, const fit_result &parameters) noexcept {
     eris::WeightSubmissionResponse res;
-    std::vector<float> parameters = get_parameters();
     std::vector<eris::WeightSubmissionRequest> fragments =
         splitter_.split(parameters, round);
 
