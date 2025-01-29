@@ -288,7 +288,7 @@ PYBIND11_MODULE(eris, m) {
       .def("get_split_mask", &PyErisClient::get_split_mask)
       .def("set_parameters", &PyErisClient::set_parameters,
            py::arg("parameters"))
-      .def("fit", &PyErisClient::fit, py::call_guard<py::gil_scoped_acquire>())
+      .def("fit", &PyErisClient::fit)
       .def("evaluate", &PyErisClient::evaluate,
            py::call_guard<py::gil_scoped_release>())
       .def("set_aggregator_config", &PyErisClient::set_aggregator_config,

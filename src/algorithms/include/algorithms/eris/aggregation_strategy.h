@@ -22,3 +22,18 @@ public:
   aggregate(uint32_t round,
             const std::vector<eris::WeightSubmissionRequest> &updates) override;
 };
+
+class Soteria : public AggregationStrategy {
+public:
+  explicit Soteria(float gamma);
+  ~Soteria(void) = default;
+
+  eris::WeightUpdate
+  aggregate(uint32_t round,
+            const std::vector<eris::WeightSubmissionRequest> &updates) override;
+
+private:
+  std::vector<float> reference_;
+  std::vector<float> prev_;
+  float gamma_;
+};
