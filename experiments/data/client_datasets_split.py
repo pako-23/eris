@@ -49,8 +49,8 @@ if args.dataset == "mnist":
         download_datasets.download_mnist()
 
     # Load MNIST dataset
-    X_train = torch.load("datasets/mnist_train.pt")
-    X_test = torch.load("datasets/mnist_test.pt")
+    X_train = torch.load("datasets/mnist_train.pt", weights_only=False)
+    X_test = torch.load("datasets/mnist_test.pt", weights_only=False)
 
 elif args.dataset == "cifar10":
     # if not exists, download CIFAR-10 dataset
@@ -58,8 +58,8 @@ elif args.dataset == "cifar10":
         download_datasets.download_cifar10()
 
     # Load CIFAR-10 dataset
-    X_train = torch.load("datasets/cifar10_train.pt")
-    X_test = torch.load("datasets/cifar10_test.pt")
+    X_train = torch.load("datasets/cifar10_train.pt", weights_only=False)
+    X_test = torch.load("datasets/cifar10_test.pt", weights_only=False)
 
 elif args.dataset == "fmnist":
     # if not exists, download Fashion MNIST dataset
@@ -67,8 +67,8 @@ elif args.dataset == "fmnist":
         download_datasets.download_fashion_mnist()
 
     # Load CIFAR-10 dataset
-    X_train = torch.load("datasets/fmnist_train.pt")
-    X_test = torch.load("datasets/fmnist_test.pt")
+    X_train = torch.load("datasets/fmnist_train.pt", weights_only=False)
+    X_test = torch.load("datasets/fmnist_test.pt", weights_only=False)
 
 elif args.dataset == "breast":
     # if not exists, download breast cancer dataset
@@ -76,8 +76,8 @@ elif args.dataset == "breast":
         download_datasets.download_breast()
 
     # Load breast cancer dataset
-    X_train = torch.load("datasets/breast_train.pt")
-    X_test = torch.load("datasets/breast_test.pt")
+    X_train = torch.load("datasets/breast_train.pt", weights_only=False)
+    X_test = torch.load("datasets/breast_test.pt", weights_only=False)
 
 elif args.dataset == "diabetes":
     # if not exists, download diabetes dataset
@@ -85,8 +85,8 @@ elif args.dataset == "diabetes":
         download_datasets.download_diabetes()
 
     # Load diabetes dataset
-    X_train = torch.load("datasets/diabetes_train.pt")
-    X_test = torch.load("datasets/diabetes_test.pt")
+    X_train = torch.load("datasets/diabetes_train.pt", weights_only=False)
+    X_test = torch.load("datasets/diabetes_test.pt", weights_only=False)
 
 elif args.dataset == "airline":
     # if not exists, download airline dataset
@@ -94,8 +94,8 @@ elif args.dataset == "airline":
         download_datasets.download_airline()
 
     # Load airline dataset
-    X_train = torch.load("datasets/airline_train.pt")
-    X_test = torch.load("datasets/airline_test.pt")
+    X_train = torch.load("datasets/airline_train.pt", weights_only=False)
+    X_test = torch.load("datasets/airline_test.pt", weights_only=False)
 
 elif args.dataset == "adult":
     # if not exists, download adult dataset
@@ -103,8 +103,8 @@ elif args.dataset == "adult":
         download_datasets.download_adult()
 
     # Load adult dataset
-    X_train = torch.load("datasets/adult_train.pt")
-    X_test = torch.load("datasets/adult_test.pt")
+    X_train = torch.load("datasets/adult_train.pt", weights_only=False)
+    X_test = torch.load("datasets/adult_test.pt", weights_only=False)
 
 elif args.dataset == "lsst":
     # if not exists, download lsst dataset
@@ -112,8 +112,8 @@ elif args.dataset == "lsst":
         download_datasets.download_lsst()
 
     # Load lsst dataset
-    X_train = torch.load("datasets/lsst_train.pt")
-    X_test = torch.load("datasets/lsst_test.pt")
+    X_train = torch.load("datasets/lsst_train.pt", weights_only=False)
+    X_test = torch.load("datasets/lsst_test.pt", weights_only=False)
 
 
 #########################################################################################
