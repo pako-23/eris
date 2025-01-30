@@ -11,7 +11,7 @@ import os
 import argparse
 import time
 import copy
-import opacus
+import opacus # type: ignore
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
