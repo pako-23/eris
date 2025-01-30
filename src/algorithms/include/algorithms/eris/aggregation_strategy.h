@@ -11,6 +11,8 @@ public:
   virtual eris::WeightUpdate
   aggregate(uint32_t round,
             const std::vector<eris::WeightSubmissionRequest> &updates) = 0;
+
+  virtual void configure(const std::vector<float> &fragment) {};
 };
 
 class WeightedAverage : public AggregationStrategy {
@@ -31,6 +33,7 @@ public:
   eris::WeightUpdate
   aggregate(uint32_t round,
             const std::vector<eris::WeightSubmissionRequest> &updates) override;
+  void configure(const std::vector<float> &fragment) override;
 
 private:
   std::vector<float> reference_;

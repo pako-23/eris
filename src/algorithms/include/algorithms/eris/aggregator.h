@@ -12,6 +12,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <vector>
 
 /**
  * The ErisAggregator class aggreagtes the weights submitted during the training
@@ -48,9 +49,11 @@ public:
    * with their local weights before the ErisAggregator can publish a new model
    * weight update.
    */
-  void configure(uint32_t fragment_size, uint32_t min_clients) noexcept {
+  void configure(const std::vector<float> &fragment,
+                 uint32_t min_clients) noexcept {
     weights_.reserve(min_clients);
-    fragment_size_ = fragment_size;
+    fragment_size_ = fragment.size();
+    aggregation_->configure(fragment);
     min_clients_ = min_clients;
   }
 

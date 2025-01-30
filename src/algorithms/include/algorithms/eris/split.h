@@ -65,6 +65,9 @@ public:
     return aggregator_mapping_;
   }
 
+  std::vector<float> get_fragment(const std::vector<float> &parameters,
+                                  uint32_t fragment_id) noexcept;
+
 private:
   std::vector<uint32_t>
       aggregator_mapping_; /**< The mapping from parameter position to assigned

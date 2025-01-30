@@ -56,3 +56,17 @@ std::vector<float> RandomSplit::reassemble(
 
   return parameters;
 }
+
+std::vector<float>
+RandomSplit::get_fragment(const std::vector<float> &parameters,
+                          uint32_t fragment_id) noexcept {
+  std::vector<float> fragment(get_fragment_size(fragment_id));
+  std::vector<float>::size_type i = 0;
+
+  for (std::vector<uint32_t>::size_type j = 0;
+       j < parameters.size() && i < fragment.size(); ++j)
+    if (aggregator_mapping_[j] == fragment_id)
+      fragment[i] = parameters[j];
+
+  return fragment;
+}
