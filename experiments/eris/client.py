@@ -82,7 +82,6 @@ class ExampleClient(ErisClient):
         for p in self.get_parameters():
             self.reference_s.append(np.zeros_like(p))
 
-
         # prepare dataset auditing
         if self.privacy_audit:
             canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
@@ -140,6 +139,7 @@ class ExampleClient(ErisClient):
     @property
     def gamma(self):
         self.k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))
+        # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
         return np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
 
@@ -222,12 +222,37 @@ class ExampleClient(ErisClient):
                 # k-sparsification on the gradients
                 sparse_grads = self.compress_parameters(
                     grads,
-                    k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n])*0.8)  # as in SoteriaFL
-                    # k = int(self.n_params * cfg.k_sparsity)
+                    k = self.k
                     )
                 
                 # update model parameters
                 params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
+                
+                # update model weights
+                self.set_parameters(params_out)
+            
+            elif cfg.shifted_k_sparsification:
+                """
+                shifted k-random sparsification on the gradients [SOTERIAFL]
+                """
+                # calculate gradients
+                params_out = self.get_parameters()
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                
+                # shifted gradient
+                shifted_grads = [grad - s for grad, s in zip(grads, self.reference_s)] 
+                
+                # k-sparsification on the gradients
+                shifted_sparse_grads = self.compress_parameters(
+                    shifted_grads,
+                    k = self.k
+                    )
+                
+                # update reference vector
+                self.reference_s = [s + self.gamma * sparse_grad for s, sparse_grad in zip(self.reference_s, shifted_sparse_grads)]
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, shifted_sparse_grads)]
                 
                 # update model weights
                 self.set_parameters(params_out)
@@ -364,8 +389,7 @@ class ExampleClient(ErisClient):
                 # k-sparsification on the gradients
                 sparse_grads = self.compress_parameters(
                     grads,
-                    k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n])*0.8)  # as in SoteriaFL
-                    # k = int(self.n_params * cfg.k_sparsity)
+                    k = self.k
                     )
                 
                 # update model parameters
@@ -373,7 +397,33 @@ class ExampleClient(ErisClient):
                 
                 # update model weights
                 self.set_parameters(params_out)
-            
+
+            elif cfg.shifted_k_sparsification:
+                """
+                shifted k-random sparsification on the gradients [SOTERIAFL]
+                """
+                # calculate gradients
+                params_out = self.get_parameters()
+                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
+                
+                # shifted gradient
+                shifted_grads = [grad - s for grad, s in zip(grads, self.reference_s)] 
+                
+                # k-sparsification on the gradients
+                shifted_sparse_grads = self.compress_parameters(
+                    shifted_grads,
+                    k = self.k
+                    )
+                
+                # update reference vector
+                self.reference_s = [s + self.gamma * sparse_grad for s, sparse_grad in zip(self.reference_s, shifted_sparse_grads)]
+                
+                # update model parameters
+                params_out = [param_in + grad for param_in, grad in zip(params_in, shifted_sparse_grads)]
+                
+                # update model weights
+                self.set_parameters(params_out)
+                
             else:
                 params_out = self.get_parameters()
 
@@ -794,7 +844,8 @@ def start_node(
     # Configure aggregator if ports are provided
     if is_aggr:
         client.set_aggregator_config("127.0.0.1")
-        client.set_aggregation_strategy(ShiftedCompression(client.gamma))
+        if cfg.shifted_k_sparsification:
+            client.set_aggregation_strategy(ShiftedCompression(client.gamma))
 
     # Start training
     start_time = time.time()
