@@ -294,9 +294,10 @@ private:
   void start_aggregator(uint16_t fragment_id) noexcept {
     std::promise<void> started;
     std::future<void> started_ready = started.get_future();
+    std::vector<float> fragment =
+        splitter_.get_fragment(get_parameters(), fragment_id);
 
-    aggregator_->configure(splitter_.get_fragment_size(fragment_id),
-                           options_.min_clients());
+    aggregator_->configure(fragment, options_.min_clients());
 
     aggregator_thread_ = std::thread(
         [](std::shared_ptr<ErisAggregator<Socket>> aggregator,

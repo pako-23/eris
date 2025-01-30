@@ -279,8 +279,8 @@ PYBIND11_MODULE(eris, m) {
              std::shared_ptr<WeightedAverage>>(m, "WeightedAverage")
       .def(py::init<>());
 
-  py::class_<Soteria, AggregationStrategy, std::shared_ptr<Soteria>>(m,
-                                                                     "Soteria")
+  py::class_<Soteria, AggregationStrategy, std::shared_ptr<Soteria>>(
+      m, "ShiftedCompression")
       .def(py::init<float>());
 
   py::class_<PyClientBase, PyClient, std::shared_ptr<PyClientBase>>(m, "Client")

@@ -1,7 +1,8 @@
 #include "algorithms/eris/aggregation_strategy.h"
 #include "algorithms/eris/aggregator.pb.h"
-#include "spdlog/spdlog.h"
+#include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <numeric>
 
 eris::WeightUpdate WeightedAverage::aggregate(
@@ -27,6 +28,11 @@ eris::WeightUpdate WeightedAverage::aggregate(
 
 Soteria::Soteria(float gamma) : reference_{}, prev_{}, gamma_{gamma} {}
 
+void Soteria::configure(const std::vector<float> &fragment) {
+  reference_.resize(fragment.size());
+  std::copy(fragment.begin(), fragment.end(), std::back_inserter(prev_));
+}
+
 eris::WeightUpdate
 Soteria::aggregate(uint32_t round,
                    const std::vector<eris::WeightSubmissionRequest> &updates) {
@@ -38,8 +44,6 @@ Soteria::aggregate(uint32_t round,
       });
 
   if (reference_.size() == 0) {
-    reference_.resize(updates[0].weight_size());
-    prev_.resize(updates[0].weight_size());
   }
 
   std::vector<float> sparse_grads(reference_.size());
@@ -49,9 +53,10 @@ Soteria::aggregate(uint32_t round,
       sparse_grads[i] += (req.weight(i) - prev_[i]) * req.samples();
 
   for (std::vector<float>::size_type i = 0; i < sparse_grads.size(); ++i) {
-    sparse_grads[i] = (sparse_grads[i] / samples) + reference_[i];
+    float shifted = sparse_grads[i] / samples;
+    sparse_grads[i] = shifted + reference_[i];
     prev_[i] += sparse_grads[i];
-    reference_[i] += gamma_ * sparse_grads[i];
+    reference_[i] += gamma_ * shifted;
   }
 
   update.set_round(round);

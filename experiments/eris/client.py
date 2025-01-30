@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
-from eris import ErisClient
+from eris import ErisClient, ShiftedCompression
 import torch
 import torch.nn.functional as F
 from torch.utils.data import random_split, Subset
@@ -38,7 +38,6 @@ class ExampleClient(ErisClient):
         device=None,
         config=None,
         exp_n: int = 0,
-
     ):
         # Initialize the superclass with only the required positional arguments
         super().__init__(router_address, subscribe_address)
@@ -79,6 +78,9 @@ class ExampleClient(ErisClient):
         self.local_dp = cfg.local_dp
         self.n_params = sum(p.numel() for p in self.model.parameters())
         self.exp_n = exp_n
+        self.reference_s = []
+        for p in self.get_parameters():
+            self.reference_s.append(np.zeros_like(p))
 
 
         # prepare dataset auditing
@@ -135,6 +137,11 @@ class ExampleClient(ErisClient):
             if client_id == 1:
                 print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
 
+    @property
+    def gamma(self):
+        self.k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))
+        w = (self.n_params / self.k) - 1
+        return np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
 
     def get_parameters(self):
         self.model.to("cpu")
@@ -370,8 +377,7 @@ class ExampleClient(ErisClient):
             else:
                 params_out = self.get_parameters()
 
-            return params_out, self.num_examples["train"]
-
+        return params_out, self.num_examples["train"]
 
     def evaluate(self):
         # save previous aggregated model if client 1
@@ -469,6 +475,97 @@ class ExampleClient(ErisClient):
 
             return -losses
 
+    def compress_parameters(self, params, k):
+        """
+        Compresses the model parameters using random-k sparsification.
+
+        Args:
+            params (List[np.ndarray]): List of NumPy arrays representing model parameters.
+            k (int): Number of coordinates to retain during compression.
+
+        Returns:
+            List[np.ndarray]: Compressed parameters where only k coordinates are retained
+                            (and scaled by d/k according to the random-k operator).
+        """
+        # Flatten all parameters (excluding scalars) into a single array
+        flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
+        d = flattened_params.size
+
+        # If k >= d, no compression happens (just return original parameters)
+        if k >= d:
+            print(f"No compression applied: k ({k}) >= d ({d}).")
+            return params
+        assert k > 0, "k must be a positive integer."
+
+        # Randomly select k indices out of d
+        indices = np.random.choice(d, k, replace=False)
+
+        # Create a boolean mask of size d with exactly k entries as True
+        mask = np.zeros(d, dtype=bool)
+        mask[indices] = True
+
+        # Apply the mask and scale by d/k
+        scaling_factor = d / k
+        compressed_flattened = scaling_factor * flattened_params * mask
+
+        # Reconstruct the parameter shapes
+        sparsified_params = []
+        start_idx = 0
+        for p in params:
+            if p.ndim == 0:
+                # If it's a scalar, just keep it uncompressed
+                sparsified_params.append(p)
+            else:
+                flat_len = p.size
+                sliced = compressed_flattened[start_idx:start_idx + flat_len]
+                sparsified_params.append(sliced.reshape(p.shape))
+                start_idx += flat_len
+
+        return sparsified_params
+
+    def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
+        """
+        Prunes 'pruning_rate' fraction (e.g., 0.3) of the weights with the largest gradients.
+        Args:
+            grads (List[np.ndarray]): List of NumPy arrays representing gradients.
+            params (List[np.ndarray]): List of NumPy arrays representing model parameters.
+            pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
+
+        Returns:
+            List[np.ndarray]: Pruned parameters with the largest weights set to zero.
+        """
+
+        assert len(grads) == len(params), "Number of gradients and parameters must match."
+        assert pruning_rate > 0 and pruning_rate < 1, "Pruning rate must be in (0, 1)."
+
+        # Flatten all parameters (excluding scalars) into a single array
+        flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
+        flattened_grads = np.concatenate([np.abs(g.flatten()) for g in grads if g.ndim > 0])
+
+        # Determine the threshold for pruning
+        threshold = np.percentile(flattened_grads, 100 * (1 - pruning_rate))
+
+        # Create a mask for weights below the threshold
+        mask = flattened_grads <= threshold  # Keep small or midrange gradients
+        # print(f"Pruned parameters: {np.sum(mask)} out of {len(flattened_params)}, pruning rate {pruning_rate}.")
+
+        # Apply the mask to set pruned weights to zero
+        pruned_params = flattened_params * mask
+
+        # Reconstruct the parameter shapes
+        pruned_params_list = []
+        start_idx = 0
+        for p in params:
+            if p.ndim == 0:
+                # If it's a scalar, just keep it uncompressed
+                pruned_params_list.append(p)
+            else:
+                flat_len = p.size
+                sliced = pruned_params[start_idx:start_idx + flat_len]
+                pruned_params_list.append(sliced.reshape(p.shape))
+                start_idx += flat_len
+
+        return pruned_params_list
 
     # def prune_parameters(self, params, pruning_rate=0.3):
     #     """
@@ -691,13 +788,13 @@ def start_node(
         evaluate_fn=evaluate_fn,
         device=device,
         config=config,
-        exp_n=exp_n                        
-
+        exp_n=exp_n,
     )
 
     # Configure aggregator if ports are provided
     if is_aggr:
         client.set_aggregator_config("127.0.0.1")
+        client.set_aggregation_strategy(ShiftedCompression(client.gamma))
 
     # Start training
     start_time = time.time()
@@ -843,7 +940,6 @@ def main():
     # model = config["model"](config["model_args"]).to(device)
     model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
 
-
     # Load data
     data = torch.load(args.shard, weights_only=False)
 
@@ -892,7 +988,7 @@ def main():
             evaluate_fn=models.simple_test,
             device=device,
             config=config,
-            exp_n=args.exp_n
+            exp_n=args.exp_n,
         )
     else:
         return start_node(

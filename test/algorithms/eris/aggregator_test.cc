@@ -1,3 +1,4 @@
+#include "algorithms/eris/aggregation_strategy.h"
 #include "algorithms/eris/aggregator.h"
 #include "algorithms/eris/aggregator.pb.h"
 #include "algorithms/eris/common.pb.h"
@@ -6,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <memory>
 #include <random>
 #include <thread>
 #include <vector>
@@ -25,9 +27,10 @@ protected:
     config.set_router_address(address);
     config.set_publish_address(address);
 
-    server_ = std::make_shared<ErisAggregator<MockZMQSocket>>(config);
+    server_ = std::make_shared<ErisAggregator<MockZMQSocket>>(
+        config, std::make_shared<WeightedAverage>());
     EXPECT_NE(server_, nullptr);
-    server_->configure(10, min_clients);
+    server_->configure(std::vector<float>(10), min_clients);
 
     std::promise<void> started;
     start_ready_ = started.get_future();
