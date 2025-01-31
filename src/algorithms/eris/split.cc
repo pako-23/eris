@@ -27,15 +27,21 @@ size_t RandomSplit::get_fragment_size(uint32_t fragment_id) const noexcept {
 
 std::vector<eris::WeightSubmissionRequest>
 RandomSplit::split(const Client::fit_result &parameters,
+RandomSplit::split(const Client::fit_result &parameters,
                    uint32_t round) noexcept {
   std::vector<eris::WeightSubmissionRequest> fragments;
   fragments.resize(nsplits_);
 
   for (uint32_t i = 0; i < fragments.size(); ++i) {
+  for (uint32_t i = 0; i < fragments.size(); ++i) {
     fragments[i].set_round(round);
     fragments[i].set_samples(parameters.second);
   }
+    fragments[i].set_samples(parameters.second);
+  }
 
+  for (size_t i = 0; i < parameters.first.size(); ++i)
+    fragments[aggregator_mapping_[i]].add_weight(parameters.first[i]);
   for (size_t i = 0; i < parameters.first.size(); ++i)
     fragments[aggregator_mapping_[i]].add_weight(parameters.first[i]);
 
