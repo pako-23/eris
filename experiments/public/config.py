@@ -5,7 +5,7 @@ import os
 # ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
-dataset_name = "cifar10"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 k_folds = 5  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
@@ -34,8 +34,12 @@ pruning = False
 pruning_rate = 0.2  # Fraction of weights to prune
 
 # k-sparsification
-k_sparsification = True
-k_sparsity = 0.01  # Fraction of weights to keep
+k_sparsification = False
+k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
+
+# shifted k-sparsification
+shifted_k_sparsification = True
+k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # Experiments config
 experiments = {
@@ -43,11 +47,11 @@ experiments = {
         "dataset": "mnist",
         "client_train_samples": [8, 16, 32, 64, 128, 256, 512], 
         "rounds": [80, 100, 200, 180, 180, 180, 160],  # Originally 15
-        "clients": 50,
+        "clients": 10,
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
-        "splits": 50,
+        "splits": 10,
         "lr": 0.01,
         "momentum": 0.9,
         # "model": models.LeNet5,

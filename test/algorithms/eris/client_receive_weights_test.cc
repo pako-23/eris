@@ -43,7 +43,7 @@ protected:
   std::vector<eris::WeightUpdate>
   GenerateUpdates(const std::vector<float> &parameters, uint32_t round) {
     std::vector<eris::WeightSubmissionRequest> requests =
-        client_.get_splitter().split(parameters, round);
+        client_.get_splitter().split(std::make_pair(parameters, 1), round);
     std::vector<eris::WeightUpdate> results;
     results.reserve(requests.size());
 
@@ -51,9 +51,8 @@ protected:
       eris::WeightUpdate update;
 
       update.set_round(round);
-      update.set_contributors(10);
       for (int j = 0; j < requests[i].weight_size(); ++j)
-        update.add_weight(requests[i].weight(j) * 10);
+        update.add_weight(requests[i].weight(j));
 
       results.emplace_back(update);
     }

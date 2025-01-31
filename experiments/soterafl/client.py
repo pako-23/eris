@@ -159,7 +159,7 @@ class FlowerClient(fl.client.NumPyClient):
 
         # privacy auditing
         if self.privacy_audit:
-            if True:
+            if False:
                 """
                 Local Differential Privacy (DP) training
                 """
@@ -173,20 +173,20 @@ class FlowerClient(fl.client.NumPyClient):
                     config["local_epochs"], 
                     self.client_id
                     )
-            # else:
-            #     """
-            #     Traditional training without DP
-            #     """
-            #     for epoch in range(config["local_epochs"]):
-            #         self.train_fn(
-            #             self.model, 
-            #             self.device, 
-            #             self.subsampled_train_loader, 
-            #             self.optimizer, 
-            #             self.criterion, 
-            #             epoch, 
-            #             self.client_id
-            #             )
+            else:
+                """
+                Traditional training without DP
+                """
+                for epoch in range(config["local_epochs"]):
+                    self.train_fn(
+                        self.model, 
+                        self.device, 
+                        self.subsampled_train_loader, 
+                        self.optimizer, 
+                        self.criterion, 
+                        epoch, 
+                        self.client_id
+                        )
                 
             """
             shifted k-random sparsification on the gradients [SOTERIAFL]

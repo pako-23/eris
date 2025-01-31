@@ -26,16 +26,18 @@ size_t RandomSplit::get_fragment_size(uint32_t fragment_id) const noexcept {
 }
 
 std::vector<eris::WeightSubmissionRequest>
-RandomSplit::split(const std::vector<float> &parameters,
+RandomSplit::split(const Client::fit_result &parameters,
                    uint32_t round) noexcept {
   std::vector<eris::WeightSubmissionRequest> fragments;
   fragments.resize(nsplits_);
 
-  for (uint32_t i = 0; i < fragments.size(); ++i)
+  for (uint32_t i = 0; i < fragments.size(); ++i) {
     fragments[i].set_round(round);
+    fragments[i].set_samples(parameters.second);
+  }
 
-  for (size_t i = 0; i < parameters.size(); ++i)
-    fragments[aggregator_mapping_[i]].add_weight(parameters[i]);
+  for (size_t i = 0; i < parameters.first.size(); ++i)
+    fragments[aggregator_mapping_[i]].add_weight(parameters.first[i]);
 
   return fragments;
 }
@@ -48,10 +50,23 @@ std::vector<float> RandomSplit::reassemble(
   for (size_t i = 0; i < aggregator_mapping_.size(); ++i) {
     uint32_t fragment_id = aggregator_mapping_[i];
     const eris::WeightUpdate &update = updates[fragment_id];
-    parameters[i] =
-        update.weight(assigned[fragment_id]) / update.contributors();
+    parameters[i] = update.weight(assigned[fragment_id]);
     ++assigned[fragment_id];
   }
 
   return parameters;
+}
+
+std::vector<float>
+RandomSplit::get_fragment(const std::vector<float> &parameters,
+                          uint32_t fragment_id) noexcept {
+  std::vector<float> fragment(get_fragment_size(fragment_id));
+  std::vector<float>::size_type i = 0;
+
+  for (std::vector<uint32_t>::size_type j = 0;
+       j < parameters.size() && i < fragment.size(); ++j)
+    if (aggregator_mapping_[j] == fragment_id)
+      fragment[i++] = parameters[j];
+
+  return fragment;
 }

@@ -90,6 +90,8 @@ class ExampleClient(ErisClient):
             loss.backward()
             self.model.optimizer.step()
 
+        return self.get_parameters(), len(self.train_data)
+
     def evaluate(self):
         pass
 

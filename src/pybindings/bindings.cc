@@ -13,8 +13,9 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
-#include <string>
 #include <sys/types.h>
+#include <utility>
+#include <vector>
 
 namespace py = pybind11;
 
@@ -30,19 +31,19 @@ public:
   void stop(void) override {
     PYBIND11_OVERRIDE_PURE(void, Coordinator, stop, );
   }
-
-  void start(void) { start(std::nullopt); }
 };
 
 class PyClientBase {
 public:
+  using fit_result = std::pair<py::list, uint32_t>;
+
   virtual ~PyClientBase(void) = default;
   virtual bool join(void) = 0;
   virtual bool train(void) = 0;
   virtual py::list get_parameters(void) = 0;
   virtual py::list get_split_mask(void) = 0;
   virtual void set_parameters(const py::list &parameters) = 0;
-  virtual void fit(void) = 0;
+  virtual PyClientBase::fit_result fit(void) = 0;
   virtual void evaluate(void) = 0;
 };
 
@@ -70,7 +71,9 @@ public:
     PYBIND11_OVERRIDE_PURE(void, PyClientBase, set_parameters, parameters);
   }
 
-  void fit(void) override { PYBIND11_OVERRIDE_PURE(void, PyClientBase, fit, ); }
+  PyClientBase::fit_result fit(void) override {
+    PYBIND11_OVERRIDE_PURE(PyClientBase::fit_result, PyClientBase, fit, );
+  }
 
   void evaluate(void) override {
     PYBIND11_OVERRIDE_PURE(void, PyClientBase, evaluate, );
@@ -83,9 +86,9 @@ public:
                const std::string &subscribe_address)
       : client_{this, router_address, subscribe_address} {}
 
-  bool train(void) override { return client_.train(); }
+  inline bool train(void) override { return client_.train(); }
 
-  bool join(void) override { return client_.join(); }
+  inline bool join(void) override { return client_.join(); }
 
   py::list get_parameters(void) override {
     PYBIND11_OVERRIDE_PURE(py::list, PyErisClient, get_parameters, );
@@ -121,12 +124,19 @@ public:
     PYBIND11_OVERRIDE_PURE(void, PyErisClient, set_parameters, parameters);
   }
 
-  void fit(void) override { PYBIND11_OVERRIDE_PURE(void, PyErisClient, fit, ); }
+  fit_result fit(void) override {
+    PYBIND11_OVERRIDE_PURE(fit_result, PyErisClient, fit, );
+  }
 
   bool set_aggregator_config(const std::string &address,
                              uint16_t submit_port = 0,
                              uint16_t publish_port = 0) {
     return client_.set_aggregator_config(address, submit_port, publish_port);
+  }
+
+  void set_aggregation_strategy(
+      std::shared_ptr<AggregationStrategy> strategy) noexcept {
+    client_.set_aggregation_strategy(std::move(strategy));
   }
 
   void evaluate(void) override {
@@ -135,15 +145,8 @@ public:
 
 private:
   class ErisClientImpl : public ErisClient<ZMQSocket> {
-  public:
-    ErisClientImpl(PyErisClient *client, const std::string &router_address,
-                   const std::string &subscribe_address)
-        : ErisClient<ZMQSocket>{router_address, subscribe_address},
-          client_{client}, shapes_initialized{false}, total_size{0} {}
-
-    std::vector<float> get_parameters(void) override {
-      py::gil_scoped_acquire acquire;
-      py::list list = client_->get_parameters();
+  private:
+    std::vector<float> to_parameters(const py::list &list) {
       std::vector<float> parameters;
 
       if (!shapes_initialized) {
@@ -167,13 +170,11 @@ private:
         for (ssize_t i = 0; i < layer.size; ++i)
           parameters[len++] = ((float *)layer.ptr)[i];
       }
-      py::gil_scoped_release release;
 
       return parameters;
     }
 
-    void set_parameters(const std::vector<float> &parameters) override {
-      py::gil_scoped_acquire acquire;
+    py::list to_list(const std::vector<float> &parameters) {
       py::list list;
 
       size_t shape = 0;
@@ -192,12 +193,38 @@ private:
         list.append(array);
         ++shape;
       }
-
-      client_->set_parameters(list);
-      py::gil_scoped_release release;
+      return list;
     }
 
-    void fit(void) override { client_->fit(); }
+  public:
+    ErisClientImpl(PyErisClient *client, const std::string &router_address,
+                   const std::string &subscribe_address)
+        : ErisClient<ZMQSocket>{router_address, subscribe_address},
+          client_{client}, shapes_initialized{false}, total_size{0} {}
+
+    std::vector<float> get_parameters(void) override {
+      py::gil_scoped_acquire acquire;
+      py::list list = client_->get_parameters();
+      std::vector<float> parameters = to_parameters(list);
+      py::gil_scoped_release release;
+
+      return parameters;
+    }
+
+    void set_parameters(const std::vector<float> &parameters) override {
+      py::gil_scoped_acquire acquire;
+      py::list list = to_list(parameters);
+      client_->set_parameters(list);
+    }
+
+    Client::fit_result fit(void) override {
+      py::gil_scoped_acquire acquire;
+      PyClient::fit_result result = client_->fit();
+      std::vector<float> parameters = to_parameters(result.first);
+      py::gil_scoped_release release;
+
+      return std::make_pair(std::move(parameters), result.second);
+    }
 
     void evaluate(void) override { client_->evaluate(); };
 
@@ -244,7 +271,19 @@ PYBIND11_MODULE(eris, m) {
       .def("start", [](ErisCoordinator<ZMQSocket> &self) { self.start(); })
       .def("stop", &ErisCoordinator<ZMQSocket>::stop);
 
-  py::class_<PyClientBase, PyClient>(m, "Client")
+  py::class_<AggregationStrategy, std::shared_ptr<AggregationStrategy>>(
+      m, "AggregationStrategy")
+      .def("aggregate", &AggregationStrategy::aggregate);
+
+  py::class_<WeightedAverage, AggregationStrategy,
+             std::shared_ptr<WeightedAverage>>(m, "WeightedAverage")
+      .def(py::init<>());
+
+  py::class_<Soteria, AggregationStrategy, std::shared_ptr<Soteria>>(
+      m, "ShiftedCompression")
+      .def(py::init<float>());
+
+  py::class_<PyClientBase, PyClient, std::shared_ptr<PyClientBase>>(m, "Client")
       .def(py::init<>())
       .def("join", &PyClientBase::join)
       .def("train", &PyClientBase::train)
@@ -255,23 +294,23 @@ PYBIND11_MODULE(eris, m) {
       .def("fit", &PyClientBase::fit)
       .def("evaluate", &PyClientBase::evaluate);
 
-  py::class_<PyErisClient, PyClientBase,
-             std::unique_ptr<PyErisClient, py::nodelete>>(m, "ErisClient")
+  py::class_<PyErisClient, PyClientBase, std::shared_ptr<PyErisClient>>(
+      m, "ErisClient")
       .def(py::init<const std::string &, const std::string &>())
       .def("join", &PyErisClient::join,
            py::call_guard<py::gil_scoped_release>())
       .def("train", &PyErisClient::train,
            py::call_guard<py::gil_scoped_release>())
-      .def("get_parameters", &PyErisClient::get_parameters,
-           py::call_guard<py::gil_scoped_acquire>())
-      .def("get_split_mask", &PyErisClient::get_split_mask,
-           py::call_guard<py::gil_scoped_acquire>())
+      .def("get_parameters", &PyErisClient::get_parameters)
+      .def("get_split_mask", &PyErisClient::get_split_mask)
       .def("set_parameters", &PyErisClient::set_parameters,
            py::arg("parameters"))
-      .def("fit", &PyErisClient::fit, py::call_guard<py::gil_scoped_release>())
+      .def("fit", &PyErisClient::fit)
       .def("evaluate", &PyErisClient::evaluate,
            py::call_guard<py::gil_scoped_release>())
       .def("set_aggregator_config", &PyErisClient::set_aggregator_config,
            py::arg("address"), py::arg("submit_port") = 0,
-           py::arg("publish_port") = 0);
+           py::arg("publish_port") = 0)
+      .def("set_aggregation_strategy", &PyErisClient::set_aggregation_strategy,
+           py::arg("strategy"));
 }

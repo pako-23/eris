@@ -1,9 +1,11 @@
 include(logging)
 
 add_library(algorithms_obj OBJECT
+  eris/aggregation_strategy.cc
   eris/config.cc
   eris/split.cc
   include/algorithms/eris/aggregator.h
+  include/algorithms/eris/aggregation_strategy.h
   include/algorithms/eris/client.h
   include/algorithms/eris/coordinator.h
   include/algorithms/eris/service.h)

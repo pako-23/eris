@@ -1,6 +1,7 @@
 #pragma once
 
 #include "algorithms/eris/aggregator.pb.h"
+#include "erisfl/client.h"
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -53,7 +54,7 @@ public:
    * @return The list of weights that should be shared with the aggregators.
    */
   std::vector<eris::WeightSubmissionRequest>
-  split(const std::vector<float> &parameters, uint32_t round) noexcept;
+  split(const Client::fit_result &parameters, uint32_t round) noexcept;
 
   /**
    * Returns the mapping from weight to aggregator identifier.
@@ -63,6 +64,9 @@ public:
   const std::vector<uint32_t> &get_mapping(void) const noexcept {
     return aggregator_mapping_;
   }
+
+  std::vector<float> get_fragment(const std::vector<float> &parameters,
+                                  uint32_t fragment_id) noexcept;
 
 private:
   std::vector<uint32_t>
