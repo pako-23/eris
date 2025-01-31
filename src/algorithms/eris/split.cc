@@ -66,7 +66,7 @@ RandomSplit::get_fragment(const std::vector<float> &parameters,
   for (std::vector<uint32_t>::size_type j = 0;
        j < parameters.size() && i < fragment.size(); ++j)
     if (aggregator_mapping_[j] == fragment_id)
-      fragment[i] = parameters[j];
+      fragment[i++] = parameters[j];
 
   return fragment;
 }

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <iterator>
 #include <numeric>
+#include <vector>
 
 eris::WeightUpdate WeightedAverage::aggregate(
     uint32_t round, const std::vector<eris::WeightSubmissionRequest> &updates) {
@@ -42,9 +43,6 @@ Soteria::aggregate(uint32_t round,
       [](uint32_t acc, const eris::WeightSubmissionRequest &update) {
         return acc + update.samples();
       });
-
-  if (reference_.size() == 0) {
-  }
 
   std::vector<float> sparse_grads(reference_.size());
 
