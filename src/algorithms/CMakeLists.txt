@@ -26,7 +26,6 @@ target_link_libraries(algorithms_obj PUBLIC
   util_static)
 
 
-
 add_library(algorithms_static STATIC)
 target_link_libraries(algorithms_static algorithms_obj)
 

@@ -6,8 +6,10 @@ set(ABSL_BUILD_TESTING OFF)
 set(ABSL_PROPAGATE_CXX_STD ON)
 set(protobuf_BUILD_TESTS OFF)
 set(protobuf_INSTALL OFF)
-set(protobuf_BUILD_SHARED_LIBS ON)
+set(protobuf_BUILD_SHARED_LIBS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_MakeAvailable(protobuf)
+
 
 set(protobuf_INCLUDE_DIR ${protobuf_SOURCE_DIR}/src)
 
