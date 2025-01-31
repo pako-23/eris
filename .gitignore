@@ -8,6 +8,7 @@ trash.ipynb
 
 # Folder 
 experiments/dlk_attacks/data
+experiments/fedavg_llm/distilbert-imdb
 
 # C extensions
 *.so
