@@ -15,6 +15,12 @@ experiments/dlk_attacks/data
 # json
 *.json
 
+# bin
+*.bin
+
+# model
+.safetensor
+
 # zip
 *.zip
 
