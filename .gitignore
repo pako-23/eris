@@ -13,6 +13,9 @@ experiments/fedavg_llm/distilbert-imdb
 # C extensions
 *.so
 
+# .arrow
+*.arrow
+
 # json
 *.json
 

@@ -4,6 +4,7 @@ import download_datasets
 import argparse
 import torch
 from torch.utils.data import Subset, DataLoader
+from datasets import load_from_disk
 import os
 import warnings
 
@@ -115,6 +116,23 @@ elif args.dataset == "lsst":
     X_train = torch.load("datasets/lsst_train.pt", weights_only=False)
     X_test = torch.load("datasets/lsst_test.pt", weights_only=False)
 
+elif args.dataset == "imdb":
+    # if not exists, download imdb dataset
+    if not os.path.exists("datasets/imdb_train.pt"):
+        download_datasets.download_imdb()
+
+    # Load imdb dataset
+    X_train = load_from_disk("datasets/imdb_train")
+    test_data = load_from_disk("datasets/imdb_test")
+
+else:
+    raise ValueError("Invalid dataset name")
+
+
+
+
+
+
 
 #########################################################################################
 # Split dataset
@@ -173,9 +191,59 @@ def IID_split_and_save_torch(dataset, num_parts, save_dir="./client_datasets", s
         # Save the subset
         torch.save(subset, file_path)
 
+def IID_split_and_save(dataset, num_parts, save_dir="./client_datasets", seed=1):
+    """
+    Splits a dataset into num_parts IID sub-datasets and saves each subset to disk.
+
+    Parameters:
+    - dataset (datasets.Dataset): The dataset to split.
+    - num_parts (int): The number of parts to split the dataset into.
+    - save_dir (str): Directory where the sub-datasets will be saved.
+    - seed (int): Random seed for shuffling.
+
+    Returns:
+    - List of file paths where each subset is saved.
+    """
+
+    print(f"\nSplitting the dataset into {num_parts} IID parts...")
+
+    # Create the directory if it doesn't exist
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    # Get the total number of samples
+    total_samples = len(dataset)
+
+    # Calculate the size of each subset
+    subset_size = total_samples // num_parts
+
+    # Shuffle the dataset indices
+    torch.manual_seed(seed)
+    indices = torch.randperm(total_samples).tolist()  # Convert to a Python list
+
+    for i in range(num_parts):
+        # Define the start and end indices for this subset
+        start_idx = i * subset_size
+        if i == num_parts - 1:
+            end_idx = total_samples  # Include the remaining samples in the last subset
+        else:
+            end_idx = start_idx + subset_size
+
+        # Select subset using Hugging Face `select`
+        subset = dataset.select(indices[start_idx:end_idx])
+
+        # Define the file path to save this subset
+        subset_dir = os.path.join(save_dir, f"IID_data_client_{i+1}")
+        print(f"Saving data client {i+1} to {subset_dir}...")
+
+        # Save the subset
+        subset.save_to_disk(subset_dir)
 
 # Split the training dataset into N clients
-IID_split_and_save_torch(X_train, args.n_clients, seed=args.seed)
+if args.dataset == "imdb":
+    IID_split_and_save(X_train, args.n_clients, seed=args.seed)
+else:
+    IID_split_and_save_torch(X_train, args.n_clients, seed=args.seed)
 
 
 # -----  2) Non-IID-scenario -----

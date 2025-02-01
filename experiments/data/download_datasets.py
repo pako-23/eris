@@ -5,6 +5,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import TensorDataset
+from datasets import load_dataset
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
@@ -18,6 +19,10 @@ from ucimlrepo import fetch_ucirepo  # type: ignore
 import os
 import numpy as np
 import shutil
+from transformers import ( # type: ignore
+    DistilBertTokenizerFast,
+    DistilBertForSequenceClassification,
+)
 
 
 ########################################################################################
@@ -466,6 +471,52 @@ def download_lsst():
     torch.save(train_dataset, "datasets/lsst_train.pt")
     torch.save(test_dataset, "datasets/lsst_test.pt")
     print("LSST dataset saved correctly as torch tensor.")
+
+
+########################################################################################
+# IMDB Movies Dataset - TEXT CLASSIFICATION
+########################################################################################
+def download_imdb():
+    # 1. Load the IMDb dataset
+    dataset = load_dataset("imdb")
+    
+    # split the dataset into training and test sets
+    train_data = dataset["train"]
+    train_data = train_data.shuffle(seed=42)
+    test_data = dataset["test"]
+
+    # Initialize tokenizer and model
+    model_name = "distilbert-base-uncased"
+    tokenizer = DistilBertTokenizerFast.from_pretrained(model_name)
+    model = DistilBertForSequenceClassification.from_pretrained(model_name, num_labels=2)
+
+    # Preprocessing (tokenization) function
+    def tokenize_function(example):
+        return tokenizer(
+            example["text"],
+            padding="max_length",
+            truncation=True,
+            max_length=128
+        )
+
+    # Tokenize the datasets
+    train_data = train_data.map(tokenize_function, batched=True)
+    test_data = test_data.map(tokenize_function, batched=True)
+
+    # Set formats for PyTorch
+    train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+    test_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+
+    # Save the datasets 
+    if not os.path.exists("datasets"):
+        os.makedirs("datasets")
+    train_data.save_to_disk("datasets/imdb_train")
+    test_data.save_to_disk("datasets/imbd_test")
+    print("IMDb dataset saved correctly as torch files.")
+
+
+
+
 
 
 if __name__ == "__main__":
