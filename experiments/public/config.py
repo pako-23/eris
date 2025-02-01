@@ -1,6 +1,6 @@
 import sys
 import os
-from transformers import TrainingArguments
+from transformers import TrainingArguments # type: ignore
 
 
 # ADD DP TO REACH 0 MIA ACC
