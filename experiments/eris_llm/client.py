@@ -1,18 +1,81 @@
 #!/usr/bin/env python3
 
+# Arguments
+import argparse
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Start an Eris client configured with the options for the given experiment"
+    )
+    parser.add_argument(
+        "--id",
+        type=int,
+        choices=range(1, 101),
+        required=False,
+        default=1,
+        help="Specifies the artificial data partition",
+    )
+    parser.add_argument(
+        "--aggregator",
+        action=argparse.BooleanOptionalAction,
+        help="Start node as aggregator",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Dataset name",
+        default="mnist",
+        choices=["mnist", "cifar10", "imdb", "fmnist"],
+    )
+    parser.add_argument(
+        "--shard",
+        type=str,
+        help="Path to the dataset portion",
+    )
+    parser.add_argument(
+        "--fold",
+        type=int,
+        choices=range(1, 20),
+        default=1,
+        help="Specifies the fold to be used",
+    )
+    parser.add_argument(
+        "--exp_n",
+        type=int,
+        help="exp number",
+        default=0,
+    )
+    
+    return parser.parse_args()
+args = parse_args()
+
+# set device for the client
+if args.id % 2 == 0:
+    device = '2'
+else:
+    device = '3'
+
+# Libraries
 import numpy as np
 from eris import ErisClient, ShiftedCompression
 import torch
 import torch.nn.functional as F
+from torch.nn.functional import cross_entropy
 from torch.utils.data import random_split, Subset
 from torch.utils.data import DataLoader
-import sys
-import os
+from datasets import concatenate_datasets, Dataset, load_from_disk # type: ignore
 import argparse
 import time
 import copy
 import opacus # type: ignore
+from transformers import ( # type: ignore
+    DistilBertForSequenceClassification,
+    Trainer,
+    TrainingArguments,
+)
 
+import sys
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = device  # select the gpu
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -21,21 +84,20 @@ from public import utils
 from public import config as cfg
 
 
+
+
+
 class ExampleClient(ErisClient):
     def __init__(
         self,
         router_address: str,
         subscribe_address: str,
         model=None,
-        train_loader=None,
-        val_loader=None,
-        optimizer=None,
-        criterion=None,
+        train_data=None,
+        val_data=None,
         num_examples=None,
         client_id=None,
-        train_fn=None,
-        evaluate_fn=None,
-        device=None,
+        training_args: TrainingArguments = None, 
         config=None,
         exp_n: int = 0,
     ):
@@ -44,15 +106,11 @@ class ExampleClient(ErisClient):
 
         # Initialize additional attributes
         self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.optimizer = optimizer
-        self.criterion = criterion
+        self.train_data = train_data
+        self.val_data = val_data
         self.num_examples = num_examples
         self.client_id = client_id
-        self.train_fn = train_fn
-        self.evaluate_fn = evaluate_fn
-        self.device = device
+        self.training_args = training_args
         self.dataset_name = config["dataset"]
         self.predictor_name = config["model_name"] if model else None
         self.config = config
@@ -75,7 +133,6 @@ class ExampleClient(ErisClient):
         self.acc_privacy_estimate_mean = -1
         self.acc_accuracy_mia_mean = -1
         self.acc_scores = None
-        self.local_dp = cfg.local_dp
         self.n_params = sum(p.numel() for p in self.model.parameters())
         self.exp_n = exp_n
         self.reference_s = []
@@ -84,64 +141,50 @@ class ExampleClient(ErisClient):
 
         # prepare dataset auditing
         if self.privacy_audit:
-            canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
-            self.n_canaries = len(canaries)
+            
+            self.n_canaries = int(len(self.train_data) * self.canary_frac)
+            self.canaries = self.train_data.select(range(0, self.n_canaries))
+            non_canaries = self.train_data.select(range(self.n_canaries, len(self.train_data)))
             self.scores = np.zeros(self.n_canaries)
+
+            self.canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+            non_canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
 
             # subsample canaries & make new dataloader
             true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(self.n_canaries) * 0.5).sample()
             self.true_in_out = true_in_out.numpy()
-            canaries_in_idx = torch.nonzero(true_in_out)
-            subsampled_train_data = torch.utils.data.ConcatDataset([
-                non_canaries,
-                torch.utils.data.Subset(canaries, canaries_in_idx)
-            ])
-            self.subsampled_train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
-            self.canary_loader = DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
-
-        # local differential privacy initialization
-        if cfg.local_dp:
-            # Calculate sample rate = (batch_size / total_number_of_samples)
-            if cfg.privacy_audit:
-                sample_rate = min(1.0, self.subsampled_train_loader.batch_size / len(self.subsampled_train_loader.dataset))
-            else:
-                sample_rate = min(1.0, self.train_loader.batch_size / len(self.train_loader.dataset))
-
-            self.sigma = opacus.accountants.utils.get_noise_multiplier(
-                target_epsilon=cfg.epsilon,
-                target_delta=cfg.delta,
-                sample_rate=sample_rate,
-                epochs=int(self.config['epochs']), 
-                accountant='rdp',  
-            ) 
-
-            self.privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
-            if cfg.privacy_audit:
-                self.model, self.optimizer, self.subsampled_train_loader = self.privacy_engine.make_private(
-                    module=self.model,
-                    optimizer=self.optimizer,
-                    data_loader=self.subsampled_train_loader,
-                    noise_multiplier=self.sigma,
-                    max_grad_norm=cfg.sensitivity,
-                    )
-            else:
-                self.model, self.optimizer, self.train_loader = self.privacy_engine.make_private(
-                    module=self.model,
-                    optimizer=self.optimizer,
-                    data_loader=self.train_loader,
-                    noise_multiplier=self.sigma,
-                    max_grad_norm=cfg.sensitivity,
-                    )           
+            canaries_in_idx = torch.nonzero(true_in_out.clone().detach())
             
-            if client_id == 1:
-                print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
+            # concatenate non_canaries data with samples from canaries with canaries_in_idx
+            self.subsampled_train_data = concatenate_datasets([non_canaries, self.canaries.select(canaries_in_idx)])
+            self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
 
+            # Trainer initialization using only the IN set for training
+            self.trainer = Trainer(
+                model=self.model,
+                args=self.training_args,
+                train_dataset=self.subsampled_train_data,
+                # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
+                compute_metrics=utils.compute_metrics,
+            )
+        else:
+            # Trainer initialization using the full training set
+            self.trainer = Trainer(
+                model=self.model,
+                args=self.training_args,
+                train_dataset=self.train_data,
+                # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
+                compute_metrics=utils.compute_metrics,
+            )
+    
+        
     @property
     def gamma(self):
         self.k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
         return np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
+
 
     def get_parameters(self):
         self.model.to("cpu")
@@ -157,39 +200,16 @@ class ExampleClient(ErisClient):
         # get initial parameters
         params_in = self.get_parameters()
         self.model.train(True)
-        self.model.to(self.device)
         self.current_round += 1
         
         # privacy auditing
         if self.privacy_audit:
-            if cfg.local_dp:
-                """
-                Local Differential Privacy (DP) training
-                """
-                models.train_with_opacus(
-                    self.model, 
-                    self.device, 
-                    self.subsampled_train_loader, 
-                    self.optimizer, 
-                    self.criterion, 
-                    self.sigma, 
-                    self.config["epochs"], 
-                    self.client_id
-                    )
-            else:
-                """
-                Traditional training without DP
-                """
-                for epoch in range(self.config["epochs"]):
-                    self.train_fn(
-                        self.model, 
-                        self.device, 
-                        self.subsampled_train_loader, 
-                        self.optimizer, 
-                        self.criterion, 
-                        epoch, 
-                        self.client_id
-                        )
+            """
+            Traditional training without DP
+            """
+            self.trainer.train()
+            training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
+            self.device = self.model.device
                 
             if cfg.pruning:
                 """
@@ -279,15 +299,13 @@ class ExampleClient(ErisClient):
 
                 # compute scores for each canary, used to predict membership            
                 scores = []
-                # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
-                if cfg.score_fn == 'whitebox':
-                    self.set_parameters(params_in)
-                    for samples, targets in self.canary_loader:
-                        scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
-                    self.set_parameters(params_out_only)
+                # if cfg.score_fn == 'whitebox':
+                #     self.set_parameters(params_in)
+                #     for samples, targets in self.canary_loader:
+                #         scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
+                #     self.set_parameters(params_out_only)
                 if cfg.score_fn == 'blackbox':
-                    for samples, targets in self.canary_loader:
-                        scores.extend(self.score_blackbox_batch(samples, targets))
+                    scores = self.score_blackbox_batch(self.canaries)
                 else:
                     NotImplementedError(f'score function {cfg.score_fn} is not known')
 
@@ -335,28 +353,8 @@ class ExampleClient(ErisClient):
             self.set_parameters(params_out)
  
         else: # NO AUDITING
-            if cfg.local_dp:   
-                # Local Differential Privacy
-                models.train_with_opacus(self.model, 
-                    self.device, 
-                    self.train_loader, 
-                    self.optimizer, 
-                    self.criterion, 
-                    self.sigma, 
-                    self.config["epochs"], 
-                    self.client_id
-                    )
-            else:
-                for epoch in range(self.config["epochs"]):
-                    self.train_fn(
-                        self.model, 
-                        self.device, 
-                        self.train_loader, 
-                        self.optimizer, 
-                        self.criterion, 
-                        epoch, 
-                        self.client_id
-                        )
+            self.trainer.train()
+            training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
                     
             if cfg.pruning:
                 """
@@ -434,12 +432,12 @@ class ExampleClient(ErisClient):
         if self.client_id == 1:
             torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
 
-        self.model.eval()
-        self.model.to(self.device)
-
-        loss, accuracy, f1_score = self.evaluate_fn(
-            self.model, self.device, self.val_loader, self.criterion, self.client_id
-        )
+        self.model.eval()  
+        self.model.to(self.device)   
+        eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
+        loss = eval_results.get("eval_loss", None)
+        accuracy = eval_results.get("eval_accuracy", None)
+        f1_score = eval_results.get("eval_f1", None)
         
         # save loss and accuracy client
         utils.save_client_metrics(
@@ -486,44 +484,45 @@ class ExampleClient(ErisClient):
         return accuracy_mia, privacy_estimate
     
     
-    def score_with_pseudograd_batch(self, samples, targets, client_update):
-        '''
-        Computes membership inference attack scores for a batch by 
-        computing the inner product between the 'pseudogradient'
-        represented by client update and the true gradients
-        for each sample in the batch.
-        '''
-        self.model.to(self.device)  # Ensure model is on the correct device
-        samples = samples.to(self.device)
-        targets = targets.to(self.device)
+    # def score_with_pseudograd_batch(self, samples, targets, client_update):
+    #     '''
+    #     Computes membership inference attack scores for a batch by 
+    #     computing the inner product between the 'pseudogradient'
+    #     represented by client update and the true gradients
+    #     for each sample in the batch.
+    #     '''
+    #     self.model.to(self.device)  # Ensure model is on the correct device
+    #     samples = samples.to(self.device)
+    #     targets = targets.to(self.device)
         
-        # Forward pass
-        predictions = self.model(samples)
-        losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none')
+    #     # Forward pass
+    #     predictions = self.model(samples)
+    #     losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none')
         
-        scores = []
-        for loss in losses:
-            # Compute gradients for each sample
-            audit_grad = torch.autograd.grad(loss, self.model.parameters(), retain_graph=True)
-            # audit_grad = parameters_to_1d(audit_grad)
-            audit_grad = np.concatenate([x.cpu().flatten() for x in audit_grad])
-            score = np.dot(client_update, - audit_grad)
-            scores.append(score)
+    #     scores = []
+    #     for loss in losses:
+    #         # Compute gradients for each sample
+    #         audit_grad = torch.autograd.grad(loss, self.model.parameters(), retain_graph=True)
+    #         # audit_grad = parameters_to_1d(audit_grad)
+    #         audit_grad = np.concatenate([x.cpu().flatten() for x in audit_grad])
+    #         score = np.dot(client_update, - audit_grad)
+    #         scores.append(score)
         
-        return scores
+    #     return scores
 
 
-    def score_blackbox_batch(self, samples, targets):
-        with torch.no_grad():
-            self.model.to(self.device)  # Ensure model is on the correct device
-            samples = samples.to(self.device)
-            targets = targets.to(self.device)
-            
-            # Forward pass
-            predictions = self.model(samples)
-            losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none').cpu()
+    def score_blackbox_batch(self, data): 
+        self.model.to(self.device)      
+        prediction_output = self.trainer.predict(data)
+        logits = torch.tensor(prediction_output.predictions)
+        labels = torch.tensor(prediction_output.label_ids)
 
-            return -losses
+        # Compute per-sample loss
+        losses = cross_entropy(logits, labels, reduction='none')
+
+        # Return scores
+        return -losses.cpu().numpy()
+
 
     def compress_parameters(self, params, k):
         """
@@ -573,6 +572,7 @@ class ExampleClient(ErisClient):
 
         return sparsified_params
 
+
     def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
         """
         Prunes 'pruning_rate' fraction (e.g., 0.3) of the weights with the largest gradients.
@@ -616,42 +616,6 @@ class ExampleClient(ErisClient):
                 start_idx += flat_len
 
         return pruned_params_list
-
-    # def prune_parameters(self, params, pruning_rate=0.3):
-    #     """
-    #     Prunes the largest weights in the parameters based on the pruning rate.
-
-    #     Args:
-    #         params (List[np.ndarray]): List of NumPy arrays representing model parameters.
-    #         pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
-
-    #     Returns:
-    #         List[np.ndarray]: Pruned parameters with the largest weights set to zero.
-    #     """
-    #     pruned_params = []
-    #     for idx, param in enumerate(params):
-    #         if param.ndim == 0:
-    #             # Skip scalar parameters if any
-    #             pruned_params.append(param)
-    #             continue
-
-    #         # Compute the absolute values and flatten the array
-    #         abs_param = np.abs(param)
-    #         flat_param = abs_param.flatten()
-
-    #         # Determine the threshold for pruning
-    #         threshold = np.percentile(flat_param, 100 * (1 - pruning_rate))
-
-    #         # Create a mask for weights above the threshold
-    #         mask = abs_param >= threshold
-
-    #         # Apply the mask to set pruned weights to zero
-    #         pruned_param = param * mask
-
-    #         pruned_params.append(pruned_param)
-    #         # print(f"Layer {idx}: Pruned {pruning_rate * 100}% of weights.")
-
-    #     return pruned_params
     
 
     def compress_parameters(self, params, k):
@@ -701,9 +665,6 @@ class ExampleClient(ErisClient):
                 start_idx += flat_len
 
         return sparsified_params
-
-
-
 
 
     def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
@@ -805,64 +766,14 @@ class ExampleClient(ErisClient):
 
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Start an Eris client configured with the options for the given experiment"
-    )
-    parser.add_argument(
-        "--id",
-        type=int,
-        choices=range(1, 101),
-        required=False,
-        default=1,
-        help="Specifies the artificial data partition",
-    )
-    parser.add_argument(
-        "--aggregator",
-        action=argparse.BooleanOptionalAction,
-        help="Start node as aggregator",
-    )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        help="Dataset name",
-        default="mnist",
-        choices=["mnist", "cifar10", "imdb", "fmnist"],
-    )
-    parser.add_argument(
-        "--shard",
-        type=str,
-        help="Path to the dataset portion",
-    )
-    parser.add_argument(
-        "--fold",
-        type=int,
-        choices=range(1, 20),
-        default=1,
-        help="Specifies the fold to be used",
-    )
-    parser.add_argument(
-        "--exp_n",
-        type=int,
-        help="exp number",
-        default=0,
-    )
-    
-    return parser.parse_args()
-
-
 def start_node(
     is_aggr=False,
     model=None,
-    train_loader=None,
-    val_loader=None,
-    optimizer=None,
-    criterion=None,
+    train_data=None,
+    val_data=None,
     num_examples=None,
     client_id=None,
-    train_fn=None,
-    evaluate_fn=None,
-    device=None,
+    training_args=None,
     config=None,
     exp_n=None,
 ):
@@ -871,19 +782,15 @@ def start_node(
         "tcp://127.0.0.1:50051",
         "tcp://127.0.0.1:5555",
         model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        optimizer=optimizer,
-        criterion=criterion,
+        train_data=train_data,
+        val_data=val_data,
         num_examples=num_examples,
         client_id=client_id,
-        train_fn=train_fn,
-        evaluate_fn=evaluate_fn,
-        device=device,
+        training_args=training_args,
         config=config,
         exp_n=exp_n,
     )
-
+    
     # Configure aggregator if ports are provided
     if is_aggr:
         client.set_aggregator_config("127.0.0.1")
@@ -915,18 +822,11 @@ def start_node(
             best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(aggregated_metrics, config, show=False, eris=True)
 
             # Load the test set
-            test_dataset = torch.load(f"../data/datasets/{config['dataset']}_test.pt", weights_only=False)
-
-            # Create the data loader
-            test_loader = DataLoader(
-                test_dataset, 
-                batch_size=config["batch_test"], 
-                shuffle=False
-            )
+            test_data = load_from_disk(f"../data/datasets/{config['dataset']}_test")
 
             # Reinitialize the model (ensure it matches the trained model architecture)
-            test_model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
-
+            test_model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
+                
             # Construct the checkpoint path
             checkpoint_path = f"checkpoints/{config["model_name"]}/{config['dataset']}/model_{best_loss_round}.pth"
             test_model.load_state_dict(torch.load(checkpoint_path,  weights_only=False))
@@ -936,7 +836,16 @@ def start_node(
             print(f"\033[93mTotal number of parameters in the model: {num_params}\033[0m")
 
             # Evaluate the model on the test set
-            loss_test, accuracy_test, metric_test = evaluate_fn(test_model, device, test_loader, criterion)
+            trainer = Trainer(
+                model=test_model,
+                args=config["training_args"],
+                train_dataset=test_data,
+                compute_metrics=utils.compute_metrics,
+            )
+            eval_results = trainer.evaluate(eval_dataset=test_data)
+            loss_test = eval_results.get("eval_loss", None)
+            accuracy_test = eval_results.get("eval_accuracy", None)
+            metric_test = eval_results.get("eval_f1", None)
             training_time = round((time.time() - start_time)/60, 2)
             print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}%, F1 Score: {metric_test*100:.2f}%\033[0m")
 
@@ -980,21 +889,18 @@ def start_node(
     return 1
 
 
-def main():
-    # Arguments
-    args = parse_args()
-    
+def main(args):    
     # Check GPU and set manual seed
-    device = utils.check_gpu(seed=cfg.seed, client_id=args.id)
+    _ = utils.check_gpu(seed=cfg.seed, client_id=args.id)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
     config['fold'] = args.fold
 
     # Initialize model
-    model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
+    model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
 
     # Load data
-    data = torch.load(args.shard, weights_only=False)
+    data = load_from_disk(args.shard)
 
     # Split the dataset
     train_size = config['client_train_samples'][args.exp_n]
@@ -1004,24 +910,16 @@ def main():
         raise ValueError(
             f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
         )
+        
+    # select the first 1000 samples for the sub
     torch.manual_seed(cfg.seed)
-    indices = torch.randperm(len(data))[:total_requested]
-    subset_data = Subset(data, indices)
-    train_dataset, val_dataset = random_split(
-        subset_data, [train_size, val_size],
-        generator=torch.Generator().manual_seed(cfg.seed)
-    )
-    num_examples = {"train": train_size, "val": val_size}
+    # shuffle
+    data = data.shuffle(seed=cfg.seed)
+    # select data
+    train_data = data.select(range(0, train_size))
+    val_data = data.select(range(train_size, total_requested))    
+    num_examples = {"train": train_size,"val": val_size}
     print(f"Num samples: {num_examples}")
-
-
-    # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config["batch_test"], shuffle=False)
-
-    # Optimizer and Loss function
-    optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=cfg.momentum)
-    criterion = F.mse_loss if config["n_classes"] == 1 else F.cross_entropy
 
     # Create directories and delede old files
     if args.id == 1:
@@ -1031,34 +929,26 @@ def main():
         return start_node(
             is_aggr=True,
             model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            optimizer=optimizer,
-            criterion=criterion,
+            train_data=train_data,
+            val_data=val_data,
             num_examples=num_examples,
             client_id=args.id,
-            train_fn=models.simple_train,
-            evaluate_fn=models.simple_test,
-            device=device,
+            training_args=config["training_args"],
             config=config,
             exp_n=args.exp_n,
-        )
+        )     
     else:
         return start_node(
             model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            optimizer=optimizer,
-            criterion=criterion,
+            train_data=train_data,
+            val_data=val_data,
             num_examples=num_examples,
             client_id=args.id,
-            train_fn=models.simple_train,
-            evaluate_fn=models.simple_test,
-            device=device,
+            training_args=config["training_args"],
             config=config,
             exp_n=args.exp_n
         )
     
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(args))

@@ -611,16 +611,9 @@ class FlowerClient(fl.client.NumPyClient):
     #         # print(f"Layer {idx}: Pruned {pruning_rate * 100}% of weights.")
 
     #     return pruned_params
-    
-    
 
 
-
-
-
-
-# main
-def main()->None:
+def parse_args():
     parser = argparse.ArgumentParser(description="Flower")
     parser.add_argument(
         "--id",
@@ -634,7 +627,7 @@ def main()->None:
         type=str,
         help="Dataset name",
         default="mnist",
-        choices=list(cfg.experiments.keys()),
+        choices=["mnist", "cifar10", "imdb", "fmnist"],
     )
     parser.add_argument(
         "--exp_n",
@@ -642,7 +635,19 @@ def main()->None:
         help="exp number",
         default=0,
     )
-    args = parser.parse_args()
+    
+    return parser.parse_args()
+    
+
+
+
+
+
+
+# main
+def main()->None:
+    # Arguments
+    args = parse_args()
 
     # check gpu and set manual seed
     device = utils.check_gpu(seed=cfg.seed, client_id=args.id)

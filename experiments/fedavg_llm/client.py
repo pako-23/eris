@@ -12,28 +12,31 @@ have this code running.
 
 # Arguments
 import argparse
-parser = argparse.ArgumentParser(description="Flower")
-parser.add_argument(
-    "--id",
-    type=int,
-    choices=range(1, 101),
-    required=True,
-    help="Specifies the artificial data partition",
-)
-parser.add_argument(
-    "--dataset",
-    type=str,
-    help="Dataset name",
-    default="mnist",
-    choices=["mnist", "cifar10", "imdb", "fmnist"],
-)
-parser.add_argument(
-    "--exp_n",
-    type=int,
-    help="exp number",
-    default=0,
-)
-args = parser.parse_args()
+def parse_args():
+    parser = argparse.ArgumentParser(description="Flower")
+    parser.add_argument(
+        "--id",
+        type=int,
+        choices=range(1, 101),
+        required=True,
+        help="Specifies the artificial data partition",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Dataset name",
+        default="mnist",
+        choices=["mnist", "cifar10", "imdb", "fmnist"],
+    )
+    parser.add_argument(
+        "--exp_n",
+        type=int,
+        help="exp number",
+        default=0,
+    )
+    
+    return parser.parse_args()
+args = parse_args()
 
 # set device for the client
 if args.id % 2 == 0:
@@ -113,26 +116,64 @@ class FlowerClient(fl.client.NumPyClient):
         self.n_params = sum(p.numel() for p in self.model.parameters())
         self.exp_n = exp_n
  
-        # # prepare dataset auditing
-        # Split into IN set (first half) and OUT set (second half)
-        self.n_canaries = int(len(self.train_data) * canary_frac)
-        self.canaries = self.train_data.select(range(0, self.n_canaries))
-        non_canaries = self.train_data.select(range(self.n_canaries, len(self.train_data)))
-        self.scores = np.zeros(self.n_canaries)
+        # # # prepare dataset auditing # to delete
+        # # Split into IN set (first half) and OUT set (second half)
+        # self.n_canaries = int(len(self.train_data) * canary_frac)
+        # self.canaries = self.train_data.select(range(0, self.n_canaries))
+        # non_canaries = self.train_data.select(range(self.n_canaries, len(self.train_data)))
+        # self.scores = np.zeros(self.n_canaries)
 
-        self.canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
-        non_canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+        # self.canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+        # non_canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
 
-        # subsample canaries & make new dataloader
-        true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(self.n_canaries) * 0.5).sample()
-        self.true_in_out = true_in_out.numpy()
-        canaries_in_idx = torch.nonzero(true_in_out.clone().detach())
+        # # subsample canaries & make new dataloader
+        # true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(self.n_canaries) * 0.5).sample()
+        # self.true_in_out = true_in_out.numpy()
+        # canaries_in_idx = torch.nonzero(true_in_out.clone().detach())
         
-        # concatenate non_canaries data with samples from canaries with canaries_in_idx
-        self.subsampled_train_data = concatenate_datasets([non_canaries, self.canaries.select(canaries_in_idx)])
-        self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+        # # concatenate non_canaries data with samples from canaries with canaries_in_idx
+        # self.subsampled_train_data = concatenate_datasets([non_canaries, self.canaries.select(canaries_in_idx)])
+        # self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
         
-        if cfg.privacy_audit:
+        # if cfg.privacy_audit:
+        #     # Trainer initialization using only the IN set for training
+        #     self.trainer = Trainer(
+        #         model=self.model,
+        #         args=self.training_args,
+        #         train_dataset=self.subsampled_train_data,
+        #         # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
+        #         compute_metrics=utils.compute_metrics,
+        #     )
+        # else:
+        #     # Trainer initialization using the full training set
+        #     self.trainer = Trainer(
+        #         model=self.model,
+        #         args=self.training_args,
+        #         train_dataset=self.train_data,
+        #         # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
+        #         compute_metrics=utils.compute_metrics,
+        #     )
+        
+        # prepare dataset auditing
+        if self.privacy_audit:
+            
+            self.n_canaries = int(len(self.train_data) * canary_frac)
+            self.canaries = self.train_data.select(range(0, self.n_canaries))
+            non_canaries = self.train_data.select(range(self.n_canaries, len(self.train_data)))
+            self.scores = np.zeros(self.n_canaries)
+
+            self.canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+            non_canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+
+            # subsample canaries & make new dataloader
+            true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(self.n_canaries) * 0.5).sample()
+            self.true_in_out = true_in_out.numpy()
+            canaries_in_idx = torch.nonzero(true_in_out.clone().detach())
+            
+            # concatenate non_canaries data with samples from canaries with canaries_in_idx
+            self.subsampled_train_data = concatenate_datasets([non_canaries, self.canaries.select(canaries_in_idx)])
+            self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+
             # Trainer initialization using only the IN set for training
             self.trainer = Trainer(
                 model=self.model,
@@ -173,7 +214,6 @@ class FlowerClient(fl.client.NumPyClient):
             self.trainer.train()
             training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
 
-                
             if cfg.pruning:
                 """
                 prune k% of the largest gradients [PriPrune FL] 
@@ -265,8 +305,7 @@ class FlowerClient(fl.client.NumPyClient):
         else: # NO AUDITING
             self.trainer.train()
             training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
-            
-                    
+              
             if cfg.pruning:
                 """
                 prune k% of the largest gradients [PriPrune FL] 
@@ -320,7 +359,6 @@ class FlowerClient(fl.client.NumPyClient):
     
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
-        # loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
         eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
         loss = eval_results.get("eval_loss", None)
         accuracy = eval_results.get("eval_accuracy", None)
@@ -553,8 +591,8 @@ class FlowerClient(fl.client.NumPyClient):
 
         return pruned_grads_list
 
-    
-    
+
+
 
 
 
