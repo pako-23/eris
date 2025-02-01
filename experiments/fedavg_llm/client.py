@@ -10,11 +10,41 @@ In a distributed environment, the server_address should be the IP address of the
 have this code running.
 """
 
-# Libraies
+# Arguments
+import argparse
+parser = argparse.ArgumentParser(description="Flower")
+parser.add_argument(
+    "--id",
+    type=int,
+    choices=range(1, 101),
+    required=True,
+    help="Specifies the artificial data partition",
+)
+parser.add_argument(
+    "--dataset",
+    type=str,
+    help="Dataset name",
+    default="mnist",
+    choices=["mnist", "cifar10", "imdb", "fmnist"],
+)
+parser.add_argument(
+    "--exp_n",
+    type=int,
+    help="exp number",
+    default=0,
+)
+args = parser.parse_args()
+
+# set device for the client
+if args.id % 2 == 0:
+    device = '2'
+else:
+    device = '3'
+
+# Import Libraies
 from collections import OrderedDict
 import torch
 import flwr as fl
-import argparse
 import numpy as np
 import copy
 import opacus # type: ignore
@@ -31,11 +61,13 @@ from transformers import ( # type: ignore
 
 import sys
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = device  # select the gpu
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 from public import utils
 from public import config as cfg
+
 
 
 
@@ -48,7 +80,6 @@ class FlowerClient(fl.client.NumPyClient):
                  num_examples: dict, 
                  client_id: int,
                  training_args: TrainingArguments, 
-                 device: torch.device,
                  privacy_audit: bool = True,
                  canary_frac: float = 0.2, 
                  p_value: float = 0.05,
@@ -68,7 +99,6 @@ class FlowerClient(fl.client.NumPyClient):
         self.client_id = client_id
         self.training_args = training_args
         # self.evaluate_fn = evaluate_fn
-        self.device = device
         self.canary_frac = canary_frac
         self.p_value = p_value
         self.k_plus = k_plus
@@ -532,37 +562,16 @@ class FlowerClient(fl.client.NumPyClient):
 
 
 # main
-def main()->None:
-    parser = argparse.ArgumentParser(description="Flower")
-    parser.add_argument(
-        "--id",
-        type=int,
-        choices=range(1, 101),
-        required=True,
-        help="Specifies the artificial data partition",
-    )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        help="Dataset name",
-        default="mnist",
-        choices=list(cfg.experiments.keys()),
-    )
-    parser.add_argument(
-        "--exp_n",
-        type=int,
-        help="exp number",
-        default=0,
-    )
-    args = parser.parse_args()
+def main(args)->None:
 
     # check gpu and set manual seed
-    device = utils.check_gpu(seed=cfg.seed, client_id=args.id)
+    _ = utils.check_gpu(seed=cfg.seed, client_id=args.id)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
     
     # Load the model
     model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
+    
     if args.id == 1:
         utils.print_num_parameters(model)
         
@@ -596,7 +605,6 @@ def main()->None:
                         num_examples=num_examples, 
                         client_id=args.id,
                         training_args=config["training_args"], 
-                        device=device,
                         privacy_audit=cfg.privacy_audit,
                         canary_frac=cfg.canary_frac,
                         p_value=cfg.p_value,
@@ -604,7 +612,7 @@ def main()->None:
                         k_min=cfg.k_min,
                         config=config, 
                         exp_n=args.exp_n                        
-                          ).to_client()
+                        ).to_client()
     fl.client.start_client(server_address="[::]:8098", client=client, max_wait_time=30) # local host
     
     # read saved data and plot
@@ -617,4 +625,4 @@ def main()->None:
 
 
 if __name__ == "__main__":
-    main()
+    main(args)

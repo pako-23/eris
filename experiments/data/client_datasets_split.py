@@ -119,7 +119,7 @@ elif args.dataset == "lsst":
 
 elif args.dataset == "imdb":
     # if not exists, download imdb dataset
-    if not os.path.exists("datasets/imdb_train.pt"):
+    if not os.path.exists("datasets/imdb_train"):
         download_datasets.download_imdb()
 
     # Load imdb dataset

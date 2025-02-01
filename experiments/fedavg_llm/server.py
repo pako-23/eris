@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 from logging import WARNING
 from flwr.common.logger import log
 from collections import OrderedDict
@@ -221,7 +222,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
         elif server_round == 1:  # Only log this warning once
             log(WARNING, "No evaluate_metrics_aggregation_fn provided")
             
-        print(f"Round {server_round} - Aggregated loss: {loss_aggregated:.3f} - Aggregated accuracy: {metrics_aggregated['accuracy']*100:.2f}")
+        print(f"\033[92mRound {server_round} - Aggregated loss: {loss_aggregated:.3f} - Aggregated accuracy: {metrics_aggregated['accuracy']*100:.2f}\033[0m")
 
         return loss_aggregated, metrics_aggregated
     
