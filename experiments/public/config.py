@@ -84,16 +84,16 @@ experiments = {
     },
     "imdb": {
         "dataset": "imdb",
-        "client_train_samples": [100, 16, 32, 64, 128, 256, 512], #[8, 16, 32, 64, 128, 256, 512] #[8, 16, 32, 64, 128, 256, 512],
-        "rounds": [10, 80, 100, 140, 100, 100, 100], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
+        "client_train_samples": [32, 64, 128, 256, 512, 1024, 2048], # avevo 100 sample, 10 epochs 100 steps, 95MIA vs 80MIA 
+        "rounds": [20, 20, 20, 20, 20, 20, 20], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
         "clients": 10,
         "splits": 10,
         "model_name": "distilbert-base-uncased",
         "training_args": TrainingArguments(
             output_dir="./distilbert-imdb",
             overwrite_output_dir=True,
-            # num_train_epochs=None, # Set desired number of epochs - Commented out to use max_steps
-            max_steps=100,  # Set desired number of training steps
+            num_train_epochs=2, # Set desired number of epochs - Commented out to use max_steps
+            # max_steps=100,  # Set desired number of training steps
             per_device_train_batch_size=16,
             per_device_eval_batch_size=16,
             learning_rate=5e-5,             

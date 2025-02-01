@@ -110,7 +110,7 @@ def set_seed(seed):
 
 
 # plot and save plot on server side
-def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
+def plot_loss_and_accuracy(metrics_distributed, config, exp_n=1, fold=1, show=True, eris=False):
     
     if eris:
         m = {
@@ -132,7 +132,8 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         metrics_distributed = m
     
     # Read arguments
-    rounds = config['rounds']
+    rounds = config['rounds'][exp_n]
+    samples = config['client_train_samples'][exp_n]
     predictor_name = config['model_name']
     loss = metrics_distributed['loss']
     accuracy = metrics_distributed['accuracy']
@@ -282,7 +283,7 @@ def plot_loss_and_accuracy(metrics_distributed, config, show=True, eris=False):
         )
         
         # Save the figure
-        plt.savefig(f"images/{predictor_name}/{config['dataset']}/training_{rounds}_rounds.png")
+        plt.savefig(f"images/{predictor_name}/{config['dataset']}/training_R{rounds}_S{samples}_F{fold}.png")
         
         # Show the plot if required
         if show:

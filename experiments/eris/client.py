@@ -912,7 +912,7 @@ def start_node(
             # utils.print_max_metrics(aggregated_metrics)
             
             # plot and print
-            best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(aggregated_metrics, config, show=False, eris=True)
+            best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(aggregated_metrics, config, exp_n=exp_n, fold=config['fold'], show=False, eris=True)
 
             # Load the test set
             test_dataset = torch.load(f"../data/datasets/{config['dataset']}_test.pt", weights_only=False)

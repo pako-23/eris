@@ -321,7 +321,7 @@ def main() -> None:
         json.dump(metrics_distributed, f)
 
     # Single Plot
-    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, config, show=False)
+    best_loss_round, best_acc_round = utils.plot_loss_and_accuracy(metrics_distributed, config, exp_n=args.exp_n, fold=args.fold, show=False)
     # best_loss_round = config['rounds'] - 1 # take the last round model
     
     # Privacy estimate plot
