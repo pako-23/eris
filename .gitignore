@@ -24,6 +24,7 @@ experiments/fedavg_llm/distilbert-imdb
 
 # model
 .safetensor
+.safetensors
 
 # zip
 *.zip
