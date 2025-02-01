@@ -17,6 +17,7 @@ import numpy as np
 from typing import List, Tuple, Union, Optional, Dict
 from flwr.common import Parameters, Scalar, Metrics
 from flwr.server.client_proxy import ClientProxy
+from datasets import Dataset, load_from_disk # type: ignore
 from flwr.common import FitRes
 import argparse
 import torch
@@ -42,6 +43,11 @@ from flwr.common import (
 )
 from flwr.common import NDArray, NDArrays
 from functools import reduce
+from transformers import ( # type: ignore
+    DistilBertForSequenceClassification,
+    Trainer,
+    TrainingArguments,
+)
 
 import sys
 import os
@@ -58,8 +64,7 @@ def fit_config(server_round: int):
     """Return training configuration dict for each round."""
     config = {
         "current_round": server_round,
-        "local_epochs": cfg.local_epochs,
-    }
+        }
     return config
     
 # Custom weighted average function
@@ -129,9 +134,6 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
         super().__init__(*args, **kwargs)
         self.model = model
         self.config = config
-        self.client_cid_list = []
-        self.aggregated_cluster_parameters = []
-        self.cluster_labels = {}
 
     # Override aggregate_fit method to add saving functionality
     def aggregate_fit(
@@ -182,7 +184,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
             # Save the model
-            torch.save(self.model.state_dict(), f"checkpoints/{self.config["model_name"]}/{self.config['dataset']}/model_{server_round}.pth")
+            torch.save(self.model.state_dict(), f"checkpoints/{self.config['model_name']}/{self.config['dataset']}/model_{server_round}.pth")
         
         return aggregated_parameters_global, aggregated_metrics
     
@@ -259,18 +261,14 @@ def main() -> None:
     config = cfg.experiments[args.dataset]
     
     # Load the test set
-    test_dataset = torch.load(f'../data/datasets/{args.dataset}_test.pt', weights_only=False)
-
-    # Create the data loaders
-    test_loader = DataLoader(test_dataset, batch_size=config['batch_test'], shuffle=False)
+    test_data = load_from_disk(f"../data/datasets/{args.dataset}_test")
 
     # model and history folder
     device = utils.check_gpu(seed=cfg.seed, print_info=True)
     utils.set_seed(cfg.seed)
 
     # model and history folder    
-    # model = config["model"](config["model_args"]).to(device)
-    model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
+    model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
 
     # Define the number of parameters in the model
     num_params = sum(p.numel() for p in model.parameters())
@@ -332,8 +330,16 @@ def main() -> None:
     model.load_state_dict(torch.load(f"checkpoints/{config["model_name"]}/{args.dataset}/model_{best_loss_round}.pth", weights_only=False))
 
     # Evaluate the model on the test set
-    criterion = F.mse_loss if config['n_classes'] == 1 else F.cross_entropy
-    loss_test, accuracy_test, metric_test = models.simple_test(model, device, test_loader, criterion)
+    trainer = Trainer(
+        model=model,
+        args=config["training_args"],
+        train_dataset=test_data,
+        compute_metrics=utils.compute_metrics,
+    )
+    eval_results = trainer.evaluate(eval_dataset=test_data)
+    loss_test = eval_results.get("eval_loss", None)
+    accuracy_test = eval_results.get("eval_accuracy", None)
+    metric_test = eval_results.get("eval_f1", None)
     print(f"\n\033[93mTest Loss: {loss_test:.3f}, Test Accuracy: {accuracy_test*100:.2f}, F1 Score: {metric_test*100:.2f} \033[0m")
     
     if cfg.privacy_audit:

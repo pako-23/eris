@@ -170,14 +170,14 @@ class FlowerClient(fl.client.NumPyClient):
                     self.optimizer, 
                     self.criterion, 
                     self.sigma, 
-                    config["local_epochs"], 
+                    self.config["epochs"], 
                     self.client_id
                     )
             else:
                 """
                 Traditional training without DP
                 """
-                for epoch in range(config["local_epochs"]):
+                for epoch in range(self.config["epochs"]):
                     self.train_fn(
                         self.model, 
                         self.device, 
@@ -268,14 +268,14 @@ class FlowerClient(fl.client.NumPyClient):
                     self.optimizer, 
                     self.criterion, 
                     self.sigma, 
-                    config["local_epochs"], 
+                    self.config["epochs"], 
                     self.client_id
                     )
             # else:
             #    """
             #    Traditional training without DP
             #    """
-            #     for epoch in range(config["local_epochs"]):
+            #     for epoch in range(self.config["epochs"]):
             #         self.train_fn(
             #             self.model, 
             #             self.device, 

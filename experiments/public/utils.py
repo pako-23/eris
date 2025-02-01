@@ -7,6 +7,7 @@ import seaborn as sns
 import torch
 import os
 import csv
+from sklearn.metrics import accuracy_score, f1_score
 from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
 from flwr.common import (
     NDArrays,
@@ -926,5 +927,14 @@ def print_max_metrics(aggregated_metrics: pd.DataFrame):
     
     print("\n")
 
-    
+
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    preds = logits.argmax(axis=-1)
+    acc = accuracy_score(labels, preds)
+    f1 = f1_score(labels, preds)
+    return {
+        "accuracy": acc,
+        "f1": f1,
+    }
     

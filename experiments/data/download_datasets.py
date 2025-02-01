@@ -511,7 +511,7 @@ def download_imdb():
     if not os.path.exists("datasets"):
         os.makedirs("datasets")
     train_data.save_to_disk("datasets/imdb_train")
-    test_data.save_to_disk("datasets/imbd_test")
+    test_data.save_to_disk("datasets/imdb_test")
     print("IMDb dataset saved correctly as torch files.")
 
 

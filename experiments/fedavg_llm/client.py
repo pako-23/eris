@@ -12,23 +12,28 @@ have this code running.
 
 # Libraies
 from collections import OrderedDict
-from torch.utils.data import Dataset, DataLoader
 import torch
 import flwr as fl
 import argparse
-from torch.utils.data import Subset, random_split
-import torch.nn.functional as F
 import numpy as np
 import copy
 import opacus # type: ignore
 import gc
+
+from torch.utils.data import DataLoader
+from torch.nn.functional import cross_entropy
+from datasets import concatenate_datasets, Dataset, load_from_disk # type: ignore
+from transformers import ( # type: ignore
+    DistilBertForSequenceClassification,
+    Trainer,
+    TrainingArguments,
+)
 
 import sys
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
-from public import models
 from public import utils
 from public import config as cfg
 
@@ -38,34 +43,31 @@ from public import config as cfg
 class FlowerClient(fl.client.NumPyClient):
     def __init__(self, 
                  model: torch.nn.Module,
-                 train_loader: DataLoader,
-                 val_loader: DataLoader,
-                 optimizer: torch.optim.Optimizer,
-                 criterion: torch.nn.Module,
+                 train_data: Dataset,
+                 val_data: Dataset,
                  num_examples: dict, 
                  client_id: int,
-                 train_fn: callable,
-                 evaluate_fn: callable,
+                 training_args: TrainingArguments, 
                  device: torch.device,
                  privacy_audit: bool = True,
                  canary_frac: float = 0.2, 
                  p_value: float = 0.05,
                  k_plus: float = 1 / 3, 
                  k_min: float = 1 / 3,
-                 config: dict = {'dataset':'mnist', 'batch':64},
+                 config: dict = {'dataset':'imdb', 'batch':4},
                  exp_n: int = 0
                 ):
         
         # Define the client
         self.model = model
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.optimizer = optimizer
-        self.criterion = criterion
+        self.train_data = train_data
+        self.val_data = val_data
+        # self.optimizer = optimizer
+        # self.criterion = criterion
         self.num_examples = num_examples
         self.client_id = client_id
-        self.train_fn = train_fn
-        self.evaluate_fn = evaluate_fn
+        self.training_args = training_args
+        # self.evaluate_fn = evaluate_fn
         self.device = device
         self.canary_frac = canary_frac
         self.p_value = p_value
@@ -81,58 +83,43 @@ class FlowerClient(fl.client.NumPyClient):
         self.n_params = sum(p.numel() for p in self.model.parameters())
         self.exp_n = exp_n
  
-        # prepare dataset auditing
-        canaries, non_canaries = random_split(self.train_loader.dataset, [self.canary_frac, 1 - self.canary_frac])
-        self.n_canaries = len(canaries)
+        # # prepare dataset auditing
+        # Split into IN set (first half) and OUT set (second half)
+        self.n_canaries = int(len(self.train_data) * canary_frac)
+        self.canaries = self.train_data.select(range(0, self.n_canaries))
+        non_canaries = self.train_data.select(range(self.n_canaries, len(self.train_data)))
         self.scores = np.zeros(self.n_canaries)
+
+        self.canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+        non_canaries.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
 
         # subsample canaries & make new dataloader
         true_in_out = torch.distributions.bernoulli.Bernoulli(torch.ones(self.n_canaries) * 0.5).sample()
         self.true_in_out = true_in_out.numpy()
-        canaries_in_idx = torch.nonzero(true_in_out)
-        subsampled_train_data = torch.utils.data.ConcatDataset([
-            non_canaries,
-            torch.utils.data.Subset(canaries, canaries_in_idx)
-        ])
-        self.subsampled_train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
-        self.canary_loader = DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
-
-        # local differential privacy initialization
-        if cfg.local_dp:
-            # Calculate sample rate = (batch_size / total_number_of_samples)
-            if cfg.privacy_audit:
-                sample_rate = min(1.0, self.subsampled_train_loader.batch_size / len(self.subsampled_train_loader.dataset))
-            else:
-                sample_rate = min(1.0, self.train_loader.batch_size / len(self.train_loader.dataset))
-
-            self.sigma = opacus.accountants.utils.get_noise_multiplier(
-                target_epsilon=cfg.epsilon,
-                target_delta=cfg.delta,
-                sample_rate=sample_rate,
-                epochs=int(self.config['epochs']), 
-                accountant='rdp',  
-            ) 
-
-            self.privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
-            if cfg.privacy_audit:
-                self.model, self.optimizer, self.subsampled_train_loader = self.privacy_engine.make_private(
-                    module=self.model,
-                    optimizer=self.optimizer,
-                    data_loader=self.subsampled_train_loader,
-                    noise_multiplier=self.sigma,
-                    max_grad_norm=cfg.sensitivity,
-                    )
-            else:
-                self.model, self.optimizer, self.train_loader = self.privacy_engine.make_private(
-                    module=self.model,
-                    optimizer=self.optimizer,
-                    data_loader=self.train_loader,
-                    noise_multiplier=self.sigma,
-                    max_grad_norm=cfg.sensitivity,
-                    )           
-            
-            if client_id == 1:
-                print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
+        canaries_in_idx = torch.nonzero(true_in_out.clone().detach())
+        
+        # concatenate non_canaries data with samples from canaries with canaries_in_idx
+        self.subsampled_train_data = concatenate_datasets([non_canaries, self.canaries.select(canaries_in_idx)])
+        self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+        
+        if cfg.privacy_audit:
+            # Trainer initialization using only the IN set for training
+            self.trainer = Trainer(
+                model=self.model,
+                args=self.training_args,
+                train_dataset=self.subsampled_train_data,
+                # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
+                compute_metrics=utils.compute_metrics,
+            )
+        else:
+            # Trainer initialization using the full training set
+            self.trainer = Trainer(
+                model=self.model,
+                args=self.training_args,
+                train_dataset=self.train_data,
+                # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
+                compute_metrics=utils.compute_metrics,
+            )
 
 
     def get_parameters(self, config):
@@ -150,34 +137,12 @@ class FlowerClient(fl.client.NumPyClient):
 
         # privacy auditing
         if self.privacy_audit:
-            if cfg.local_dp:
-                """
-                Local Differential Privacy (DP) training
-                """
-                models.train_with_opacus(
-                    self.model, 
-                    self.device, 
-                    self.subsampled_train_loader, 
-                    self.optimizer, 
-                    self.criterion, 
-                    self.sigma, 
-                    config["local_epochs"], 
-                    self.client_id
-                    )
-            else:
-                """
-                Traditional training without DP
-                """
-                for epoch in range(config["local_epochs"]):
-                    self.train_fn(
-                        self.model, 
-                        self.device, 
-                        self.subsampled_train_loader, 
-                        self.optimizer, 
-                        self.criterion, 
-                        epoch, 
-                        self.client_id
-                        )
+            """
+            Traditional training without DP
+            """
+            self.trainer.train()
+            training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
+
                 
             if cfg.pruning:
                 """
@@ -231,15 +196,14 @@ class FlowerClient(fl.client.NumPyClient):
             # compute scores for each canary, used to predict membership            
             scores = []
             # canary_loader = torch.utils.data.DataLoader(canaries, batch_size=cfg.batch_size, shuffle=False)
-            if cfg.score_fn == 'whitebox':
-                self.set_parameters(params_in)
-                for samples, targets in self.canary_loader:
-                    scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
-                self.set_parameters(params_out)
+            # if cfg.score_fn == 'whitebox':
+            #     self.set_parameters(params_in)
+            #     for samples, targets in self.canary_loader:
+            #         scores.extend(self.score_with_pseudograd_batch(samples, targets, client_update))
+            #     self.set_parameters(params_out)
             if cfg.score_fn == 'blackbox':
                 # self.set_parameters(params_in)  # TO REMOVE
-                for samples, targets in self.canary_loader:
-                    scores.extend(self.score_blackbox_batch(samples, targets, client_update))
+                scores = self.score_blackbox_batch(self.canaries)
                 # self.set_parameters(params_out) # TO REMOVE
             else:
                 NotImplementedError(f'score function {cfg.score_fn} is not known')
@@ -269,28 +233,9 @@ class FlowerClient(fl.client.NumPyClient):
                 )
         
         else: # NO AUDITING
-            if cfg.local_dp:   
-                # Local Differential Privacy
-                models.train_with_opacus(self.model, 
-                    self.device, 
-                    self.train_loader, 
-                    self.optimizer, 
-                    self.criterion, 
-                    self.sigma, 
-                    config["local_epochs"], 
-                    self.client_id
-                    )
-            else:
-                for epoch in range(config["local_epochs"]):
-                    self.train_fn(
-                        self.model, 
-                        self.device, 
-                        self.train_loader, 
-                        self.optimizer, 
-                        self.criterion, 
-                        epoch, 
-                        self.client_id
-                        )
+            self.trainer.train()
+            training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
+            
                     
             if cfg.pruning:
                 """
@@ -345,7 +290,11 @@ class FlowerClient(fl.client.NumPyClient):
     
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
-        loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
+        # loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
+        eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
+        loss = eval_results.get("eval_loss", None)
+        accuracy = eval_results.get("eval_accuracy", None)
+        f1_score = eval_results.get("eval_f1", None)
         
         # save loss and accuracy client
         utils.save_client_metrics(config["current_round"], loss, accuracy, f1_score, client_id=self.client_id,
@@ -399,44 +348,43 @@ class FlowerClient(fl.client.NumPyClient):
         return accuracy_mia, privacy_estimate
     
     
-    def score_with_pseudograd_batch(self, samples, targets, client_update):
-        '''
-        Computes membership inference attack scores for a batch by 
-        computing the inner product between the 'pseudogradient'
-        represented by client update and the true gradients
-        for each sample in the batch.
-        '''
-        self.model.to(self.device)  # Ensure model is on the correct device
-        samples = samples.to(self.device)
-        targets = targets.to(self.device)
+    # def score_with_pseudograd_batch(self, samples, targets, client_update):
+    #     '''
+    #     Computes membership inference attack scores for a batch by 
+    #     computing the inner product between the 'pseudogradient'
+    #     represented by client update and the true gradients
+    #     for each sample in the batch.
+    #     '''
+    #     self.model.to(self.device)  # Ensure model is on the correct device
+    #     samples = samples.to(self.device)
+    #     targets = targets.to(self.device)
         
-        # Forward pass
-        predictions = self.model(samples)
-        losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none')
+    #     # Forward pass
+    #     predictions = self.model(samples)
+    #     losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none')
         
-        scores = []
-        for loss in losses:
-            # Compute gradients for each sample
-            audit_grad = torch.autograd.grad(loss, self.model.parameters(), retain_graph=True)
-            # audit_grad = parameters_to_1d(audit_grad)
-            audit_grad = np.concatenate([x.cpu().flatten() for x in audit_grad])
-            score = np.dot(client_update, - audit_grad)
-            scores.append(score)
+    #     scores = []
+    #     for loss in losses:
+    #         # Compute gradients for each sample
+    #         audit_grad = torch.autograd.grad(loss, self.model.parameters(), retain_graph=True)
+    #         # audit_grad = parameters_to_1d(audit_grad)
+    #         audit_grad = np.concatenate([x.cpu().flatten() for x in audit_grad])
+    #         score = np.dot(client_update, - audit_grad)
+    #         scores.append(score)
         
-        return scores
+    #     return scores
 
 
-    def score_blackbox_batch(self, samples, targets, client_update):
-        with torch.no_grad():
-            self.model.to(self.device)  # Ensure model is on the correct device
-            samples = samples.to(self.device)
-            targets = targets.to(self.device)
-            
-            # Forward pass
-            predictions = self.model(samples)
-            losses = torch.nn.functional.cross_entropy(predictions, targets, reduction='none').cpu()
+    def score_blackbox_batch(self, data):        
+        prediction_output = self.trainer.predict(data)
+        logits = torch.tensor(prediction_output.predictions)
+        labels = torch.tensor(prediction_output.label_ids)
 
-            return -losses
+        # Compute per-sample loss
+        losses = cross_entropy(logits, labels, reduction='none')
+
+        # Return scores
+        return -losses.cpu().numpy()
 
 
     def compress_parameters(self, params, k):
@@ -575,42 +523,6 @@ class FlowerClient(fl.client.NumPyClient):
 
         return pruned_grads_list
 
-
-    # def prune_parameters(self, params, pruning_rate=0.3):
-    #     """
-    #     Prunes the largest weights in the parameters based on the pruning rate.
-
-    #     Args:
-    #         params (List[np.ndarray]): List of NumPy arrays representing model parameters.
-    #         pruning_rate (float): Fraction of weights to prune (e.g., 0.3 for 30%).
-
-    #     Returns:
-    #         List[np.ndarray]: Pruned parameters with the largest weights set to zero.
-    #     """
-    #     pruned_params = []
-    #     for idx, param in enumerate(params):
-    #         if param.ndim == 0:
-    #             # Skip scalar parameters if any
-    #             pruned_params.append(param)
-    #             continue
-
-    #         # Compute the absolute values and flatten the array
-    #         abs_param = np.abs(param)
-    #         flat_param = abs_param.flatten()
-
-    #         # Determine the threshold for pruning
-    #         threshold = np.percentile(flat_param, 100 * (1 - pruning_rate))
-
-    #         # Create a mask for weights above the threshold
-    #         mask = abs_param <= threshold
-
-    #         # Apply the mask to set pruned weights to zero
-    #         pruned_param = param * mask
-
-    #         pruned_params.append(pruned_param)
-    #         # print(f"Layer {idx}: Pruned {pruning_rate * 100}% of weights.")
-
-    #     return pruned_params
     
     
 
@@ -648,13 +560,14 @@ def main()->None:
     device = utils.check_gpu(seed=cfg.seed, client_id=args.id)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
-
-    # model and history folder
-    model = models.model_dict[config["dataset"]](config["model_args"]).to(device)
+    
+    # Load the model
+    model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
     if args.id == 1:
         utils.print_num_parameters(model)
+        
     # Load data
-    data = torch.load(f'../data/client_datasets/IID_data_client_{args.id}.pt', weights_only=False)
+    data = load_from_disk(f"../data/client_datasets/IID_data_client_{args.id}")
     
     # Split the dataset
     train_size = config['client_train_samples'][args.exp_n]
@@ -664,37 +577,26 @@ def main()->None:
         raise ValueError(
             f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
         )
+        
+    # select the first 1000 samples for the sub
     torch.manual_seed(cfg.seed)
-    indices = torch.randperm(len(data))[:total_requested]
-    subset_data = Subset(data, indices)
-    train_dataset, val_dataset = random_split(
-        subset_data, [train_size, val_size],
-        generator=torch.Generator().manual_seed(cfg.seed)
-)
+    # shuffle
+    data = data.shuffle(seed=cfg.seed)
+    # select data
+    train_data = data.select(range(0, train_size))
+    val_data = data.select(range(train_size, total_requested))    
     num_examples = {"train": train_size,"val": val_size}
     print(f"Num samples: {num_examples}")
-
-
-    # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config["batch_test"], shuffle=False)
-
-    # Optimizer and Loss function
-    optimizer = torch.optim.SGD(model.parameters(), lr=cfg.lr, momentum=cfg.momentum)
-    criterion = F.mse_loss if config["n_classes"] == 1 else F.cross_entropy
     
     # Start Flower client
     client = FlowerClient(
                         model, 
-                        train_loader, 
-                        val_loader, 
-                        optimizer, 
-                        criterion, 
-                        num_examples, 
-                        args.id, 
-                        models.simple_train, 
-                        models.simple_test, 
-                        device,
+                        train_data=train_data, 
+                        val_data=val_data, 
+                        num_examples=num_examples, 
+                        client_id=args.id,
+                        training_args=config["training_args"], 
+                        device=device,
                         privacy_audit=cfg.privacy_audit,
                         canary_frac=cfg.canary_frac,
                         p_value=cfg.p_value,
@@ -703,7 +605,7 @@ def main()->None:
                         config=config, 
                         exp_n=args.exp_n                        
                           ).to_client()
-    fl.client.start_client(server_address="[::]:8098", client=client) # local host
+    fl.client.start_client(server_address="[::]:8098", client=client, max_wait_time=30) # local host
     
     # read saved data and plot
     utils.plot_client_metrics(args.id, config, show=False)

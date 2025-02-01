@@ -1,12 +1,13 @@
 import sys
 import os
+from transformers import TrainingArguments
 
 
 # ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
-dataset_name = "mnist"  # Options: "mnist", "cifar10", "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 5  # Set 1 to disable cross validation
+dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+k_folds = 1  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
@@ -38,7 +39,7 @@ k_sparsification = False
 k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # shifted k-sparsification
-shifted_k_sparsification = True
+shifted_k_sparsification = False
 k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # Experiments config
@@ -54,7 +55,6 @@ experiments = {
         "splits": 10,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.LeNet5,
         "model_name": "LeNet5",
         "model_args": {
             "in_channels": 1,
@@ -74,7 +74,6 @@ experiments = {
         "splits": 50,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.ResNet9,
         "model_name": "ResNet9",
         "model_args": {
             "in_channels": 3,
@@ -82,6 +81,33 @@ experiments = {
             "input_size": (32, 32),
         },
         "n_classes": 10,
+    },
+    "imdb": {
+        "dataset": "imdb",
+        "client_train_samples": [100, 16, 32, 64, 128, 256, 512], #[8, 16, 32, 64, 128, 256, 512] #[8, 16, 32, 64, 128, 256, 512],
+        "rounds": [10, 80, 100, 140, 100, 100, 100], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
+        "clients": 2,
+        "splits": 2,
+        "model_name": "distilbert-base-uncased",
+        "training_args": TrainingArguments(
+            output_dir="./distilbert-imdb",
+            overwrite_output_dir=True,
+            # num_train_epochs=None, # Set desired number of epochs - Commented out to use max_steps
+            max_steps=50,  # Set desired number of training steps
+            per_device_train_batch_size=4,
+            per_device_eval_batch_size=4,
+            learning_rate=5e-5,             
+            weight_decay=0.0,               
+            # adam_beta1=0.9,                   
+            # adam_beta2=0.999,                 
+            # adam_epsilon=1e-8,                
+            eval_strategy="no", #"epoch",
+            save_strategy="epoch",
+            logging_dir="./logs",
+            logging_steps=100,
+            seed=42
+        ),
+        "n_classes": 2,
     },
     "fmnist": {
         "dataset": "fmnist",
@@ -94,7 +120,6 @@ experiments = {
         "splits": 5,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.LeNet5,
         "model_name": "LeNet5",
         "model_args": {
             "in_channels": 1,
@@ -114,7 +139,6 @@ experiments = {
         "splits": 5,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.MLP,
         "model_name": "MLP",
         "model_args": {
             "input_size": 30,
@@ -134,7 +158,6 @@ experiments = {
         "splits": 5,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.MLP,
         "model_name": "MLP",
         "model_args": {
             "input_size": 21,
@@ -154,7 +177,6 @@ experiments = {
         "splits": 5,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.MLP,
         "model_name": "MLP",
         "model_args": {
             "input_size": 105,
@@ -174,7 +196,6 @@ experiments = {
         "splits": 5,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.LinearModel,
         "model_name": "LinearModel",
         "model_args": {
             "input_size": 30,
@@ -193,7 +214,6 @@ experiments = {
         "splits": 5,
         "lr": 0.01,
         "momentum": 0.9,
-        # "model": models.TransformerModelFlexible,
         "model_name": "TransformerModelFlexible",
         "model_args": {
             "input_size": 6,

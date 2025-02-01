@@ -24,6 +24,7 @@ args.add_argument(
     choices=[
         "mnist",
         "cifar10",
+        "imdb",
         "fmnist",
         "breast",
         "diabetes",

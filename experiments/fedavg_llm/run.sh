@@ -66,7 +66,7 @@ for exp_n in $(seq 0 6); do
         # Creating dataset
         cd ../data
         python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-        cd ../fedavg
+        cd ../fedavg_llm
 
         echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 
@@ -93,7 +93,7 @@ for exp_n in $(seq 0 6); do
     if [ $k_folds -gt 1 ]; then
         echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
         cd ../public
-        python average_results.py --strategy "fedavg" --dataset $dataset_name --exp_n $exp_n
+        python average_results.py --strategy "fedavg_llm" --dataset $dataset_name --exp_n $exp_n
         sleep 1
     fi
 

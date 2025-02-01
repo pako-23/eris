@@ -58,7 +58,6 @@ def fit_config(server_round: int):
     """Return training configuration dict for each round."""
     config = {
         "current_round": server_round,
-        "local_epochs": cfg.local_epochs,
     }
     return config
     
@@ -129,9 +128,6 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
         super().__init__(*args, **kwargs)
         self.model = model
         self.config = config
-        self.client_cid_list = []
-        self.aggregated_cluster_parameters = []
-        self.cluster_labels = {}
 
     # Override aggregate_fit method to add saving functionality
     def aggregate_fit(
