@@ -1,17 +1,4 @@
-
-FetchContent_Declare(protobuf
-  GIT_REPOSITORY https://github.com/protocolbuffers/protobuf.git
-  GIT_TAG        v28.2)
-set(ABSL_BUILD_TESTING OFF)
-set(ABSL_PROPAGATE_CXX_STD ON)
-set(protobuf_BUILD_TESTS OFF)
-set(protobuf_INSTALL OFF)
-set(protobuf_BUILD_SHARED_LIBS OFF)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-FetchContent_MakeAvailable(protobuf)
-
-
-set(protobuf_INCLUDE_DIR ${protobuf_SOURCE_DIR}/src)
+find_package(Protobuf REQUIRED)
 
 function(compile_proto_files target)
   get_target_property(_source_list ${target} SOURCES)
@@ -33,11 +20,11 @@ function(compile_proto_files target)
       
     add_custom_command(
        OUTPUT ${_generated_srcs}
-       COMMAND $<TARGET_FILE:protoc>
+       COMMAND ${Protobuf_PROTOC_EXECUTABLE}
        ARGS --proto_path ${CMAKE_CURRENT_SOURCE_DIR}
             --cpp_out ${CMAKE_CURRENT_BINARY_DIR}
 	    ${_abs_file}
-       DEPENDS ${_abs_file} $<TARGET_FILE:protoc>
+       DEPENDS ${_abs_file}
        COMMENT "Running C++ protocol buffer compiler on ${_file}"
        VERBATIM)
    endforeach()
