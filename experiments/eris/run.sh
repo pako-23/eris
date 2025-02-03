@@ -68,7 +68,7 @@ for exp_n in $(seq 0 6); do
         echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 
         # Start training
-        ./coordinator.py --dataset_name "$dataset_name" &
+        ./coordinator.py --dataset_name "$dataset_name" --exp_n "$exp_n" &
         # sleep 0.5
         sleep 1
 

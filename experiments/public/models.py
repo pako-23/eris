@@ -5,6 +5,10 @@ from math import prod
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import opacus # type: ignore
+from torch.utils.data import DataLoader
+from transformers import get_scheduler # type: ignore
+from tqdm import tqdm
+import numpy as np
 
 import sys
 import os
@@ -353,6 +357,91 @@ def train_with_opacus(model, device, train_loader, optimizer, criterion, sigma, 
     print(f"Client {client_id} - Epoch {epoch+1}/{epochs} | Loss: {avg_loss:.4f} | ε = {cur_epsilon:.2f} (δ={cfg.delta})")
 
     del privacy_engine
+    
+
+# def train_llm_with_opacus(model, device, train_loader, optimizer, scheduler, privacy_engine, training_args, sigma, client_id=None): 
+def train_llm_with_opacus(model, device, train_data, training_args, sigma, delta, client_id=None): 
+    # Create the dataloader
+    train_loader = DataLoader(
+        train_data,
+        batch_size=training_args.per_device_train_batch_size,
+        shuffle=True,
+    )
+    
+    # Optimizer and scheduler
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=training_args.learning_rate,
+        betas=(training_args.adam_beta1, training_args.adam_beta2),
+        eps=training_args.adam_epsilon,
+        weight_decay=training_args.weight_decay,
+    )
+    scheduler = get_scheduler(
+        "linear",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=len(train_loader) * training_args.num_train_epochs,
+    )
+        
+    # Freeze the word and position embeddings - few params (cannot be optimized with opacus)
+    model.train()
+    model.distilbert.embeddings.position_embeddings.weight.requires_grad = False
+
+    # Opacus privacy engine
+    privacy_engine = opacus.PrivacyEngine(accountant='rdp', secure_mode=False)
+    model, optimizer, train_loader = privacy_engine.make_private(
+                        module=model,
+                        optimizer=optimizer,
+                        data_loader=train_loader,
+                        noise_multiplier=sigma,
+                        max_grad_norm=cfg.sensitivity,
+                        poisson_sampling=False,
+                    )
+
+    # 4) Training loop
+    training_loss_history = []
+    for epoch in range(training_args.num_train_epochs):
+        # print(f"Epoch {epoch + 1}/{epochs}")
+        progress_bar = tqdm(
+            enumerate(train_loader),
+            total=len(train_loader),
+            bar_format="{percentage:3.0f}%|{bar:10}| {n_fmt}/{total_fmt} - {postfix} [{elapsed}<{remaining}, {rate_fmt}]"
+        )
+        for step, batch in progress_bar:
+            # Move batch to device
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["label"].to(device)
+
+            # Forward pass
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+
+            # (Optional) Gradient clipping used in Trainer (already in PrivacyEngine)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+
+            optimizer.step()
+            scheduler.step()
+
+            training_loss_history.append(loss.item())
+
+            # Update the postfix inline every 100 steps
+            if (step + 1) % 100 == 0:
+                avg_loss = np.mean(training_loss_history[-100:])
+                progress_bar.set_postfix_str(f"Epoch {epoch+1} - Step {step+1} - Loss: {avg_loss:.4f}")
+    
+    cur_epsilon = privacy_engine.get_epsilon(delta=delta)
+    print(f"Client {client_id} - ε = {cur_epsilon:.2f} (δ={delta})")
+    
+    # Set the position embeddings back to trainable
+    model.distilbert.embeddings.position_embeddings.weight.requires_grad = True
+ 
+    del privacy_engine
+
 
 # simple test function
 def simple_test(model, device, test_loader, criterion, client_id=None):

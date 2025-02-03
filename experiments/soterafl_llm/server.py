@@ -66,7 +66,7 @@ def fit_config(server_round: int):
     """Return training configuration dict for each round."""
     config = {
         "current_round": server_round,
-        }
+    }
     return config
     
 # Custom weighted average function
@@ -112,30 +112,62 @@ def weighted_loss_avg(results: List[Tuple[int, float]]) -> float:
     weighted_losses = [num_examples * loss for num_examples, loss in results]
     return sum(weighted_losses) / num_total_evaluation_examples
 
-def aggregate(results: List[Tuple[NDArrays, int]]) -> NDArrays:
-    """Compute weighted average."""
+def aggregate(results: List[Tuple[NDArrays, int]], params_in: List, reference_s: List, gamma: float) -> NDArrays:
+    """Compute weighted average.
+    Args:
+        results: List of tuples (weights, num_examples)
+        params_in: List of parameters of the previous global model 
+        reference_s: List of reference vectors
+        gamma: float, sparsity parameter
+    """
     # Calculate the total number of examples used during training
     num_examples_total = sum([num_examples for _, num_examples in results])
-
-    # Create a list of weights, each multiplied by the related number of examples
-    weighted_weights = [
-        [layer * num_examples for layer in weights] for weights, num_examples in results
-    ]
-
-    # Compute average weights of each layer
-    weights_prime: NDArrays = [
+    
+    # recover the shifted sparse gradients
+    weighted_shifted_sparse_grads_clients = [
+        [(param_out - param_in)*num_examples for param_out, param_in in zip(weights, params_in)]
+        for weights, num_examples in results
+        ]
+    
+    # Compute the average of the shifted sparse gradients
+    shifted_sparse_grads_prime = [
         reduce(np.add, layer_updates) / num_examples_total
-        for layer_updates in zip(*weighted_weights)
-    ]
-    return weights_prime
+        for layer_updates in zip(*weighted_shifted_sparse_grads_clients)
+    ] 
+    
+    # remove shift
+    sparse_grads_prime = [s + g for s, g in zip(reference_s, shifted_sparse_grads_prime)]
+    
+    # update next round model
+    weights_prime = [param_in + sparse_grad for param_in, sparse_grad in zip(params_in, sparse_grads_prime)]
+    
+    # update vector reference
+    reference_s = [s + gamma * sparse_grad for s, sparse_grad in zip(reference_s, shifted_sparse_grads_prime)]
+
+    return weights_prime, reference_s
 
 
 # Custom strategy to save model after each round
 class SaveModelStrategy(fl.server.strategy.FedAvg):
-    def __init__(self, model, config, *args, **kwargs):
+    def __init__(self, model, config, exp_n, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.model = model
         self.config = config
+        
+        # initialize first model parameters
+        self.previous_params = self.get_parameters()
+
+        # initialize reference vector
+        self.reference_s = []
+        for p in self.get_parameters():
+            self.reference_s.append(np.zeros_like(p))
+        
+        # initialize k for sparsity
+        n_params = sum(p.numel() for p in self.model.parameters())
+        self.k = int(n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+        w = (n_params / self.k) - 1
+        self.gamma = np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
+
 
     # Override aggregate_fit method to add saving functionality
     def aggregate_fit(
@@ -162,8 +194,12 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
             for _, fit_res in results
         ]
-        aggregated_parameters_global = ndarrays_to_parameters(aggregate(weights_results))   # Global aggregation - traditional - no clustering
+        # aggregated_parameters_global = ndarrays_to_parameters(aggregate(weights_results))   # Global aggregation - traditional - no clustering
         
+        p_ndarrays, self.reference_s = aggregate(weights_results, self.previous_params, self.reference_s, self.gamma)
+        self.previous_params = copy.deepcopy(p_ndarrays)
+        aggregated_parameters_global = ndarrays_to_parameters(p_ndarrays)
+
         # Aggregate custom metrics if aggregation fn was provided   NO FIT METRICS AGGREGATION FN PROVIDED - SKIPPED FOR NOW
         aggregated_metrics = {}
         if self.fit_metrics_aggregation_fn:
@@ -186,7 +222,7 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
             state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
             self.model.load_state_dict(state_dict, strict=True)
             # Save the model
-            torch.save(self.model.state_dict(), f"checkpoints/{self.config['model_name']}/{self.config['dataset']}/model_{server_round}.pth")
+            torch.save(self.model.state_dict(), f"checkpoints/{self.config["model_name"]}/{self.config['dataset']}/model_{server_round}.pth")
         
         return aggregated_parameters_global, aggregated_metrics
     
@@ -226,7 +262,11 @@ class SaveModelStrategy(fl.server.strategy.FedAvg):
         print(f"\033[92mRound {server_round} - Aggregated loss: {loss_aggregated:.3f} - Aggregated accuracy: {metrics_aggregated['accuracy']*100:.2f}\033[0m")
 
         return loss_aggregated, metrics_aggregated
-    
+
+
+    def get_parameters(self, config=None):
+        return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
+
 
 
     
@@ -290,7 +330,8 @@ def main() -> None:
         evaluate_metrics_aggregation_fn=weighted_average,
         on_evaluate_config_fn=fit_config,
         on_fit_config_fn=fit_config,
-        config=config
+        config=config,
+        exp_n=args.exp_n
     )
         
     print(f"\033[94mTraining {config["model_name"]} on {args.dataset} with {config['clients']} clients\033[0m\n")

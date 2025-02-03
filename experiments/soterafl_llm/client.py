@@ -43,7 +43,7 @@ if args.id % 2 == 0:
     device = '2'
 else:
     device = '3'
-
+    
 # Import Libraies
 from collections import OrderedDict
 import torch
@@ -78,7 +78,7 @@ from public import config as cfg
 
 # Define Flower client 
 class FlowerClient(fl.client.NumPyClient):
-    def __init__(self, 
+    def __init__(self,                
                  model: torch.nn.Module,
                  train_data: Dataset,
                  val_data: Dataset,
@@ -91,7 +91,7 @@ class FlowerClient(fl.client.NumPyClient):
                  k_plus: float = 1 / 3, 
                  k_min: float = 1 / 3,
                  config: dict = {'dataset':'imdb', 'batch':4},
-                 exp_n: int = 0
+                 exp_n: int = 0  
                 ):
         
         # Define the client
@@ -114,6 +114,16 @@ class FlowerClient(fl.client.NumPyClient):
         self.acc_scores = None
         self.n_params = sum(p.numel() for p in self.model.parameters())
         self.exp_n = exp_n
+        
+        # initialize reference vector
+        self.reference_s = []
+        for p in self.get_parameters():
+            self.reference_s.append(np.zeros_like(p))
+        
+        # initialize k for sparsity
+        self.k = int(self.n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+        w = (self.n_params / self.k) - 1
+        self.gamma = np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
 
         # prepare dataset auditing
         if self.privacy_audit:
@@ -152,7 +162,7 @@ class FlowerClient(fl.client.NumPyClient):
                 # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
                 compute_metrics=utils.compute_metrics,
             )
-        
+
         if cfg.local_dp:
             # Calculate sample rate = (batch_size / total_number_of_samples)
             if cfg.privacy_audit:
@@ -177,6 +187,7 @@ class FlowerClient(fl.client.NumPyClient):
             ) 
             print(f"Client {self.client_id} - Noise multiplier: {self.sigma}")
 
+            
             # Optimizer and scheduler
             self.optimizer_dp = torch.optim.AdamW(
                 self.model.parameters(),
@@ -196,15 +207,15 @@ class FlowerClient(fl.client.NumPyClient):
                                 noise_multiplier=self.sigma,
                                 max_grad_norm=cfg.sensitivity,
                                 poisson_sampling=False,
-                            )
+                            )     
             
             if client_id == 1:
                 print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
 
 
-    def get_parameters(self, config):
+    def get_parameters(self, config=None):
         return [val.cpu().numpy() for _, val in self.model.state_dict().items()]
-    
+
 
     def set_parameters(self, parameters):
         params_dict = zip(self.model.state_dict().keys(), parameters)
@@ -217,7 +228,7 @@ class FlowerClient(fl.client.NumPyClient):
 
         # privacy auditing
         if self.privacy_audit:
-            if cfg.local_dp:   
+            if True:
                 """
                 Training with DP
                 """                
@@ -230,58 +241,39 @@ class FlowerClient(fl.client.NumPyClient):
                     1 / len(self.train_loader_dp), 
                     client_id=self.client_id
                     ) 
-            else:
-                """
-                Traditional training without DP
-                """
-                self.trainer.train()
-                # training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
+            # else:
+            #     """
+            #     Traditional training without DP
+            #     """
+            #     self.trainer.train()
+            #     training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
 
-            if cfg.pruning:
-                """
-                prune k% of the largest gradients [PriPrune FL] 
-                """
-                # calculate gradients
-                params_out = self.get_parameters(config)
-                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
                 
-                # prune the largest gradients
-                pruned_grads = self.prune_largest_grads(
-                    grads=grads,
-                    pruning_rate = cfg.pruning_rate
-                    )
-                
-                # update model parameters
-                params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
+            """
+            shifted k-random sparsification on the gradients [SOTERIAFL]
+            """
+            # calculate gradients
+            params_out = self.get_parameters(config)
+            grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
             
-                # update model weights
-                self.set_parameters(params_out)
-
-                
-            elif cfg.k_sparsification:
-                """
-                k-random sparsification on the gradients [Part of SOTERIAFL]
-                """
-                # calculate gradients
-                params_out = self.get_parameters(config)
-                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
-                    
-                # k-sparsification on the gradients
-                sparse_grads = self.compress_parameters(
-                    grads,
-                    # k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))  # as in SoteriaFL
-                    k = int(self.n_params * cfg.k_sparsity)
-                    )
-                
-                # update model parameters
-                params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
-                
-                # update model weights
-                self.set_parameters(params_out)
+            # shifted gradient
+            shifted_grads = [grad - s for grad, s in zip(grads, self.reference_s)] 
             
-            else:
-                params_out = self.get_parameters(config)
-
+            # k-sparsification on the gradients
+            shifted_sparse_grads = self.compress_parameters(
+                shifted_grads,
+                k = self.k
+                )
+            
+            # update reference vector
+            self.reference_s = [s + self.gamma * sparse_grad for s, sparse_grad in zip(self.reference_s, shifted_sparse_grads)]
+            
+            # update model parameters
+            params_out = [param_in + grad for param_in, grad in zip(params_in, shifted_sparse_grads)]
+            
+            # update model weights
+            self.set_parameters(params_out)
+            
             # normalize client update vector
             client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in)
             client_update = client_update / np.linalg.norm(client_update)
@@ -326,7 +318,7 @@ class FlowerClient(fl.client.NumPyClient):
                 )
         
         else: # NO AUDITING
-            if cfg.local_dp:   
+            if True:   
                 """
                 Training with DP
                 """                
@@ -339,57 +331,34 @@ class FlowerClient(fl.client.NumPyClient):
                     1 / len(self.train_loader_dp), 
                     client_id=self.client_id
                     )
-            else:
-                """
-                Traditional training without DP
-                """
-                self.trainer.train()
-                # training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
+            # else:
+            #     """
+            #     Traditional training without DP
+            #     """
+            #     self.trainer.train()
+            #     training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
                 
-            if cfg.pruning:
-                """
-                prune k% of the largest gradients [PriPrune FL] 
-                """
-                # calculate gradients
-                params_out = self.get_parameters(config)
-                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
-                
-                # prune the largest gradients
-                pruned_grads = self.prune_largest_grads(
-                    grads=grads,
-                    pruning_rate = cfg.pruning_rate
-                    )
-                
-                # update model parameters
-                params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
-            
-                # update model weights
-                self.set_parameters(params_out)
-                
-            elif cfg.k_sparsification:
-                """
-                k-random sparsification on the gradients [Part of SOTERIAFL]
-                """
-                # calculate gradients
-                params_out = self.get_parameters(config)
-                grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
                     
-                # k-sparsification on the gradients
-                sparse_grads = self.compress_parameters(
-                    grads,
-                    # k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))  # as in SoteriaFL
-                    k = int(self.n_params * cfg.k_sparsity)
-                    )
+            """
+            k-random sparsification on the gradients [Part of SOTERIAFL]
+            """
+            # calculate gradients
+            params_out = self.get_parameters(config)
+            grads = [param_out - param_in for param_in, param_out in zip(params_in, params_out)]
                 
-                # update model parameters
-                params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
-                
-                # update model weights
-                self.set_parameters(params_out)
+            # k-sparsification on the gradients
+            sparse_grads = self.compress_parameters(
+                grads,
+                k = self.k
+                )
             
-            else:
-                params_out = self.get_parameters(config)
-        
+            # update model parameters
+            params_out = [param_in + grad for param_in, grad in zip(params_in, sparse_grads)]
+            
+            # update model weights
+            self.set_parameters(params_out)
+            
+
         gc.collect() 
         torch.cuda.empty_cache() 
         if self.client_id == 1:
@@ -447,8 +416,7 @@ class FlowerClient(fl.client.NumPyClient):
             m=self.n_canaries,
             r=self.n_canaries - len(abstained),
             v=num_correct,
-            # delta=cfg.delta,
-            delta=1 / len(self.train_loader_dp),
+            delta=cfg.delta,
             p=0.05)
         
         # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
@@ -632,6 +600,7 @@ class FlowerClient(fl.client.NumPyClient):
                 start_idx += flat_len
 
         return pruned_grads_list
+    
 
 
 
@@ -643,12 +612,14 @@ class FlowerClient(fl.client.NumPyClient):
 
 # main
 def main(args)->None:
+    # Arguments
+    args = parse_args()
 
     # check gpu and set manual seed
-    _ = utils.check_gpu(seed=cfg.seed, client_id=args.id)
+    device = utils.check_gpu(seed=cfg.seed, client_id=args.id)
     utils.set_seed(cfg.seed)
     config = cfg.experiments[args.dataset]
-    
+
     # Load the model
     model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
     
@@ -666,7 +637,7 @@ def main(args)->None:
         raise ValueError(
             f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
         )
-        
+
     # select the first 1000 samples for the sub
     torch.manual_seed(cfg.seed)
     # shuffle
@@ -676,8 +647,8 @@ def main(args)->None:
     val_data = data.select(range(train_size, total_requested))    
     num_examples = {"train": train_size,"val": val_size}
     print(f"Num samples: {num_examples}")
-    
-    # Start Flower client
+
+    # Start Flower client    
     client = FlowerClient(
                         model, 
                         train_data=train_data, 

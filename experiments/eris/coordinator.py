@@ -38,6 +38,8 @@ def main():
     builder.set_rounds(int(config["rounds"][args.exp_n]))
     builder.set_splits(int(config["splits"]))
     builder.set_min_clients(int(config["clients"]))
+    # builder.set_publish_port(50051)
+    # builder.set_subscribe_port(5555)
 
     coordinator = ErisCoordinator(builder)
     coordinator.start()
