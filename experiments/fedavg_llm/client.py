@@ -39,10 +39,11 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-if args.id % 2 == 0:
-    device = '2'
-else:
-    device = '3'
+# if args.id % 2 == 0:
+#     device = '2'
+# else:
+#     device = '3'
+device = str(args.id % 4)
 
 # Import Libraies
 from collections import OrderedDict

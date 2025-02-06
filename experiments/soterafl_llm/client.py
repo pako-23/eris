@@ -39,10 +39,11 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-if args.id % 2 == 0:
-    device = '2'
-else:
-    device = '3'
+# if args.id % 2 == 0:
+#     device = '2'
+# else:
+#     device = '3'
+device = str(args.id % 4)
     
 # Import Libraies
 from collections import OrderedDict
@@ -121,7 +122,8 @@ class FlowerClient(fl.client.NumPyClient):
             self.reference_s.append(np.zeros_like(p))
         
         # initialize k for sparsity
-        self.k = int(self.n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+        # self.k = int(self.n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+        self.k = int(self.n_params / 20)  # as in SoteriaFL
         w = (self.n_params / self.k) - 1
         self.gamma = np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
 

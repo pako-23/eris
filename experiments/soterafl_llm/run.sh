@@ -1,5 +1,5 @@
 #!/bin/sh
-
+sleep 17000
 # This code is usually called from cross_validation.sh, and it starts the server and clients 
 # for the federated learning process. The server is started first, and then the clients are started.
 
@@ -55,7 +55,7 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 0 0); do
+for exp_n in $(seq 0 6); do
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do
