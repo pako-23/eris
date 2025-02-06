@@ -13,6 +13,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
+#include <stdexcept>
+#include <string>
 #include <sys/types.h>
 #include <utility>
 #include <vector>
@@ -246,12 +248,30 @@ PYBIND11_MODULE(eris, m) {
 
   py::class_<ErisCoordinatorConfig>(m, "ErisCoordinatorConfig")
       .def(py::init<>())
-      .def("set_router_port", &ErisCoordinatorConfig::set_router_port,
-           py::arg("port"))
+      .def(
+          "set_router_port",
+          [](ErisCoordinatorConfig &config, int port) {
+            if (port < 0 || port > UINT16_MAX)
+              throw std::invalid_argument{
+                  "A valid  port should be a number in in range 0 to " +
+                  std::to_string(UINT16_MAX)};
+
+            config.set_router_port(port);
+          },
+          py::arg("port"))
       .def("set_router_address", &ErisCoordinatorConfig::set_router_address,
            py::arg("address"))
-      .def("set_publish_port", &ErisCoordinatorConfig::set_publish_port,
-           py::arg("port"))
+      .def(
+          "set_publish_port",
+          [](ErisCoordinatorConfig &config, int port) {
+            if (port < 0 || port > UINT16_MAX)
+              throw std::invalid_argument{
+                  "A valid  port should be a number in in range 0 to " +
+                  std::to_string(UINT16_MAX)};
+
+            config.set_publish_port(port);
+          },
+          py::arg("port"))
       .def("set_publish_address", &ErisCoordinatorConfig::set_publish_address,
            py::arg("address"))
       .def("set_rounds", &ErisCoordinatorConfig::set_rounds, py::arg("rounds"))
