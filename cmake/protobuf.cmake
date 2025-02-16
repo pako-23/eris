@@ -22,6 +22,7 @@ function(compile_proto_files target)
        OUTPUT ${_generated_srcs}
        COMMAND ${Protobuf_PROTOC_EXECUTABLE}
        ARGS --proto_path ${CMAKE_CURRENT_SOURCE_DIR}
+            --experimental_allow_proto3_optional
             --cpp_out ${CMAKE_CURRENT_BINARY_DIR}
 	    ${_abs_file}
        DEPENDS ${_abs_file}
