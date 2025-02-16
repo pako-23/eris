@@ -167,6 +167,7 @@ class ExampleClient(ErisClient):
                 # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
                 compute_metrics=utils.compute_metrics,
             )
+            self.delta = 1 / len(self.subsampled_train_data)
         else:
             # Trainer initialization using the full training set
             self.trainer = Trainer(
@@ -176,6 +177,8 @@ class ExampleClient(ErisClient):
                 # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
                 compute_metrics=utils.compute_metrics,
             )
+            self.delta = 1 / len(self.train_data)
+
     
         
     @property
@@ -474,7 +477,8 @@ class ExampleClient(ErisClient):
             m=self.n_canaries,
             r=self.n_canaries - len(abstained),
             v=num_correct,
-            delta=cfg.delta,
+            # delta=cfg.delta,
+            delta=self.delta,
             p=0.05)
         
         # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html

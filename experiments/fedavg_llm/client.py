@@ -144,6 +144,7 @@ class FlowerClient(fl.client.NumPyClient):
                 # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
                 compute_metrics=utils.compute_metrics,
             )
+            self.delta = 1 / len(self.subsampled_train_data)
         else:
             # Trainer initialization using the full training set
             self.trainer = Trainer(
@@ -167,6 +168,7 @@ class FlowerClient(fl.client.NumPyClient):
                 batch_size=self.training_args.per_device_train_batch_size,
                 shuffle=True,
             )
+            self.delta = 1 / len(self.train_loader_dp)
             
             self.sigma = opacus.accountants.utils.get_noise_multiplier(
                 target_epsilon=cfg.epsilon,
@@ -449,7 +451,7 @@ class FlowerClient(fl.client.NumPyClient):
             r=self.n_canaries - len(abstained),
             v=num_correct,
             # delta=cfg.delta,
-            delta=1 / len(self.train_loader_dp),
+            delta=self.delta,
             p=0.05)
         
         # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
