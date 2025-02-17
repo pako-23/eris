@@ -938,4 +938,35 @@ def compute_metrics(eval_pred):
         "accuracy": acc,
         "f1": f1,
     }
-    
+
+
+def plot_histogram(flat_gradients, path):
+    # create fold if not exists
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+     
+    # Compute the magnitude (absolute value) of each gradient
+    gradient_magnitudes = np.abs(flat_gradients)
+
+    # Create a histogram
+    fig, ax = plt.subplots(figsize=(8, 6))
+    n_bins = 50  
+
+    # Plot the histogram with a light color and black edges for clarity
+    ax.hist(gradient_magnitudes, bins=n_bins, color='skyblue', edgecolor='black')
+
+    # Label the axes and set the title
+    ax.set_xlabel("Gradient Magnitude", fontsize=14)
+    ax.set_ylabel("Count", fontsize=14)
+    ax.set_title("Histogram of Gradient Magnitudes", fontsize=16)
+
+    # Optional: improve layout and styling for publication quality
+    ax.tick_params(axis='both', which='major', labelsize=12)
+    plt.tight_layout()
+
+    # Save the figure in a high-quality format (e.g., PDF)
+    plt.savefig(f"{path}.pdf", dpi=300)
+
+    # Display the plot
+    # plt.show()
+    plt.close()
+        

@@ -86,7 +86,8 @@ class FlowerClient(fl.client.NumPyClient):
         
         # initialize k for sparsity
         n_params = sum(p.numel() for p in self.model.parameters())
-        self.k = int(n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+        # self.k = int(n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+        self.k = int(n_params / 20) # as in SoteriaFL
         w = (n_params / self.k) - 1
         self.gamma = np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
 
@@ -159,7 +160,7 @@ class FlowerClient(fl.client.NumPyClient):
 
         # privacy auditing
         if self.privacy_audit:
-            if False:
+            if True:
                 """
                 Local Differential Privacy (DP) training
                 """
@@ -173,20 +174,20 @@ class FlowerClient(fl.client.NumPyClient):
                     self.config["epochs"], 
                     self.client_id
                     )
-            else:
-                """
-                Traditional training without DP
-                """
-                for epoch in range(self.config["epochs"]):
-                    self.train_fn(
-                        self.model, 
-                        self.device, 
-                        self.subsampled_train_loader, 
-                        self.optimizer, 
-                        self.criterion, 
-                        epoch, 
-                        self.client_id
-                        )
+            # else:
+            #     """
+            #     Traditional training without DP
+            #     """
+            #     for epoch in range(self.config["epochs"]):
+            #         self.train_fn(
+            #             self.model, 
+            #             self.device, 
+            #             self.subsampled_train_loader, 
+            #             self.optimizer, 
+            #             self.criterion, 
+            #             epoch, 
+            #             self.client_id
+            #             )
                 
             """
             shifted k-random sparsification on the gradients [SOTERIAFL]

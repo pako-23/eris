@@ -167,6 +167,7 @@ class ExampleClient(ErisClient):
                 # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
                 compute_metrics=utils.compute_metrics,
             )
+            self.delta = 1 / len(self.subsampled_train_data)
         else:
             # Trainer initialization using the full training set
             self.trainer = Trainer(
@@ -176,6 +177,8 @@ class ExampleClient(ErisClient):
                 # eval_dataset=test_data,  # Normal evaluation on the official test set (not pass it in FL)
                 compute_metrics=utils.compute_metrics,
             )
+            self.delta = 1 / len(self.train_data)
+
     
         
     @property
@@ -474,7 +477,8 @@ class ExampleClient(ErisClient):
             m=self.n_canaries,
             r=self.n_canaries - len(abstained),
             v=num_correct,
-            delta=cfg.delta,
+            # delta=cfg.delta,
+            delta=self.delta,
             p=0.05)
         
         # Kairouz privacy estimate from https://proceedings.mlr.press/v37/kairouz15.html
@@ -524,55 +528,6 @@ class ExampleClient(ErisClient):
         return -losses.cpu().numpy()
 
 
-    def compress_parameters(self, params, k):
-        """
-        Compresses the model parameters using random-k sparsification.
-
-        Args:
-            params (List[np.ndarray]): List of NumPy arrays representing model parameters.
-            k (int): Number of coordinates to retain during compression.
-
-        Returns:
-            List[np.ndarray]: Compressed parameters where only k coordinates are retained
-                            (and scaled by d/k according to the random-k operator).
-        """
-        # Flatten all parameters (excluding scalars) into a single array
-        flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
-        d = flattened_params.size
-
-        # If k >= d, no compression happens (just return original parameters)
-        if k >= d:
-            print(f"No compression applied: k ({k}) >= d ({d}).")
-            return params
-        assert k > 0, "k must be a positive integer."
-
-        # Randomly select k indices out of d
-        indices = np.random.choice(d, k, replace=False)
-
-        # Create a boolean mask of size d with exactly k entries as True
-        mask = np.zeros(d, dtype=bool)
-        mask[indices] = True
-
-        # Apply the mask and scale by d/k
-        scaling_factor = d / k
-        compressed_flattened = scaling_factor * flattened_params * mask
-
-        # Reconstruct the parameter shapes
-        sparsified_params = []
-        start_idx = 0
-        for p in params:
-            if p.ndim == 0:
-                # If it's a scalar, just keep it uncompressed
-                sparsified_params.append(p)
-            else:
-                flat_len = p.size
-                sliced = compressed_flattened[start_idx:start_idx + flat_len]
-                sparsified_params.append(sliced.reshape(p.shape))
-                start_idx += flat_len
-
-        return sparsified_params
-
-
     def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
         """
         Prunes 'pruning_rate' fraction (e.g., 0.3) of the weights with the largest gradients.
@@ -616,9 +571,9 @@ class ExampleClient(ErisClient):
                 start_idx += flat_len
 
         return pruned_params_list
-    
 
-    def compress_parameters(self, params, k):
+
+    def compress_parameters(self, params, k, print_histogram=False):
         """
         Compresses the model parameters using random-k sparsification.
 
@@ -633,6 +588,16 @@ class ExampleClient(ErisClient):
         # Flatten all parameters (excluding scalars) into a single array
         flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
         d = flattened_params.size
+        
+        # Plot the distribution of the parameters
+        if print_histogram:
+            path = (
+                f"images/{self.config['model_name']}/{self.config['dataset']}/"
+                f"histogram_gradients_C{self.client_id}/S{self.config['client_train_samples'][self.exp_n]}_"
+                f"R{self.config['rounds'][self.exp_n]}_cR{self.current_round}_"
+                f"F{self.config['fold']}"
+            )
+            utils.plot_histogram(flattened_params, path)
 
         # If k >= d, no compression happens (just return original parameters)
         if k >= d:
@@ -650,6 +615,7 @@ class ExampleClient(ErisClient):
         # Apply the mask and scale by d/k
         scaling_factor = d / k
         compressed_flattened = scaling_factor * flattened_params * mask
+        # print(f"\033[93mCompressed parameters: kept {np.sum(mask)} out of {len(flattened_params)}, compression rate {k/d}.\033[0m")
 
         # Reconstruct the parameter shapes
         sparsified_params = []

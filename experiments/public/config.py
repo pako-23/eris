@@ -7,13 +7,13 @@ from transformers import TrainingArguments # type: ignore
 
 # Training settings (for everyone)
 dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 1  # Set 1 to disable cross validation
+k_folds = 5  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
 seed = 1
 transform = None
-gpu = 3 # select the gpu, -1 use cpu, -2 multiple distributed gpus
+gpu = -2 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Privacy auditing
 privacy_audit = True
@@ -84,18 +84,18 @@ experiments = {
     },
     "imdb": {
         "dataset": "imdb",
-        "client_train_samples": [32, 64, 128, 256, 512, 1024, 2048], # avevo 100 sample, 10 epochs 100 steps, 95MIA vs 80MIA 
-        "rounds": [5, 5, 5, 5, 20, 5, 5], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
-        "clients": 2,
-        "splits": 2,
+        "client_train_samples": [8, 16, 32, 64, 128, 256, 512], # avevo 100 sample, 10 epochs 100 steps, 95MIA vs 80MIA 
+        "rounds": [16, 16, 12, 10, 8, 6, 4], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
+        "clients": 25,
+        "splits": 25,
         "model_name": "distilbert-base-uncased",
         "training_args": TrainingArguments(
             output_dir="./distilbert-imdb",
             overwrite_output_dir=True,
             num_train_epochs=2, # Set desired number of epochs - Commented out to use max_steps
             # max_steps=100,  # Set desired number of training steps
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
             learning_rate=5e-5,             
             weight_decay=0.0,               
             adam_beta1=0.9,                   

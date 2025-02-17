@@ -138,7 +138,8 @@ class ExampleClient(ErisClient):
 
     @property
     def gamma(self):
-        self.k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))
+        n = 2
+        self.k = int(self.n_params / (n * np.log2(self.config['rounds'][self.exp_n])))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
         return np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))
@@ -525,54 +526,7 @@ class ExampleClient(ErisClient):
 
             return -losses
 
-    def compress_parameters(self, params, k):
-        """
-        Compresses the model parameters using random-k sparsification.
-
-        Args:
-            params (List[np.ndarray]): List of NumPy arrays representing model parameters.
-            k (int): Number of coordinates to retain during compression.
-
-        Returns:
-            List[np.ndarray]: Compressed parameters where only k coordinates are retained
-                            (and scaled by d/k according to the random-k operator).
-        """
-        # Flatten all parameters (excluding scalars) into a single array
-        flattened_params = np.concatenate([p.flatten() for p in params if p.ndim > 0])
-        d = flattened_params.size
-
-        # If k >= d, no compression happens (just return original parameters)
-        if k >= d:
-            print(f"No compression applied: k ({k}) >= d ({d}).")
-            return params
-        assert k > 0, "k must be a positive integer."
-
-        # Randomly select k indices out of d
-        indices = np.random.choice(d, k, replace=False)
-
-        # Create a boolean mask of size d with exactly k entries as True
-        mask = np.zeros(d, dtype=bool)
-        mask[indices] = True
-
-        # Apply the mask and scale by d/k
-        scaling_factor = d / k
-        compressed_flattened = scaling_factor * flattened_params * mask
-
-        # Reconstruct the parameter shapes
-        sparsified_params = []
-        start_idx = 0
-        for p in params:
-            if p.ndim == 0:
-                # If it's a scalar, just keep it uncompressed
-                sparsified_params.append(p)
-            else:
-                flat_len = p.size
-                sliced = compressed_flattened[start_idx:start_idx + flat_len]
-                sparsified_params.append(sliced.reshape(p.shape))
-                start_idx += flat_len
-
-        return sparsified_params
-
+ 
     def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
         """
         Prunes 'pruning_rate' fraction (e.g., 0.3) of the weights with the largest gradients.
@@ -686,6 +640,7 @@ class ExampleClient(ErisClient):
         # Apply the mask and scale by d/k
         scaling_factor = d / k
         compressed_flattened = scaling_factor * flattened_params * mask
+        # print(f"\033[93mCompressed parameters: kept {np.sum(mask)} out of {len(flattened_params)}, compression rate {k/d}.\033[0m")
 
         # Reconstruct the parameter shapes
         sparsified_params = []
@@ -701,9 +656,6 @@ class ExampleClient(ErisClient):
                 start_idx += flat_len
 
         return sparsified_params
-
-
-
 
 
     def prune_params_basedon_grads(self, grads, params, pruning_rate=0.3):
