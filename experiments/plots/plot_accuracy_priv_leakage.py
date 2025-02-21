@@ -3,6 +3,47 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import rcParams
+ 
+# ICML plot settings
+def setup_icml_plot(two_column=False):
+    """Set up ICML-compatible plot settings."""
+    if two_column:
+        figure_width = 7  # Full-page width for two-column layout (in inches)
+    else:
+        figure_width = 3.5  # Half-page width for two-column layout (in inches)
+ 
+    rcParams.update({
+        # Font and text
+        "text.usetex": True,  # Use LaTeX for text rendering
+        "font.family": "serif",  # Use serif fonts
+        "font.serif": ["Times New Roman"],  # Set font to Times New Roman
+        "axes.labelsize": 12,  # Font size for axis labels
+        "axes.titlesize": 12,  # Font size for titles
+        "legend.fontsize": 14,  # Font size for legends
+        "xtick.labelsize": 12,  # Font size for x-axis ticks
+        "ytick.labelsize": 12,  # Font size for y-axis ticks
+ 
+        # Line and marker styles
+        "lines.linewidth": 1.2,  # Line width
+        "lines.markersize": 3,  # Marker size
+ 
+        # Figure dimensions
+        "figure.figsize": (figure_width, figure_width * 0.85),  # TODO change to better ratio
+        "figure.dpi": 300,  # High resolution for publication
+ 
+        # Grid
+        "axes.grid": True,  # Enable grid
+        "grid.alpha": 0.3,  # Grid transparency
+        "grid.linestyle": "--",  # Dashed grid lines
+ 
+        # Legend
+        "legend.frameon": False,  # No border around legends
+    })
+    
+    return (figure_width, figure_width * 0.85)
+
+
     
 ###############################################################################
 # 1) DEFINE THE DATA FOR EACH DATASET
@@ -112,11 +153,6 @@ dataset_cifar = {
 
 
 
-
-
-
-
-
 ###############################################################################
 # 2) BASELINE COLORS + MARKER STYLES
 ###############################################################################
@@ -146,6 +182,7 @@ marker_styles = {
 ###############################################################################
 # 3) SETUP THE FIGURE WITH 3 SUBPLOTS
 ###############################################################################
+fig_size = setup_icml_plot(two_column=False)
 fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=False)
 fig.subplots_adjust(bottom=0.3)  # leave space at bottom for legends
 
@@ -261,7 +298,8 @@ fig.legend(
     loc='upper center',
     bbox_to_anchor=(0.25, -0.0),
     title=r"$\mathbf{Baselines:}$",
-    ncol=7  # you can adjust number of columns
+    ncol=7,  # you can adjust number of columns,
+    # fontsize=12
 )
 
 fig.legend(
@@ -270,7 +308,8 @@ fig.legend(
     loc='upper center',
     bbox_to_anchor=(0.73, -0.0),
     title=r"$\mathbf{Sample\:Per\:Client:}$",
-    ncol=7  # you can adjust number of columns
+    ncol=7 , # you can adjust number of columns
+    # fontsize=12
 )
 
 plt.tight_layout()
@@ -282,10 +321,25 @@ plt.savefig('figure_different_symbol.pdf', bbox_inches='tight')
 
 
 
-# 2) OPTION WITH SAME SHAPE FOR EACH NUMBER OF SAMPLES - DIFFERENT SIZE
 
-import matplotlib.pyplot as plt
-import numpy as np
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 2) OPTION WITH SAME SHAPE FOR EACH NUMBER OF SAMPLES - DIFFERENT SIZE
 
 ###############################################################################
 # 1) DEFINE THE DATA FOR EACH DATASET
@@ -427,6 +481,7 @@ size_scale = {
 ###############################################################################
 # 3) SETUP THE FIGURE WITH 3 SUBPLOTS
 ###############################################################################
+fig_size = setup_icml_plot(two_column=False)
 fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=False)
 fig.subplots_adjust(bottom=0.3)  # leave space at the bottom for legends
 
@@ -444,7 +499,7 @@ sample_handles = {}
 # 4) PLOTTING FUNCTION
 ###############################################################################
 def plot_dataset(ax, dataset_name, data_dict):
-    ax.set_title(dataset_name, fontsize=13)
+    ax.set_title(dataset_name, fontsize=16)
     for baseline_name, vals in data_dict.items():
         color = baseline_colors.get(baseline_name, 'grey')
         accuracies = vals['accuracy']
@@ -511,8 +566,8 @@ def plot_dataset(ax, dataset_name, data_dict):
     elif dataset_name == 'CIFAR-10':
         ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
     
-    ax.set_xlabel('1 - Privacy Leakage', fontsize=11)
-    ax.set_ylabel('Accuracy', fontsize=11)
+    ax.set_xlabel('1 - Privacy Leakage', fontsize=14)
+    ax.set_ylabel('Accuracy', fontsize=14)
 
 ###############################################################################
 # 5) PLOT EACH DATASET
@@ -534,9 +589,11 @@ fig.legend(
     handles=baseline_hlist,
     labels=baseline_labels,
     loc='upper center',
-    bbox_to_anchor=(0.25, -0.0),
+    bbox_to_anchor=(0.25, 0.015),
     title=r"$\mathbf{Baselines:}$",
-    ncol=7
+    ncol=3,
+    fontsize=14,
+    title_fontsize=14  
 )
 
 # Sample-sizes legend
@@ -544,9 +601,12 @@ fig.legend(
     handles=sample_hlist,
     labels=[f"{s} samples" for s in sample_labels],
     loc='upper center',
-    bbox_to_anchor=(0.73, -0.0),
-    title=r"$\mathbf{Samples/Client:}$",
-    ncol=7
+    bbox_to_anchor=(0.73, 0.015),
+    title=r"$\mathbf{Samples\: Per\: Client:}$",
+    ncol=3,
+    fontsize=14,
+    title_fontsize=14  
+
 )
 
 plt.tight_layout()

@@ -1,5 +1,48 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import rcParams
+ 
+# ICML plot settings
+def setup_icml_plot(two_column=False):
+    """Set up ICML-compatible plot settings."""
+    if two_column:
+        figure_width = 7  # Full-page width for two-column layout (in inches)
+    else:
+        figure_width = 3.5  # Half-page width for two-column layout (in inches)
+ 
+    rcParams.update({
+        # Font and text
+        "text.usetex": True,  # Use LaTeX for text rendering
+        "font.family": "serif",  # Use serif fonts
+        "font.serif": ["Times New Roman"],  # Set font to Times New Roman
+        "axes.labelsize": 10,  # Font size for axis labels
+        "axes.titlesize": 10,  # Font size for titles
+        "legend.fontsize": 4,  # Font size for legends
+        "xtick.labelsize": 9.5,  # Font size for x-axis ticks
+        "ytick.labelsize": 9.5,  # Font size for y-axis ticks
+ 
+        # Line and marker styles
+        "lines.linewidth": 1.2,  # Line width
+        "lines.markersize": 3,  # Marker size
+ 
+        # Figure dimensions
+        "figure.figsize": (figure_width, figure_width * 0.85),  # TODO change to better ratio
+        "figure.dpi": 300,  # High resolution for publication
+ 
+        # Grid
+        "axes.grid": True,  # Enable grid
+        "grid.alpha": 0.3,  # Grid transparency
+        "grid.linestyle": "--",  # Dashed grid lines
+ 
+        # Legend
+        "legend.frameon": False,  # No border around legends
+    })
+    
+    return (figure_width, figure_width * 0.85)
+
+
+
+
 
 ###############################################################################
 # 1) DATA
@@ -126,6 +169,7 @@ baseline_colors = {
 ###############################################################################
 # 3) CREATE THE 3 ROWS × 6 COLUMNS FIGURE
 ###############################################################################
+fig_size = setup_icml_plot(two_column=False)
 fig, axes = plt.subplots(
     nrows=3, ncols=6,
     figsize=(18, 9),
@@ -179,7 +223,7 @@ for row_idx, (s1, s2) in enumerate(sample_pairs):
                 marker='o',
                 color=color,
                 edgecolors='k',
-                s=80, alpha=0.9,
+                s=65, alpha=0.9,
                 label=baseline_name
             )
 
@@ -215,20 +259,20 @@ for row_idx, (s1, s2) in enumerate(sample_pairs):
                     label=baseline_name,
                     markerfacecolor=color, markersize=8, linewidth=0
                 )
-        
+    
         # Subplot title: show the sample size
-        ax.set_title(f"{n_sample} sample per client", fontsize=10)
+        ax.set_title(f"{n_sample} sample per client", fontsize=12)
         
         # Only label the Y-axis in the first two columns of each row (i.e., IMDB columns 0,1)
         # If you only want the *very first column* of each row to show "Accuracy", do:
         if col_idx == 0:
-            ax.set_ylabel("Accuracy", fontsize=10)
+            ax.set_ylabel("Accuracy", fontsize=12)
         # else:
             # ax.set_ylabel("")
         
         # X-axis label can be repeated or omitted; let's keep it for clarity
         if row_idx == 2:
-            ax.set_xlabel("1 - Privacy Leakage", fontsize=10)
+            ax.set_xlabel("1 - Privacy Leakage", fontsize=12)
         # else:
             # ax.set_xlabel("")
 
@@ -272,9 +316,9 @@ for row_idx in range(3):
 # We'll place text above columns 0..1 for IMDB, 2..3 for MNIST, 4..5 for CIFAR.
 # The approximate x-coordinates in figure space:
 #   IMDB ~ x=0.17,  MNIST ~ x=0.50,  CIFAR ~ x=0.83
-fig.text(0.245-0.015, 0.93, "IMDB",  fontsize=14, fontweight='bold', ha='center')
-fig.text(0.515, 0.93, "MNIST", fontsize=14, fontweight='bold', ha='center')
-fig.text(0.78+0.015, 0.93, "CIFAR", fontsize=14, fontweight='bold', ha='center')
+fig.text(0.245-0.015, 0.93, "IMDB",  fontsize=16, fontweight='bold', ha='center')
+fig.text(0.515, 0.93, "MNIST", fontsize=16, fontweight='bold', ha='center')
+fig.text(0.78+0.015, 0.93, "CIFAR", fontsize=16, fontweight='bold', ha='center')
 
 ###############################################################################
 # 6) CREATE A SINGLE LEGEND AT THE BOTTOM
@@ -288,7 +332,7 @@ fig.legend(
     loc='lower center',
     bbox_to_anchor=(0.5, 0.0+0.065),  # Adjust vertical offset if needed
     ncol=len(baseline_labels),
-    fontsize=11
+    fontsize=13
 )
 
 # plt.show()
