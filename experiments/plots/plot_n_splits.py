@@ -18,8 +18,8 @@ def setup_icml_plot(two_column=False):
         "axes.labelsize": 10,  # Font size for axis labels
         "axes.titlesize": 10,  # Font size for titles
         "legend.fontsize": 4,  # Font size for legends
-        "xtick.labelsize": 8,  # Font size for x-axis ticks
-        "ytick.labelsize": 8,  # Font size for y-axis ticks
+        "xtick.labelsize": 10,  # Font size for x-axis ticks
+        "ytick.labelsize": 10,  # Font size for y-axis ticks
  
         # Line and marker styles
         "lines.linewidth": 1.2,  # Line width
@@ -60,7 +60,8 @@ fig, ax = plt.subplots(figsize=(5, 4))
 
 # Plot MIA Accuracy with error bars
 ax.errorbar(splits, mia_accuracy_mean, yerr=mia_accuracy_std, fmt='o-', 
-            capsize=5, label='MIA Accuracy', color='black', markersize=4, linewidth=1.2)
+            capsize=5, label='_nolegend_', color='black', markersize=4, linewidth=1.2, alpha=0.4)
+ax.plot(splits, mia_accuracy_mean, 'o-', color='black', markersize=4, label='MIA Accuracy', linewidth=1.2)
 
 # Plot the dashed horizontal line for minimum leakage
 ax.axhline(min_leakage, color='green', linestyle='--', linewidth=1.2, label='Minimum Leakage')

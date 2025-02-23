@@ -18,11 +18,11 @@ def setup_icml_plot(two_column=False):
         "text.usetex": True,  # Use LaTeX for text rendering
         "font.family": "serif",  # Use serif fonts
         "font.serif": ["Times New Roman"],  # Set font to Times New Roman
-        "axes.labelsize": 12,  # Font size for axis labels
-        "axes.titlesize": 12,  # Font size for titles
+        "axes.labelsize": 10,  # Font size for axis labels
+        "axes.titlesize": 10,  # Font size for titles
         "legend.fontsize": 14,  # Font size for legends
-        "xtick.labelsize": 12,  # Font size for x-axis ticks
-        "ytick.labelsize": 12,  # Font size for y-axis ticks
+        "xtick.labelsize": 10,  # Font size for x-axis ticks
+        "ytick.labelsize": 10,  # Font size for y-axis ticks
  
         # Line and marker styles
         "lines.linewidth": 1.2,  # Line width
@@ -459,30 +459,33 @@ baseline_colors = {
 
 # Instead of different markers, we define a single marker ('D') but
 # scale the size with the number of samples. For instance:
+# size_scale = {
+#     4:   40,
+#     8:   70,
+#     16:  100,
+#     32:  130,
+#     64:  160,
+#     128: 190
+# }
+
 size_scale = {
-    4:   40,
-    8:   70,
-    16:  100,
-    32:  130,
-    64:  160,
-    128: 190
+    4:   30,
+    8:   60,
+    16:  90,
+    32:  120,
+    64:  150,
+    128: 180
 }
 
-# size_scale = {
-#     4:   30,
-#     8:   60,
-#     16:  90,
-#     32:  120,
-#     64:  150,
-#     128: 180
-# }
 # These values are the "area" in points^2 for scatter(..., s=...).
 
 ###############################################################################
 # 3) SETUP THE FIGURE WITH 3 SUBPLOTS
 ###############################################################################
 fig_size = setup_icml_plot(two_column=False)
-fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=False)
+# fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=False)
+fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=False)
+
 fig.subplots_adjust(bottom=0.3)  # leave space at the bottom for legends
 
 datasets = [
@@ -533,7 +536,7 @@ def plot_dataset(ax, dataset_name, data_dict):
                     ecolor=color,
                     elinewidth=1,
                     capsize=3,
-                    alpha=0.8
+                    alpha=0.4
                 )
             
             # Collect a dummy handle for the baseline color legend
@@ -561,13 +564,14 @@ def plot_dataset(ax, dataset_name, data_dict):
     # Optionally add a random guess line:
     if dataset_name == 'IMDB':
         ax.axhline(y=0.5, color='gray', linestyle='--', label='Random Guess = 50%')
+        ax.set_ylabel('Accuracy', fontsize=14)
     elif dataset_name == 'MNIST':
         ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
     elif dataset_name == 'CIFAR-10':
         ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
     
     ax.set_xlabel('1 - Privacy Leakage', fontsize=14)
-    ax.set_ylabel('Accuracy', fontsize=14)
+    # ax.set_ylabel('Accuracy', fontsize=14)
 
 ###############################################################################
 # 5) PLOT EACH DATASET
@@ -590,10 +594,11 @@ fig.legend(
     labels=baseline_labels,
     loc='upper center',
     bbox_to_anchor=(0.25, 0.015),
-    title=r"$\mathbf{Baselines:}$",
+    title=r"$\mathbf{Baselines}$",
     ncol=3,
-    fontsize=14,
-    title_fontsize=14  
+    fontsize=11,
+    title_fontsize=11,
+    labelspacing=0.85
 )
 
 # Sample-sizes legend
@@ -602,11 +607,11 @@ fig.legend(
     labels=[f"{s} samples" for s in sample_labels],
     loc='upper center',
     bbox_to_anchor=(0.73, 0.015),
-    title=r"$\mathbf{Samples\: Per\: Client:}$",
+    title=r"$\mathbf{Samples\: Per\: Client}$",
     ncol=3,
-    fontsize=14,
-    title_fontsize=14  
-
+    fontsize=11,
+    title_fontsize=11,
+    labelspacing=0.85
 )
 
 plt.tight_layout()

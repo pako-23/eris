@@ -89,7 +89,7 @@ ax1.errorbar(x_positions, ssim_dlg_mean, yerr=ssim_dlg_std, fmt='o-',
 ax1.errorbar(x_positions, ssim_idlg_mean, yerr=ssim_idlg_std, fmt='s-', 
              capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax1.axhline(ssim_random, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax1.axhline(ssim_random, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax1.axhspan(ssim_random - ssim_random_std, ssim_random + ssim_random_std, 
             facecolor='green', alpha=0.2)
 ax1.set_ylabel('SSIM', fontsize=14)
@@ -106,7 +106,7 @@ ax2.errorbar(x_positions, lpips_dlg_mean, yerr=lpips_dlg_std, fmt='o-',
 ax2.errorbar(x_positions, lpips_idlg_mean, yerr=lpips_idlg_std, fmt='s-', 
              capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax2.axhline(lpips_random, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax2.axhline(lpips_random, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax2.axhspan(lpips_random - lpips_random_std, lpips_random + lpips_random_std, 
             facecolor='green', alpha=0.2)
 ax2.set_ylabel('LPIPS', fontsize=14)
@@ -187,7 +187,7 @@ ax1.errorbar(x_positions, ssim_dlg_mean, yerr=ssim_dlg_std, fmt='o-',
 ax1.errorbar(x_positions, ssim_idlg_mean, yerr=ssim_idlg_std, fmt='s-', 
              capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax1.axhline(ssim_random, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax1.axhline(ssim_random, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax1.axhspan(ssim_random - ssim_random_std, ssim_random + ssim_random_std, 
             facecolor='green', alpha=0.2)
 ax1.set_ylabel('SSIM', fontsize=14)
@@ -204,7 +204,7 @@ ax2.errorbar(x_positions, lpips_dlg_mean, yerr=lpips_dlg_std, fmt='o-',
 ax2.errorbar(x_positions, lpips_idlg_mean, yerr=lpips_idlg_std, fmt='s-', 
              capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax2.axhline(lpips_random, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax2.axhline(lpips_random, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax2.axhspan(lpips_random - lpips_random_std, lpips_random + lpips_random_std, 
             facecolor='green', alpha=0.2)
 ax2.set_ylabel('LPIPS', fontsize=14)
@@ -294,7 +294,7 @@ ax1.errorbar(x_positions, ssim_dlg_mean, yerr=ssim_dlg_std, fmt='o-',
 ax1.errorbar(x_positions, ssim_idlg_mean, yerr=ssim_idlg_std, fmt='s-', 
              capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax1.axhline(ssim_random, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax1.axhline(ssim_random, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax1.axhspan(ssim_random - ssim_random_std, ssim_random + ssim_random_std, 
             facecolor='green', alpha=0.2)
 ax1.set_ylabel('SSIM', fontsize=14)
@@ -311,7 +311,7 @@ ax2.errorbar(x_positions, lpips_dlg_mean, yerr=lpips_dlg_std, fmt='o-',
 ax2.errorbar(x_positions, lpips_idlg_mean, yerr=lpips_idlg_std, fmt='s-', 
              capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax2.axhline(lpips_random, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax2.axhline(lpips_random, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax2.axhspan(lpips_random - lpips_random_std, lpips_random + lpips_random_std, 
             facecolor='green', alpha=0.2)
 ax2.set_ylabel('LPIPS', fontsize=14)
@@ -397,11 +397,13 @@ fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12,4))
 
 # --- MNIST Plot ---
 ax1.errorbar(x_positions, lpips_dlg_mean_mnist, yerr=lpips_dlg_std_mnist, fmt='o-', 
-             capsize=5, label='DLG', color='black', markersize=4, linewidth=1.2)
+             capsize=5, label='_nolegend_', color='black', markersize=4, linewidth=1.2, alpha=0.3)
 ax1.errorbar(x_positions, lpips_idlg_mean_mnist, yerr=lpips_idlg_std_mnist, fmt='s-', 
-             capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
+             capsize=5, label='_nolegend_', color='blue', markersize=4, linewidth=1.2, alpha=0.3)
+ax1.plot(x_positions, lpips_dlg_mean_mnist, 'o-', color='black', markersize=4, linewidth=1.2, label='DLG')
+ax1.plot(x_positions, lpips_idlg_mean_mnist, 's-', color='blue', markersize=4, linewidth=1.2, label='iDLG')
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax1.axhline(lpips_random_mnist, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax1.axhline(lpips_random_mnist, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax1.axhspan(lpips_random_mnist - lpips_random_std_mnist, lpips_random_mnist + lpips_random_std_mnist, 
             facecolor='green', alpha=0.2)
 ax1.set_ylabel('Reconstruction Quality (LPIPS)', fontsize=14)
@@ -417,11 +419,13 @@ ax1.set_xticklabels([str(s) for s in splits], rotation=45, ha="right")
 
 # --- CIFAR Plot ---
 ax2.errorbar(x_positions, lpips_dlg_mean_cifar, yerr=lpips_dlg_std_cifar, fmt='o-', 
-             capsize=5, label='DLG', color='black', markersize=4, linewidth=1.2)
+             capsize=5, label='_nolegend_', color='black', markersize=4, linewidth=1.2, alpha=0.3)
 ax2.errorbar(x_positions, lpips_idlg_mean_cifar, yerr=lpips_idlg_std_cifar, fmt='s-',
-                capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
+                capsize=5, label='_nolegend_', color='blue', markersize=4, linewidth=1.2, alpha=0.3)
+ax2.plot(x_positions, lpips_dlg_mean_cifar, 'o-', color='black', markersize=4, linewidth=1.2, label='DLG')
+ax2.plot(x_positions, lpips_idlg_mean_cifar, 's-', color='blue', markersize=4, linewidth=1.2, label='iDLG')
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax2.axhline(lpips_random_cifar, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax2.axhline(lpips_random_cifar, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax2.axhspan(lpips_random_cifar - lpips_random_std_cifar, lpips_random_cifar + lpips_random_std_cifar, 
             facecolor='green', alpha=0.2)
 # ax2.set_ylabel('Reconstruction Quality (LPIPS)', fontsize=14)
@@ -437,11 +441,14 @@ ax2.set_xticklabels([str(s) for s in splits], rotation=45, ha="right")
 
 # --- LFW Plot ---
 ax3.errorbar(x_positions, lpips_dlg_mean_lfw, yerr=lpips_dlg_std_lfw, fmt='o-', 
-             capsize=5, label='DLG', color='black', markersize=4, linewidth=1.2)
+             capsize=5, label='_nolegend_', color='black', markersize=4, linewidth=1.2, alpha=0.3)
 ax3.errorbar(x_positions, lpips_idlg_mean_lfw, yerr=lpips_idlg_std_lfw, fmt='s-',
-                capsize=5, label='iDLG', color='blue', markersize=4, linewidth=1.2)
+                capsize=5, label='_nolegend_', color='blue', markersize=4, linewidth=1.2, alpha=0.3)
+ax3.plot(x_positions, lpips_dlg_mean_lfw, 'o-', color='black', markersize=4, linewidth=1.2, label='DLG')
+ax3.plot(x_positions, lpips_idlg_mean_lfw, 's-', color='blue', markersize=4, linewidth=1.2, label='iDLG')
+
 # Plot random baseline as a horizontal dashed line with a shaded error band
-ax3.axhline(lpips_random_lfw, color='green', linestyle='--', linewidth=1.2, label='Random')
+ax3.axhline(lpips_random_lfw, color='green', linestyle='--', linewidth=1.2, label='R. Noise')
 ax3.axhspan(lpips_random_lfw - lpips_random_std_lfw, lpips_random_lfw + lpips_random_std_lfw, 
             facecolor='green', alpha=0.2)
 # ax3.set_ylabel('Reconstruction Quality (LPIPS)', fontsize=14)

@@ -240,7 +240,7 @@ for row_idx, (s1, s2) in enumerate(sample_pairs):
                     ecolor=color,    # same color as the baseline
                     elinewidth=1,
                     capsize=3,
-                    alpha=0.8
+                    alpha=0.4
                 )
             
             # After plotting, add a horizontal line for random guessing:
