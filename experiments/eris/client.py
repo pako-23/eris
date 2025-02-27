@@ -433,7 +433,19 @@ class ExampleClient(ErisClient):
     def evaluate(self):
         # save previous aggregated model if client 1
         if self.client_id == 1:
-            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
+            if cfg.local_dp:
+                # Rename keys by removing the '_module.' prefix
+                state_dict = {}
+                for key, weight in self.model.state_dict().items():
+                    if key.startswith('_module.'):
+                        new_key = key.replace('_module.', '', 1)
+                        state_dict[new_key] = weight
+                    else:
+                        state_dict[key] = weight
+            else:
+                state_dict = self.model.state_dict()
+            # save
+            torch.save(state_dict, f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
 
         self.model.eval()
         self.model.to(self.device)

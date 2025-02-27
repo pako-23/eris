@@ -10,6 +10,8 @@ trash.ipynb
 experiments/dlk_attacks/data
 **/distilbert-imdb/
 
+# Power Point
+*.pptx
 
 # C extensions
 *.so
