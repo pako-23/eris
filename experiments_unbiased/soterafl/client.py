@@ -104,7 +104,7 @@ class FlowerClient(fl.client.NumPyClient):
             non_canaries,
             torch.utils.data.Subset(canaries, canaries_in_idx)
         ])
-        self.subsampled_train_loader = DataLoader(subsampled_train_data, batch_size=self.config['batch'], shuffle=True)
+        self.subsampled_train_loader = DataLoader(subsampled_train_data, batch_size=len(subsampled_train_data), shuffle=True)
         self.canary_loader = DataLoader(canaries, batch_size=self.config['batch'], shuffle=False)
 
         # local differential privacy initialization
@@ -618,7 +618,7 @@ def main()->None:
 
 
     # Create the data loaders
-    train_loader = DataLoader(train_dataset, batch_size=config["batch"], shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=len(train_dataset), shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=config["batch_test"], shuffle=False)
 
     # Optimizer and Loss function

@@ -147,6 +147,9 @@ class FlowerClient(fl.client.NumPyClient):
             self.subsampled_train_data = concatenate_datasets([non_canaries, self.canaries.select(canaries_in_idx)])
             self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
 
+            # set batch size
+            self.training_args.per_device_train_batch_size = len(self.subsampled_train_data)
+            
             # Trainer initialization using only the IN set for training
             self.trainer = Trainer(
                 model=self.model,
@@ -156,6 +159,9 @@ class FlowerClient(fl.client.NumPyClient):
                 compute_metrics=utils.compute_metrics,
             )
         else:
+            # set batch size
+            self.training_args.per_device_train_batch_size = len(self.train_data)
+            
             # Trainer initialization using the full training set
             self.trainer = Trainer(
                 model=self.model,

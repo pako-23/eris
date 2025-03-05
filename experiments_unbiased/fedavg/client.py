@@ -708,7 +708,7 @@ def main()->None:
                         config=config, 
                         exp_n=args.exp_n                        
                           ).to_client()
-    fl.client.start_client(server_address="[::]:8098", client=client) # local host
+    fl.client.start_client(server_address="[::]:6398", client=client) # local host
     
     # read saved data and plot
     utils.plot_client_metrics(args.id, config, show=False)
