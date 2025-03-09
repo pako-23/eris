@@ -6,6 +6,8 @@ __pycache__/
 *$py.class
 trash.ipynb
 
+experiments/dlk_attacks/exps_results/
+
 # Folder 
 experiments/dlk_attacks/data
 **/distilbert-imdb/
