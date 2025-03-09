@@ -55,7 +55,7 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 4 4); do
+for exp_n in $(seq 0 0); do
 
     # Cycle through the folds
     for fold in $(seq 2 $k_folds); do
@@ -104,7 +104,7 @@ done
 
 
 
-for exp_n in $(seq 5 5); do
+for exp_n in $(seq 1 5); do
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do
@@ -149,3 +149,6 @@ for exp_n in $(seq 5 5); do
     echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
 
 done
+
+
+

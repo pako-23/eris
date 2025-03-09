@@ -24,7 +24,7 @@ k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
 
 # Differential Privacy
-local_dp = True
+local_dp = False
 # clipping_norm = 5.0 # (float) limits the L2 norm of each data point’s contribution, affecting the sensitivity of the function (default: 1.0)
 # sensitivity = 5.0 # (float) defines the maximum change to the function’s output that any single input can cause (default: 1.0) - generally equal to the clipping norm
 # epsilon = 1000.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
@@ -32,7 +32,7 @@ delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is use
 sigma = -1
 
 # Pruning
-pruning = False
+pruning = True
 pruning_rate = 0.2  # Fraction of weights to prune
 
 # k-sparsification
@@ -40,7 +40,7 @@ k_sparsification = False
 k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # shifted k-sparsification
-shifted_k_sparsification = True
+shifted_k_sparsification = False
 # k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # Experiments config
@@ -84,8 +84,10 @@ experiments = {
             "input_size": (32, 32),
         },
         "n_classes": 10,
-        "epsilon": [100,50,10,1,1000,1000,1000],#[100,50,10,1,100,50,10,1,100,50,10,1],
-        "sensitivity": [1,1,1,1,5,2,1]#[5,5,5,5,2,2,2,2,1,1,1,1],
+        "epsilon": [100000,1000,100,50,10,1,100000,1000,100,50,10,1,100000,1000,100,50,10,1,100000,1000,100,50,10,1],
+        "sensitivity": [100, 10, 10, 5, 2, 1],
+        "sigma": [0.001, 0.01, 0.1, 0.3, 0.6, 1.0], 
+        "pruning_rate": [0.0001, 0.0005, 0.001, 0.002, 0.004, 0.006, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1],
     },
     "imdb": {
         "dataset": "imdb",

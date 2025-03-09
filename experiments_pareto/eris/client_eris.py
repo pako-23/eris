@@ -120,6 +120,7 @@ class ExampleClient(ErisClient):
             # manually set sigma
             # if cfg.sigma > 0:
             #     self.sigma = cfg.sigma
+            self.sigma = self.config['sigma'][self.scaling_dp]
                 
             if self.client_id == 1:
                 print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")

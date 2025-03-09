@@ -6,7 +6,7 @@ from transformers import TrainingArguments # type: ignore
 # ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
-dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+dataset_name = "cifar10"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 k_folds = 5  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
@@ -24,15 +24,15 @@ k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
 
 # Differential Privacy
-local_dp = True
+local_dp = False
 clipping_norm = 1.0 # (float) limits the L2 norm of each data point’s contribution, affecting the sensitivity of the function (default: 1.0)
 sensitivity = 1.0 # (float) defines the maximum change to the function’s output that any single input can cause (default: 1.0) - generally equal to the clipping norm
-epsilon = 100.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
+epsilon = 1.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
 delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is used to account for the probability of the privacy guarantee not holding (default: 1e-5)
 
 # Pruning
 pruning = False
-pruning_rate = 0.2  # Fraction of weights to prune
+pruning_rate = 0.05  # Fraction of weights to prune
 
 # k-sparsification
 k_sparsification = False
@@ -94,8 +94,8 @@ experiments = {
             overwrite_output_dir=True,
             num_train_epochs=2, # Set desired number of epochs - Commented out to use max_steps
             # max_steps=100,  # Set desired number of training steps
-            per_device_train_batch_size=8,
-            per_device_eval_batch_size=8,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=16,
             learning_rate=5e-5,             
             weight_decay=0.0,               
             adam_beta1=0.9,                   

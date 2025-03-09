@@ -55,7 +55,7 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 0 0); do
+for exp_n in $(seq 0 5); do
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do

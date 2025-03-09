@@ -56,7 +56,7 @@ fi
 for exp_n in $(seq 0 0); do
     echo -e "\n\033[1;36mStarting experiment $exp_n\033[0m\n"
 
-    for scaling_dp in $(seq 0 7); do
+    for scaling_dp in $(seq 5 5); do
         echo -e "\n\033[1;36mStarting experiment $exp_n with scaling_dp $scaling_dp\033[0m\n"
         
         # Cycle through the folds

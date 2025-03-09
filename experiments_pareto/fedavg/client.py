@@ -115,6 +115,8 @@ class FlowerClient(fl.client.NumPyClient):
                 epochs=int(self.config['epochs']), 
                 accountant='rdp',  
             ) 
+            
+            self.sigma = self.config['sigma'][self.scaling_dp]
 
             self.privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
             if cfg.privacy_audit:
@@ -196,7 +198,8 @@ class FlowerClient(fl.client.NumPyClient):
                 # prune the largest gradients
                 pruned_grads = self.prune_largest_grads(
                     grads=grads,
-                    pruning_rate = cfg.pruning_rate
+                    # pruning_rate = cfg.pruning_rate
+                    pruning_rate=self.config['pruning_rate'][self.scaling_dp]
                     )
                 
                 # update model parameters
@@ -310,7 +313,8 @@ class FlowerClient(fl.client.NumPyClient):
                 # prune the largest gradients
                 pruned_grads = self.prune_largest_grads(
                     grads=grads,
-                    pruning_rate = cfg.pruning_rate
+                    # pruning_rate = cfg.pruning_rate
+                    pruning_rate=self.config['pruning_rate'][self.scaling_dp]
                     )
                 
                 # update model parameters
