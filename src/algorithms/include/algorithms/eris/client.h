@@ -53,7 +53,7 @@ public:
         aggr_strategy_{nullptr}, options_{}, splitter_{}, mu_{}, cv_{},
         submit_{}, publish_{}, coordinator_updates_{}, aggregator_{nullptr},
         aggregator_thread_{} {
-    const int timeout = 100;
+    const int timeout = 5000;
 
     if (!valid_zmq_endpoint(router_address))
       throw std::invalid_argument{
