@@ -55,10 +55,10 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 0 0); do
+for exp_n in $(seq 5 5); do
 
     # Cycle through the folds
-    for fold in $(seq 1 $k_folds); do
+    for fold in $(seq 5 $k_folds); do
         if [ $k_folds -gt 1 ]; then
             echo -e "\n\033[1;36mFold $fold\033[0m"
         fi
@@ -87,6 +87,10 @@ for exp_n in $(seq 0 0); do
         echo "Fold completed correctly"
         pkill -9 -f server.py
         pkill -9 -f client.py
+        sleep 5
+        pkill -9 -f server.py
+        pkill -9 -f client.py
+        sleep 5
     done
 
     # Aggregate results

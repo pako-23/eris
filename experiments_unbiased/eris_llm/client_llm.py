@@ -49,10 +49,11 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-if args.id % 2 == 0:
-    device = '2'
-else:
-    device = '3'
+# if args.id % 2 == 0:
+#     device = '2'
+# else:
+#     device = '3'
+device = str(args.id % 4)
 
 # Libraries
 import numpy as np
@@ -188,7 +189,8 @@ class ExampleClient(ErisClient):
     
     @property
     def gamma(self):
-        self.k = int(self.n_params / np.log2(self.config['rounds'][self.exp_n]))
+        n = 1
+        self.k = int(self.n_params / (n * np.log2(self.config['rounds'][self.exp_n])))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
         return np.sqrt((1 + 2 * w) / (2 * (1 + w)**3))

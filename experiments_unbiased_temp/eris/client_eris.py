@@ -21,6 +21,7 @@ from public import utils
 from public import config as cfg
 
 
+
 class ExampleClient(ErisClient):
     def __init__(
         self,
@@ -140,7 +141,7 @@ class ExampleClient(ErisClient):
 
     @property
     def gamma(self):
-        n = 3
+        n = 24
         self.k = int(self.n_params / (n * np.log2(self.config['rounds'][self.exp_n])))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1

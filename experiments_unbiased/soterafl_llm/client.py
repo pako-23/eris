@@ -204,18 +204,19 @@ class FlowerClient(fl.client.NumPyClient):
                 eps=self.training_args.adam_epsilon,
                 weight_decay=self.training_args.weight_decay,
             )
+            self.model.train()
                 
             # Opacus privacy engine
-            self.model.train()
-            self.privacy_engine = opacus.PrivacyEngine(accountant='rdp', secure_mode=False)
-            self.model, self.optimizer_dp, self.train_loader_dp = self.privacy_engine.make_private(
-                                module=self.model,
-                                optimizer=self.optimizer_dp,
-                                data_loader=self.train_loader_dp,
-                                noise_multiplier=self.sigma,
-                                max_grad_norm=cfg.sensitivity,
-                                poisson_sampling=False,
-                            )     
+            if cfg.use_opacus:
+                self.privacy_engine = opacus.PrivacyEngine(accountant='rdp', secure_mode=False)
+                self.model, self.optimizer_dp, self.train_loader_dp = self.privacy_engine.make_private(
+                                    module=self.model,
+                                    optimizer=self.optimizer_dp,
+                                    data_loader=self.train_loader_dp,
+                                    noise_multiplier=self.sigma,
+                                    max_grad_norm=cfg.sensitivity,
+                                    poisson_sampling=False,
+                                )    
             
             if client_id == 1:
                 print(f"\n\033[94mLocal Differential Privacy with introduced noise_value_sd: {self.sigma}\033[0m\n")
@@ -237,18 +238,30 @@ class FlowerClient(fl.client.NumPyClient):
         # privacy auditing
         if self.privacy_audit:
             if True:
-                """
-                Training with DP
-                """                
-                models.train_llm_with_opacus(
-                    self.model, 
-                    self.trainer.args.device, 
-                    self.subsampled_train_data,  
-                    self.training_args, 
-                    self.sigma,
-                    1 / len(self.train_loader_dp), 
-                    client_id=self.client_id
-                    ) 
+                if cfg.use_opacus:  
+                    """
+                    Training with DP
+                    """                
+                    models.train_llm_with_opacus(
+                        self.model, 
+                        self.trainer.args.device, 
+                        self.subsampled_train_data,  
+                        self.training_args, 
+                        self.sigma,
+                        1 / len(self.train_loader_dp), 
+                        client_id=self.client_id
+                        )
+                else:
+                    models.dp_sgd_train_loop(
+                        self.model,
+                        self.train_loader_dp,
+                        self.optimizer_dp,
+                        self.scheduler,
+                        max_grad_norm=cfg.sensitivity,       # C
+                        noise_multiplier=self.sigma,    # sigma
+                        device=self.trainer.args.device,
+                        num_epochs=self.training_args.num_train_epochs,
+                    )
             # else:
             #     """
             #     Traditional training without DP
@@ -326,18 +339,30 @@ class FlowerClient(fl.client.NumPyClient):
                 )
         
         else: # NO AUDITING
-            if True:   
-                """
-                Training with DP
-                """                
-                models.train_llm_with_opacus(
-                    self.model, 
-                    self.trainer.args.device, 
-                    self.train_data,  
-                    self.training_args, 
-                    self.sigma, 
-                    1 / len(self.train_loader_dp), 
-                    client_id=self.client_id
+            if True:                 
+                if cfg.use_opacus:  
+                    """
+                    Training with DP - Opacus
+                    """                
+                    models.train_llm_with_opacus(
+                        self.model, 
+                        self.trainer.args.device, 
+                        self.train_data,  
+                        self.training_args, 
+                        self.sigma, 
+                        1 / len(self.train_loader_dp), 
+                        client_id=self.client_id
+                        )
+                else:
+                    models.dp_sgd_train_loop(
+                        self.model,
+                        self.train_loader_dp,
+                        self.optimizer_dp,
+                        self.scheduler,
+                        max_grad_norm=cfg.sensitivity,       # C
+                        noise_multiplier=self.sigma,    # sigma
+                        device=self.trainer.args.device,
+                        num_epochs=self.training_args.num_train_epochs,
                     )
             # else:
             #     """

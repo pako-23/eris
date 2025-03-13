@@ -487,7 +487,8 @@ def dp_sgd_train_loop(
             # 1) Zero out the container for per-sample grads
             for p in model.parameters():
                 # We will store each sample's gradient in a list
-                p.accumulated_grads = []
+                # p.accumulated_grads = []
+                p.accumulated_grad = torch.zeros_like(p, device=p.device)
 
             # 2) Per-sample gradient computation loop
             for i in range(B):
@@ -525,17 +526,23 @@ def dp_sgd_train_loop(
                     if p.grad is not None:
                         g = p.grad.detach().clone()
                         g.mul_(clip_factor)  # clip in-place
-                        p.accumulated_grads.append(g)
+                        # p.accumulated_grads.append(g)
+                        p.accumulated_grad += g
 
             # 3) Now aggregate (average) all per-sample grads for each parameter
             for p in model.parameters():
-                if len(p.accumulated_grads) == 0:
+                # if len(p.accumulated_grads) == 0:
+                #     continue
+                if p.accumulated_grad is None:
                     continue
                 
                 # Stack shape: [B, ...parameter_shape...]
-                stacked = torch.stack(p.accumulated_grads, dim=0)
-                # Average over the batch dimension
-                grad = stacked.mean(dim=0)
+                # stacked = torch.stack(p.accumulated_grads, dim=0)
+                # # Average over the batch dimension
+                # grad = stacked.mean(dim=0)
+                
+                # Average the summed gradients
+                grad = p.accumulated_grad / B
 
                 # 4) Add Gaussian noise: N(0, sigma^2 * C^2 / B^2)
                 # => noise stddev = sigma*C / B
