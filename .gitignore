@@ -18,6 +18,9 @@ experiments/dlk_attacks/data
 # C extensions
 *.so
 
+# out
+*.out
+
 # .arrow
 *.arrow
 
