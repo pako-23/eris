@@ -6,7 +6,7 @@ from transformers import TrainingArguments # type: ignore
 # ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
-dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+dataset_name = "cifar10"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 k_folds = 5  # Set 1 to disable cross validation
 lr = 0.01
 momentum = 0.9

@@ -75,6 +75,7 @@ from transformers import ( # type: ignore
 )
 
 import sys
+import gc
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = device  # select the gpu
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -161,6 +162,12 @@ class ExampleClient(ErisClient):
             self.subsampled_train_data.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
             
             # set batch size
+            # The above code is accessing the attribute `per_device_train_batch_size` of the
+            # `training_args` object within the `self` context. This code is likely part of a Python
+            # script or program where `self` refers to an instance of a class, and `training_args` is
+            # an attribute of that instance. By accessing `per_device_train_batch_size`, the code is
+            # likely retrieving the batch size used for training on each device during the training
+            # process.
             self.training_args.per_device_train_batch_size = len(self.subsampled_train_data)
 
             # Trainer initialization using only the IN set for training
@@ -189,7 +196,7 @@ class ExampleClient(ErisClient):
     
     @property
     def gamma(self):
-        n = 1
+        n = 4000
         self.k = int(self.n_params / (n * np.log2(self.config['rounds'][self.exp_n])))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
@@ -217,9 +224,19 @@ class ExampleClient(ErisClient):
             """
             Traditional training without DP
             """
-            self.trainer.train()
+            if self.training_args.per_device_train_batch_size > 128:
+                self.device = "cuda:0"
+                self.model.to(self.device)
+                time.sleep(self.client_id)
+                self.trainer.train()
+                self.model.cpu()
+                gc.collect() 
+                torch.cuda.empty_cache() 
+            else:
+                self.trainer.train()
+                self.device = self.model.device
+            
             training_loss = [log['loss'] for log in self.trainer.state.log_history if 'loss' in log]
-            self.device = self.model.device
                 
             if cfg.pruning:
                 """
@@ -443,8 +460,15 @@ class ExampleClient(ErisClient):
             torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
 
         self.model.eval()  
-        self.model.to(self.device)   
-        eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
+        self.model.to(self.device) 
+        if self.training_args.per_device_eval_batch_size > 128:
+            time.sleep(self.client_id*1.5)  
+            eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
+            self.model.cpu()
+            gc.collect()
+            torch.cuda.empty_cache()
+        else:
+            eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
         loss = eval_results.get("eval_loss", None)
         accuracy = eval_results.get("eval_accuracy", None)
         f1_score = eval_results.get("eval_f1", None)
@@ -524,7 +548,13 @@ class ExampleClient(ErisClient):
 
     def score_blackbox_batch(self, data): 
         self.model.to(self.device)      
-        prediction_output = self.trainer.predict(data)
+        if self.training_args.per_device_train_batch_size > 128:
+            prediction_output = self.trainer.predict(data)
+            self.model.cpu()
+            gc.collect()
+            torch.cuda.empty_cache()
+        else:
+            prediction_output = self.trainer.predict(data)
         logits = torch.tensor(prediction_output.predictions)
         labels = torch.tensor(prediction_output.label_ids)
 

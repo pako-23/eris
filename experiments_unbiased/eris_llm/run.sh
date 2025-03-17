@@ -52,7 +52,7 @@ elif [ "$k_folds" -eq 1 ]; then # if k_folds = 1, print "No cross validation"
 fi
 
 
-for exp_n in $(seq 4 5); do
+for exp_n in $(seq 0 5); do
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do

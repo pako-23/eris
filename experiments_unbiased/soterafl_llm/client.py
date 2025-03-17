@@ -43,7 +43,7 @@ args = parse_args()
 #     device = '2'
 # else:
 #     device = '3'
-device = str(args.id % 4)
+device = str((args.id+1) % 4)
     
 # Import Libraies
 from collections import OrderedDict
@@ -171,7 +171,7 @@ class FlowerClient(fl.client.NumPyClient):
                 compute_metrics=utils.compute_metrics,
             )
 
-        if cfg.local_dp:
+        if True:
             # Calculate sample rate = (batch_size / total_number_of_samples)
             if cfg.privacy_audit:
                 sample_rate = min(1.0, self.training_args.per_device_train_batch_size / len(self.subsampled_train_data))
@@ -203,6 +203,12 @@ class FlowerClient(fl.client.NumPyClient):
                 betas=(self.training_args.adam_beta1, self.training_args.adam_beta2),
                 eps=self.training_args.adam_epsilon,
                 weight_decay=self.training_args.weight_decay,
+            )
+            self.scheduler = get_scheduler(
+                "linear",
+                optimizer=self.optimizer_dp,
+                num_warmup_steps=0,
+                num_training_steps=len(self.train_loader_dp) * training_args.num_train_epochs,
             )
             self.model.train()
                 

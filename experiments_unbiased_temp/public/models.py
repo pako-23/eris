@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from transformers import get_scheduler # type: ignore
 from tqdm import tqdm
 import numpy as np
+import math
 
 import sys
 import os
@@ -441,6 +442,131 @@ def train_llm_with_opacus(model, device, train_data, training_args, sigma, delta
     model.distilbert.embeddings.position_embeddings.weight.requires_grad = True
  
     del privacy_engine
+
+
+def dp_sgd_train_loop(
+    model,
+    dataloader,
+    optimizer,
+    scheduler,
+    max_grad_norm,       # C
+    noise_multiplier,    # sigma
+    device="cuda",
+    num_epochs=1
+):
+    """
+    Manually performs DP-SGD with EXACT same math as Opacus (poisson_sampling=False)
+    for a single set of steps:
+      1) Per-batch:
+         - For each sample in the batch, compute grads
+         - Globally clip to max_grad_norm
+         - Then average per-sample grads across the batch
+         - Add noise with std = sigma * C / batch_size
+         - Apply optimizer step
+    """
+    # Example: freeze position embeddings if you do so in your code
+    # (Must be consistent with your original Opacus code)
+    model.distilbert.embeddings.position_embeddings.weight.requires_grad = False
+
+    model.to(device)
+    model.train()
+    
+    # We will assume the dataloader is the same as used with Opacus
+    # and that you have set shuffle=True, drop_last=False, etc. consistently.
+    
+    for epoch in range(num_epochs):
+        for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False):
+            # Extract input tensors
+            input_ids      = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels         = batch["label"].to(device)
+
+            # B = batch size
+            B = input_ids.size(0)
+            
+            # 1) Zero out the container for per-sample grads
+            for p in model.parameters():
+                # We will store each sample's gradient in a list
+                # p.accumulated_grads = []
+                p.accumulated_grad = torch.zeros_like(p, device=p.device)
+
+            # 2) Per-sample gradient computation loop
+            for i in range(B):
+                # Forward/backward on a single sample
+                input_ids_i      = input_ids[i].unsqueeze(0)
+                attention_mask_i = attention_mask[i].unsqueeze(0)
+                labels_i         = labels[i].unsqueeze(0)
+
+                # Forward
+                outputs = model(
+                    input_ids=input_ids_i,
+                    attention_mask=attention_mask_i,
+                    labels=labels_i
+                )
+                loss_i = outputs.loss
+
+                # Clear grads
+                model.zero_grad()
+                # Backprop
+                loss_i.backward()
+
+                # We'll do global norm clipping, so first gather
+                # the current per-sample grads in a flat sense
+                grad_norm_sq = 0.0
+                for p in model.parameters():
+                    if p.grad is not None:
+                        grad_norm_sq += p.grad.data.norm(2).item() ** 2
+                grad_norm = math.sqrt(grad_norm_sq)
+
+                # Clip factor
+                clip_factor = min(1.0, max_grad_norm / (grad_norm + 1e-6))
+
+                # Save each clipped gradient
+                for p in model.parameters():
+                    if p.grad is not None:
+                        g = p.grad.detach().clone()
+                        g.mul_(clip_factor)  # clip in-place
+                        # p.accumulated_grads.append(g)
+                        p.accumulated_grad += g
+
+            # 3) Now aggregate (average) all per-sample grads for each parameter
+            for p in model.parameters():
+                # if len(p.accumulated_grads) == 0:
+                #     continue
+                if p.accumulated_grad is None:
+                    continue
+                
+                # Stack shape: [B, ...parameter_shape...]
+                # stacked = torch.stack(p.accumulated_grads, dim=0)
+                # # Average over the batch dimension
+                # grad = stacked.mean(dim=0)
+                
+                # Average the summed gradients
+                grad = p.accumulated_grad / B
+
+                # 4) Add Gaussian noise: N(0, sigma^2 * C^2 / B^2)
+                # => noise stddev = sigma*C / B
+                noise = torch.normal(
+                    mean=0.0,
+                    std=(noise_multiplier * max_grad_norm) / B,
+                    size=p.shape,
+                    device=p.device,
+                )
+                grad += noise
+
+                # Place in p.grad so we can do an optimizer step
+                p.grad = grad
+
+            # 5) Optimizer step
+            optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
+            
+            # 6) Zero out for next iteration
+            optimizer.zero_grad()
+
+    # Unfreeze if that’s what you do after training
+    model.distilbert.embeddings.position_embeddings.weight.requires_grad = True
 
 
 # simple test function
