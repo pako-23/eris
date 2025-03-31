@@ -9,6 +9,8 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/zeromq/libzmq.git
   GIT_TAG        v4.3.5)
 set(BUILD_TESTS OFF CACHE INTERNAL "")
+set(BUILD_SHARED OFF CACHE INTERNAL "")
+set(BUILD_STATIC ON CACHE INTERNAL "")
 FetchContent_MakeAvailable(libzmq)
 
 add_subdirectory(proto)

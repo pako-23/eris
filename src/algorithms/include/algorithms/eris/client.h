@@ -12,9 +12,11 @@
 #include "zmq.h"
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -53,7 +55,7 @@ public:
         aggr_strategy_{nullptr}, options_{}, splitter_{}, mu_{}, cv_{},
         submit_{}, publish_{}, coordinator_updates_{}, aggregator_{nullptr},
         aggregator_thread_{} {
-    const int timeout = 5000;
+    const int timeout = 100;
 
     if (!valid_zmq_endpoint(router_address))
       throw std::invalid_argument{
@@ -174,7 +176,8 @@ public:
     zmq_msg_init_size(&msg, req.ByteSizeLong());
     req.SerializeToArray(zmq_msg_data(&msg), req.ByteSizeLong());
     if (!dealer_.send_msg(&msg, 0)) {
-      spdlog::error("failed to send join request to given coordinator");
+      spdlog::error("failed to send join request to given coordinator: {}",
+                    strerror(errno));
       goto joining_failed;
     }
 
@@ -208,8 +211,9 @@ public:
     for (const auto &aggr : res.state().aggregators())
       if (!register_aggregator(aggr)) {
         spdlog::error("failed to register aggregator with submit address {} "
-                      "and publish address{}",
-                      aggr.submit_address(), aggr.submit_address());
+                      "and publish address {}: {}",
+                      aggr.submit_address(), aggr.submit_address(),
+                      strerror(errno));
         goto joining_failed;
       }
     listen_coordinator_updates();
@@ -362,7 +366,8 @@ private:
       }
 
       if (!submitted) {
-        spdlog::error("failed to submit weights to aggregator with ID {}", i);
+        spdlog::error("failed to submit weights to aggregator with ID {}: {}",
+                      i, strerror(errno));
         zmq_msg_close(&reply);
         return false;
       }
@@ -374,8 +379,8 @@ private:
 
       if (!received) {
         spdlog::error("failed to receive successful weight submission "
-                      "notification from aggregator with ID {}",
-                      i);
+                      "notification from aggregator with ID {}: {}",
+                      i, strerror(errno));
         zmq_msg_close(&reply);
         return false;
       } else if (!res.ParseFromArray(zmq_msg_data(&reply),
@@ -430,7 +435,8 @@ private:
 
       if (!received) {
         spdlog::error(
-            "failed to receive weight updates from aggregator with ID {}", i);
+            "failed to receive weight updates from aggregator with ID {}: {}",
+            i, strerror(errno));
         zmq_msg_close(&msg);
         return false;
       } else if (!weights[i].ParseFromArray(zmq_msg_data(&msg),
