@@ -108,12 +108,9 @@ public:
                                      client_.shapes_[shape].end(), 1,
                                      std::multiplies<size_t>());
 
-      py::array_t<uint32_t> array(client_.shapes_[shape]);
-      auto layer = array.request();
-
-      for (size_t j = 0; j < items; ++j)
-        ((uint32_t *)layer.ptr)[j] = mapping[i++];
-
+      py::array_t<uint32_t> array(client_.shapes_[shape], mapping.data() + i,
+                                  py::cast(this));
+      i += items;
       list.append(array);
       ++shape;
     }
