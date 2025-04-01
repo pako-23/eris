@@ -94,7 +94,7 @@ private:
 
     service_.route_msg(identity, res);
 
-    if (req.has_join()) {
+    if (req.has_join() && req.join().has_submit_address()) {
       // FIXME temporary fix
       sleep(1);
       service_.publish_event(state_[res.state().assigned_fragment()]);

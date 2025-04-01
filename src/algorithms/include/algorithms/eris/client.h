@@ -1,30 +1,30 @@
 #pragma once
 
-#include "algorithms/eris/aggregation_strategy.h"
-#include "algorithms/eris/aggregator.h"
-#include "algorithms/eris/aggregator.pb.h"
-#include "algorithms/eris/common.pb.h"
-#include "algorithms/eris/coordinator.pb.h"
-#include "algorithms/eris/split.h"
-#include "erisfl/client.h"
-#include "spdlog/spdlog.h"
-#include "util/networking.h"
-#include "zmq.h"
 #include <algorithm>
+#include <algorithms/eris/aggregation_strategy.h>
+#include <algorithms/eris/aggregator.h>
+#include <algorithms/eris/aggregator.pb.h>
+#include <algorithms/eris/common.pb.h>
+#include <algorithms/eris/coordinator.pb.h>
+#include <algorithms/eris/split.h>
 #include <atomic>
 #include <cerrno>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <erisfl/client.h>
 #include <future>
 #include <memory>
 #include <mutex>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <util/networking.h>
 #include <utility>
 #include <vector>
+#include <zmq.h>
 
 /**
  * The ErisClient class implements the Client interface for the eris
@@ -278,7 +278,8 @@ private:
             !register_aggregator_locked(aggregator)) {
           zmq_msg_close(&msg);
           zmq_msg_init(&msg);
-          spdlog::error("failed to register received aggregator");
+          spdlog::error("failed to register received aggregator: {}",
+                        strerror(errno));
           continue;
         }
 
