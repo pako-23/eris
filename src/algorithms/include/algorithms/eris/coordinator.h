@@ -3,6 +3,7 @@
 #include <cstring>
 #include <future>
 #include <spdlog/spdlog.h>
+#include <unistd.h>
 #include <vector>
 #include <zmq.h>
 
@@ -153,6 +154,8 @@ private:
         state_[i].set_submit_address(req.submit_address());
         state_[i].set_publish_address(req.publish_address());
         state->set_assigned_fragment(i);
+        // FIXME this is only a temporary fix
+        sleep(5);
         service_.publish_event(state_[i]);
         spdlog::info("new aggregator joined for fragment {}. submit "
                      "address: {}, publish address: {}",

@@ -1,5 +1,5 @@
-#include "algorithms/eris/split.h"
-#include "algorithms/eris/aggregator.pb.h"
+#include <algorithms/eris/aggregator.pb.h>
+#include <algorithms/eris/split.h>
 #include <cstddef>
 #include <cstdint>
 #include <random>
