@@ -19,14 +19,14 @@ set_target_properties(algorithms_obj PROPERTIES
 target_link_libraries(algorithms_obj PRIVATE
   compiler_flags
   spdlog::spdlog
-  libzmq)
+  libzmq-static)
 target_link_libraries(algorithms_obj PUBLIC
   erisfl
   proto_obj
   util_static)
 
-
 add_library(algorithms_static STATIC)
 target_link_libraries(algorithms_static algorithms_obj)
+set_target_properties(algorithms_static PROPERTIES OUTPUT_NAME algorithms)
 
 CleanCoverage(algorithms_static)

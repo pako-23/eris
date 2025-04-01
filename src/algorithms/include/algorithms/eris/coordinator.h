@@ -3,6 +3,7 @@
 #include <cstring>
 #include <future>
 #include <spdlog/spdlog.h>
+#include <unistd.h>
 #include <vector>
 #include <zmq.h>
 
@@ -84,7 +85,7 @@ private:
         return;
       }
 
-      handle_join(req.join(), res.mutable_state());
+      fill_join(req.join(), res.mutable_state());
     }
 
     for (State::size_type i = 0; i < state_.size(); ++i)
@@ -92,6 +93,16 @@ private:
         *res.mutable_state()->add_aggregators() = state_[i];
 
     service_.route_msg(identity, res);
+
+    if (req.has_join()) {
+      // FIXME temporary fix
+      sleep(1);
+      service_.publish_event(state_[res.state().assigned_fragment()]);
+      spdlog::info("new aggregator joined for fragment {}. submit "
+                   "address: {}, publish address: {}",
+                   res.state().assigned_fragment(), req.join().submit_address(),
+                   req.join().publish_address());
+    }
   }
 
   /**
@@ -142,7 +153,7 @@ private:
    * @param req The request message.
    * @param state The state portion of the response.
    */
-  void handle_join(const eris::JoinRequest &req, eris::State *state) noexcept {
+  void fill_join(const eris::JoinRequest &req, eris::State *state) noexcept {
     *state->mutable_options() = options_;
     if (!req.has_submit_address())
       return;
@@ -153,11 +164,6 @@ private:
         state_[i].set_submit_address(req.submit_address());
         state_[i].set_publish_address(req.publish_address());
         state->set_assigned_fragment(i);
-        service_.publish_event(state_[i]);
-        spdlog::info("new aggregator joined for fragment {}. submit "
-                     "address: {}, publish address: {}",
-                     i, req.submit_address(), req.publish_address());
-
         break;
       }
   }

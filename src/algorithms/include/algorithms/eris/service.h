@@ -5,6 +5,7 @@
 #include "spdlog/spdlog.h"
 #include "util/networking.h"
 #include "zmq.h"
+#include <cerrno>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -82,7 +83,8 @@ public:
       if (!router_.recv_msg(&msg, 0)) {
         zmq_msg_close(&identity);
         zmq_msg_init(&identity);
-        spdlog::error("failed to recieve client's message");
+        spdlog::error("failed to recieve client's message: {}",
+                      strerror(errno));
         continue;
       }
 

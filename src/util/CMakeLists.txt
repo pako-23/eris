@@ -7,11 +7,10 @@ target_include_directories(util_obj PUBLIC
 set_target_properties(util_obj PROPERTIES
   POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(util_obj
-  PRIVATE compiler_flags libzmq)
+  PRIVATE compiler_flags libzmq-static)
 
-add_library(util_shared SHARED)
-target_link_libraries(util_shared util_obj)
 add_library(util_static STATIC)
 target_link_libraries(util_static util_obj)
+set_target_properties(util_static PROPERTIES OUTPUT_NAME util)
 
 CleanCoverage(util_static)
