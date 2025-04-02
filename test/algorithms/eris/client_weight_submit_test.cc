@@ -1,18 +1,19 @@
-#include "algorithms/eris/aggregator.pb.h"
-#include "mock_client.h"
-#include "mock_zmq_socket.h"
-#include "zmq.h"
 #include <algorithm>
+#include <algorithms/eris/aggregator.pb.h>
+#include <bits/types/struct_sched_param.h>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
 #include <future>
 #include <gtest/gtest.h>
+#include <mock_client.h>
+#include <mock_zmq_socket.h>
 #include <mutex>
 #include <numeric>
 #include <random>
 #include <vector>
+#include <zmq.h>
 
 static const uint32_t splits = 5;
 static const uint32_t split_seed = 42;
@@ -41,17 +42,22 @@ protected:
   Reassemble(const std::vector<eris::WeightSubmissionRequest> &requests) {
     std::vector<eris::WeightUpdate> results;
     results.reserve(requests.size());
+    size_t size = 0;
 
     for (size_t i = 0; i < requests.size(); ++i) {
       eris::WeightUpdate update;
 
-      for (int j = 0; j < requests[i].weight_size(); ++j)
+      for (int j = 0; j < requests[i].weight_size(); ++j, ++size)
         update.add_weight(requests[i].weight(j));
 
       results.emplace_back(update);
     }
 
-    return client_.get_splitter().reassemble(results);
+    std::vector<float> parameters(size);
+    client_.get_splitter().reassemble(parameters.begin(), parameters.end(),
+                                      results);
+
+    return parameters;
   }
 
   void CheckSubmission(uint32_t round) {

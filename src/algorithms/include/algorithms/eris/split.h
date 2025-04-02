@@ -1,7 +1,6 @@
 #pragma once
 
-#include "algorithms/eris/aggregator.pb.h"
-#include "erisfl/client.h"
+#include <algorithms/eris/aggregator.pb.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -40,8 +39,20 @@ public:
    * aggregators.
    * @return The new weights of the model.
    */
-  std::vector<float>
-  reassemble(const std::vector<eris::WeightUpdate> &updates) const noexcept;
+  template <class It>
+  void
+  reassemble(It begin, It end,
+             const std::vector<eris::WeightUpdate> &updates) const noexcept {
+    std::vector<int> assigned(updates.size(), 0);
+
+    for (size_t i = 0; i < aggregator_mapping_.size() && begin != end;
+         ++i, ++begin) {
+      uint32_t fragment_id = aggregator_mapping_[i];
+      const eris::WeightUpdate &update = updates[fragment_id];
+      *begin = update.weight(assigned[fragment_id]);
+      ++assigned[fragment_id];
+    }
+  }
 
   /**
    * It splits the given model weights into a list of weights that can be
@@ -49,12 +60,30 @@ public:
    * resulting weight represents the identifier of the aggregator with whom the
    * weights should be shared.
    *
-   * @param parameters The weights are they are coming from the model.
+   * @param begin An iterator to delimiting the beginning of a sequence of
+   * parameters.
+   * @param end An iterator to delimiting the end of a sequence of
+   * parameters.
+   * @param samples The number of samples used to fit.
    * @param round The current training round.
    * @return The list of weights that should be shared with the aggregators.
    */
+  template <class It>
   std::vector<eris::WeightSubmissionRequest>
-  split(const Client::fit_result &parameters, uint32_t round) noexcept;
+  split(It begin, It end, uint32_t samples, uint32_t round) noexcept {
+    std::vector<eris::WeightSubmissionRequest> fragments;
+    fragments.resize(nsplits_);
+
+    for (uint32_t i = 0; i < fragments.size(); ++i) {
+      fragments[i].set_round(round);
+      fragments[i].set_samples(samples);
+    }
+
+    for (size_t i = 0; begin != end; ++begin, ++i)
+      fragments[aggregator_mapping_[i]].add_weight(*begin);
+
+    return fragments;
+  }
 
   /**
    * Returns the mapping from weight to aggregator identifier.
@@ -65,8 +94,20 @@ public:
     return aggregator_mapping_;
   }
 
-  std::vector<float> get_fragment(const std::vector<float> &parameters,
-                                  uint32_t fragment_id) noexcept;
+  template <class Parameters>
+  std::vector<float> get_fragment(const Parameters &parameters,
+                                  uint32_t fragment_id) noexcept {
+    std::vector<float> fragment(get_fragment_size(fragment_id));
+    size_t i = 0;
+
+    auto it = parameters.begin();
+    for (std::vector<uint32_t>::size_type j = 0;
+         j < parameters.size() && i < fragment.size(); ++j, ++it)
+      if (aggregator_mapping_[j] == fragment_id)
+        fragment[i++] = *it;
+
+    return fragment;
+  }
 
 private:
   std::vector<uint32_t>

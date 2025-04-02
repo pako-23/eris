@@ -2,15 +2,14 @@
 
 #include <cstdint>
 #include <utility>
-#include <vector>
 
 /**
  * The Client class provides an interface of a process that joins the federated
  * training and locally trains its model.
  */
-class Client {
+template <class Parameters> class Client {
 public:
-  using fit_result = std::pair<std::vector<float>, uint32_t>;
+  using fit_result = std::pair<Parameters, uint32_t>;
 
   /**
    * Deletes an instance of a Client object.
@@ -30,14 +29,14 @@ public:
    *
    * @return The model parameters.
    */
-  virtual std::vector<float> get_parameters(void) = 0;
+  virtual Parameters get_parameters(void) = 0;
 
   /**
    * Sets the model parameters.
    *
    * @param parameters The model parameters
    */
-  virtual void set_parameters(const std::vector<float> &parameters) = 0;
+  virtual void set_parameters(const Parameters &parameters) = 0;
 
   /**
    * Performs a training round of the model.

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "algorithms/eris/aggregation_strategy.h"
-#include "algorithms/eris/aggregator.pb.h"
-#include "algorithms/eris/common.pb.h"
-#include "algorithms/eris/config.h"
-#include "algorithms/eris/service.h"
 #include "zmq.h"
+#include <algorithms/eris/aggregation_strategy.h>
+#include <algorithms/eris/aggregator.pb.h>
+#include <algorithms/eris/common.pb.h>
+#include <algorithms/eris/config.h>
+#include <algorithms/eris/service.h>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -44,7 +44,7 @@ public:
    * It configures the ErisAggregator. This method must be called before calling
    * the start method.
    *
-   * @param fragment_size The size of the model fragment.
+   * @param fragment The initial fragment.
    * @param min_clients The minimum number of clients that should contribute
    * with their local weights before the ErisAggregator can publish a new model
    * weight update.
@@ -136,8 +136,8 @@ private:
                                   communications */
 
   std::shared_ptr<AggregationStrategy> aggregation_; /**< The strategy used for
-                                                        aggregating weights
-                                                        received from clients */
+                                          aggregating weights
+                                          received from clients */
 
   uint32_t round_; /**< The current round of the training */
   std::vector<eris::WeightSubmissionRequest> weights_; /**< The weights sent by
