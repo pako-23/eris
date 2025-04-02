@@ -1,15 +1,15 @@
-#include "algorithms/eris/common.pb.h"
-#include "algorithms/eris/config.h"
-#include "algorithms/eris/coordinator.pb.h"
-#include "mock_client.h"
-#include "mock_zmq_socket.h"
-#include "zmq.h"
+#include <algorithms/eris/common.pb.h>
+#include <algorithms/eris/config.h>
+#include <algorithms/eris/coordinator.pb.h>
 #include <cstdint>
 #include <ctime>
 #include <future>
 #include <gtest/gtest.h>
+#include <mock_client.h>
+#include <mock_zmq_socket.h>
 #include <string>
 #include <utility>
+#include <zmq.h>
 
 class TrainSocket : public MockZMQSocket {
 public:
@@ -17,10 +17,11 @@ public:
   ~TrainSocket(void) = default;
 };
 
-class TrainClient : public ErisClient<TrainSocket> {
+class TrainClient : public ErisClient<std::vector<float>, TrainSocket> {
 public:
   explicit TrainClient(void)
-      : ErisClient<TrainSocket>{"tcp://127.0.0.1:" +
+      : ErisClient<std::vector<float>,
+                   TrainSocket>{"tcp://127.0.0.1:" +
                                     std::to_string(DEFAULT_ERIS_ROUTER_PORT),
                                 "tcp://127.0.0.1:" +
                                     std::to_string(DEFAULT_ERIS_PUBLISH_PORT)},

@@ -1,12 +1,12 @@
-#include "util/networking.h"
-#include "zmq.h"
+#include <cerrno>
 #include <chrono>
 #include <cstring>
-#include <iostream>
 #include <new>
 #include <regex>
 #include <string>
 #include <thread>
+#include <util/networking.h>
+#include <zmq.h>
 
 static std::string ipv4_regex =
     "(25[0-5]|2[0-4]\\d|1\\d{1,2}|[1-9]\\d?|0)(\\.(25[0-"
@@ -78,11 +78,23 @@ bool ZMQSocket::connect(const std::string &address) noexcept {
 }
 
 bool ZMQSocket::send_msg(zmq_msg_t *msg, int flag) {
-  return zmq_msg_send(msg, socket_, flag) > 0;
+  int result;
+
+  do {
+    result = zmq_msg_send(msg, socket_, flag);
+  } while (result == -1 && zmq_errno() == EINTR);
+
+  return result > 0;
 }
 
 bool ZMQSocket::recv_msg(zmq_msg_t *msg, int flag) {
-  return zmq_msg_recv(msg, socket_, flag) >= 0;
+  int result;
+
+  do {
+    result = zmq_msg_recv(msg, socket_, flag);
+  } while (result == -1 && zmq_errno() == EINTR);
+
+  return result >= 0;
 }
 
 bool ZMQSocket::setsockopt(int option, const void *optval,

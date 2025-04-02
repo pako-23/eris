@@ -1,12 +1,14 @@
-#include "algorithms/eris/client.h"
-#include "algorithms/eris/config.h"
-#include "algorithms/eris/coordinator.h"
-#include "erisfl/coordinator.h"
-#include "util/networking.h"
+#include "spdlog/spdlog.h"
+#include <algorithms/eris/client.h>
+#include <algorithms/eris/config.h>
+#include <algorithms/eris/coordinator.h>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <erisfl/coordinator.h>
 #include <optional>
 #include <pybind11/attr.h>
+#include <pybind11/buffer_info.h>
 #include <pybind11/cast.h>
 #include <pybind11/detail/common.h>
 #include <pybind11/gil.h>
@@ -16,6 +18,7 @@
 #include <stdexcept>
 #include <string>
 #include <sys/types.h>
+#include <util/networking.h>
 #include <utility>
 #include <vector>
 
@@ -82,15 +85,129 @@ public:
   }
 };
 
+class PyParameters {
+public:
+  explicit PyParameters(py::list list,
+                        const std::vector<std::vector<ssize_t>> &shapes,
+                        size_t total_size)
+      : parameters_(std::move(list)), shapes_(shapes), total_size_{total_size} {
+  }
+
+  py::list to_list(void) const { return std::move(parameters_); }
+
+  class iterator {
+  public:
+    explicit iterator(py::list &list, size_t layer = 0)
+        : layer_{layer}, it_{0}, list_{list} {
+      if (layer_ < list.size())
+        buf_ = py::cast<py::array>(list_[layer_]).request();
+    }
+
+    iterator &operator++() {
+      if (layer_ >= list_.size())
+        return *this;
+      else if (++it_ == buf_.size) {
+        it_ = 0;
+
+        do {
+          if (++layer_ == list_.size())
+            break;
+          buf_ = py::cast<py::array>(list_[layer_]).request();
+        } while (buf_.size == 0);
+      }
+
+      return *this;
+    }
+
+    float &operator*() const { return ((float *)buf_.ptr)[it_]; }
+
+    bool operator==(const iterator &other) const {
+      return layer_ == other.layer_ && it_ == other.it_;
+    }
+
+    bool operator!=(const iterator &other) const { return !(*this == other); }
+
+  private:
+    size_t layer_;
+    py::ssize_t it_;
+    py::list &list_;
+    py::buffer_info buf_;
+  };
+
+  class const_iterator {
+  public:
+    explicit const_iterator(const py::list &list, size_t layer = 0)
+        : layer_{layer}, it_{0}, list_{list} {
+      if (layer_ < list.size())
+        buf_ = py::cast<py::array>(list_[layer_]).request();
+    }
+
+    const_iterator &operator++() {
+      if (layer_ >= list_.size())
+        return *this;
+      else if (++it_ == buf_.size) {
+        it_ = 0;
+
+        do {
+          if (++layer_ == list_.size())
+            break;
+          buf_ = py::cast<py::array>(list_[layer_]).request();
+        } while (buf_.size == 0);
+      }
+
+      return *this;
+    }
+
+    const float &operator*() const { return ((float *)buf_.ptr)[it_]; }
+
+    bool operator==(const const_iterator &other) const {
+      return layer_ == other.layer_ && it_ == other.it_;
+    }
+
+    bool operator!=(const const_iterator &other) const {
+      return !(*this == other);
+    }
+
+  private:
+    size_t layer_;
+    py::ssize_t it_;
+    const py::list &list_;
+    py::buffer_info buf_;
+  };
+
+  const_iterator begin(void) const { return const_iterator(parameters_); }
+
+  const_iterator end(void) const {
+    return const_iterator(parameters_, parameters_.size());
+  }
+
+  iterator begin(void) { return iterator(parameters_); }
+
+  iterator end(void) { return iterator(parameters_, parameters_.size()); }
+
+  size_t size(void) const { return total_size_; }
+
+private:
+  py::list parameters_;
+  std::vector<std::vector<ssize_t>> shapes_;
+  size_t total_size_;
+};
+
 class PyErisClient : public PyClientBase {
 public:
   PyErisClient(const std::string &router_address,
                const std::string &subscribe_address)
       : client_{this, router_address, subscribe_address} {}
 
-  inline bool train(void) override { return client_.train(); }
+  inline bool train(void) override {
+    py::gil_scoped_acquire acquire;
+    return client_.train();
+  }
 
-  inline bool join(void) override { return client_.join(); }
+  inline bool join(void) override {
+    py::gil_scoped_acquire acquire;
+    return client_.join();
+  }
 
   py::list get_parameters(void) override {
     PYBIND11_OVERRIDE_PURE(py::list, PyErisClient, get_parameters, );
@@ -143,10 +260,15 @@ public:
   }
 
 private:
-  class ErisClientImpl : public ErisClient<ZMQSocket> {
-  private:
-    std::vector<float> to_parameters(const py::list &list) {
-      std::vector<float> parameters;
+  class ErisClientImpl : public ErisClient<PyParameters> {
+  public:
+    ErisClientImpl(PyErisClient *client, const std::string &router_address,
+                   const std::string &subscribe_address)
+        : ErisClient<PyParameters>{router_address, subscribe_address},
+          client_{client}, shapes_initialized{false}, total_size{0} {}
+
+    PyParameters get_parameters(void) override {
+      py::list list = client_->get_parameters();
 
       if (!shapes_initialized) {
         shapes_initialized = true;
@@ -160,67 +282,19 @@ private:
         }
       }
 
-      parameters.resize(total_size);
-      size_t len = 0;
-
-      for (const auto &item : list) {
-        auto layer = py::cast<py::array>(item).request();
-
-        for (ssize_t i = 0; i < layer.size; ++i)
-          parameters[len++] = ((float *)layer.ptr)[i];
-      }
+      PyParameters parameters(list, shapes_, total_size);
 
       return parameters;
     }
 
-    py::list to_list(const std::vector<float> &parameters) {
-      py::list list;
-
-      size_t shape = 0;
-      size_t i = 0;
-      while (i < parameters.size()) {
-        size_t items =
-            std::accumulate(shapes_[shape].begin(), shapes_[shape].end(), 1,
-                            std::multiplies<size_t>());
-
-        py::array_t<float> array(shapes_[shape]);
-        auto layer = array.request();
-
-        for (size_t j = 0; j < items; ++j)
-          ((float *)layer.ptr)[j] = parameters[i++];
-
-        list.append(array);
-        ++shape;
-      }
-      return list;
-    }
-
-  public:
-    ErisClientImpl(PyErisClient *client, const std::string &router_address,
-                   const std::string &subscribe_address)
-        : ErisClient<ZMQSocket>{router_address, subscribe_address},
-          client_{client}, shapes_initialized{false}, total_size{0} {}
-
-    std::vector<float> get_parameters(void) override {
-      py::gil_scoped_acquire acquire;
-      py::list list = client_->get_parameters();
-      std::vector<float> parameters = to_parameters(list);
-      py::gil_scoped_release release;
-
-      return parameters;
-    }
-
-    void set_parameters(const std::vector<float> &parameters) override {
-      py::gil_scoped_acquire acquire;
-      py::list list = to_list(parameters);
+    void set_parameters(const PyParameters &parameters) override {
+      py::list list = parameters.to_list();
       client_->set_parameters(list);
     }
 
     Client::fit_result fit(void) override {
-      py::gil_scoped_acquire acquire;
       PyClient::fit_result result = client_->fit();
-      std::vector<float> parameters = to_parameters(result.first);
-      py::gil_scoped_release release;
+      PyParameters parameters(result.first, shapes_, total_size);
 
       return std::make_pair(std::move(parameters), result.second);
     }

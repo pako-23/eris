@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <algorithm>
@@ -36,15 +37,18 @@
  * aggregators, and updating the weights based on the ones published by the
  * aggregators.
  */
-template <class Socket = ZMQSocket> class ErisClient : public Client {
+template <class Parameters, class Socket = ZMQSocket>
+class ErisClient : public Client<Parameters> {
 public:
+  using fit_result = typename Client<Parameters>::fit_result;
+
   /**
    * It constructs an ErisClient that will contact an ErisCoordinator at the
-   * given addresses. Upon construction, the process will start connect to the
-   * given addresses.
+   * given addresses. Upon construction, the process will start connect to
+   * the given addresses.
    *
-   * @param router_address The address on which the ErisCoordinator will accept
-   * requests.
+   * @param router_address The address on which the ErisCoordinator will
+   * accept requests.
    * @param subscribe_address The address on which the ErisCoordinator will
    * publish updates.
    */
@@ -101,12 +105,13 @@ public:
       return false;
 
     while (round != options_.rounds()) {
-      std::pair<std::vector<float>, uint32_t> result = fit();
+      std::pair<Parameters, uint32_t> result = this->fit();
 
-      if (!submit_weights(round, result) || !receive_weights(&round))
+      if (!submit_weights(round, result) ||
+          !receive_weights(&round, result.first))
         return false;
 
-      evaluate();
+      this->evaluate();
       spdlog::info("finished with round {0}", round);
       ++round;
     }
@@ -197,7 +202,7 @@ public:
       goto joining_failed;
     }
     options_ = res.state().options();
-    splitter_.configure(get_parameters().size(), options_.splits(),
+    splitter_.configure(this->get_parameters().size(), options_.splits(),
                         options_.split_seed());
 
     if (res.state().has_assigned_fragment())
@@ -300,7 +305,7 @@ private:
     std::promise<void> started;
     std::future<void> started_ready = started.get_future();
     std::vector<float> fragment =
-        splitter_.get_fragment(get_parameters(), fragment_id);
+        splitter_.get_fragment(this->get_parameters(), fragment_id);
 
     aggregator_->configure(fragment, options_.min_clients());
 
@@ -344,7 +349,8 @@ private:
   bool submit_weights(uint32_t round, const fit_result &parameters) noexcept {
     eris::WeightSubmissionResponse res;
     std::vector<eris::WeightSubmissionRequest> fragments =
-        splitter_.split(parameters, round);
+        splitter_.split(parameters.first.begin(), parameters.first.end(),
+                        parameters.second, round);
 
     for (size_t i = 0; i < fragments.size(); ++i) {
       zmq_msg_t msg, reply;
@@ -413,7 +419,7 @@ private:
    * @return If it manages to succesfully receive the model parameters from all
    * the aggregators, it returns true; otherwise, it returns false.
    */
-  bool receive_weights(uint32_t *round) noexcept {
+  bool receive_weights(uint32_t *round, Parameters &parameters) noexcept {
     std::vector<eris::WeightUpdate> weights(options_.splits());
     std::vector<bool> done(options_.splits(), false);
     size_t i = 0;
@@ -460,8 +466,9 @@ private:
         i = 0;
       }
     }
-    set_parameters(splitter_.reassemble(weights));
 
+    splitter_.reassemble(parameters.begin(), parameters.end(), weights);
+    this->set_parameters(parameters);
     return true;
   }
 

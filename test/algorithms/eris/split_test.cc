@@ -1,5 +1,5 @@
-#include "algorithms/eris/aggregator.pb.h"
-#include "algorithms/eris/split.h"
+#include <algorithms/eris/aggregator.pb.h>
+#include <algorithms/eris/split.h>
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
@@ -75,7 +75,7 @@ TEST_F(SplitTest, Split) {
 
   splitter.configure(parameters.size(), splits, 42);
   std::vector<eris::WeightSubmissionRequest> fragments =
-      splitter.split(std::make_pair(parameters, samples), round);
+      splitter.split(parameters.begin(), parameters.end(), samples, round);
 
   size_t total_size = 0;
   for (const auto &fragment : fragments) {
@@ -107,13 +107,15 @@ TEST_F(SplitTest, SplitSameSeed) {
 
   first_splitter.configure(parameters.size(), splits, 42);
   std::vector<eris::WeightSubmissionRequest> first_fragments =
-      first_splitter.split(std::make_pair(parameters, samples), round);
+      first_splitter.split(parameters.begin(), parameters.end(), samples,
+                           round);
 
   RandomSplit second_splitter;
 
   second_splitter.configure(parameters.size(), splits, 42);
   std::vector<eris::WeightSubmissionRequest> second_fragments =
-      second_splitter.split(std::make_pair(parameters, samples), round);
+      second_splitter.split(parameters.begin(), parameters.end(), samples,
+                            round);
 
   EXPECT_EQ(first_fragments.size(), second_fragments.size());
   for (size_t i = 0; i < first_fragments.size(); ++i)
@@ -132,13 +134,15 @@ TEST_F(SplitTest, SplitDifferentSeed) {
 
   first_splitter.configure(parameters.size(), splits, 42);
   std::vector<eris::WeightSubmissionRequest> first_fragments =
-      first_splitter.split(std::make_pair(parameters, samples), round);
+      first_splitter.split(parameters.begin(), parameters.end(), samples,
+                           round);
 
   RandomSplit second_splitter;
 
   second_splitter.configure(parameters.size(), splits, 100);
   std::vector<eris::WeightSubmissionRequest> second_fragments =
-      second_splitter.split(std::make_pair(parameters, samples), round);
+      second_splitter.split(parameters.begin(), parameters.end(), samples,
+                            round);
 
   EXPECT_EQ(first_fragments.size(), second_fragments.size());
   bool difference = false;
@@ -161,7 +165,7 @@ TEST_F(SplitTest, Reassemble) {
 
   splitter.configure(parameters.size(), splits, 42);
   std::vector<eris::WeightSubmissionRequest> fragments =
-      splitter.split(std::make_pair(parameters, samples), round);
+      splitter.split(parameters.begin(), parameters.end(), samples, round);
 
   std::vector<eris::WeightUpdate> updates(fragments.size());
   for (size_t i = 0; i < updates.size(); ++i) {
@@ -171,7 +175,8 @@ TEST_F(SplitTest, Reassemble) {
       updates[i].add_weight(fragments[i].weight(j));
   }
 
-  std::vector<float> reassembled = splitter.reassemble(updates);
+  std::vector<float> reassembled(parameters.size());
+  splitter.reassemble(reassembled.begin(), reassembled.end(), updates);
 
   EXPECT_EQ(parameters.size(), reassembled.size());
   for (size_t i = 0; i < parameters.size(); ++i)

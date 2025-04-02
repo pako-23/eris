@@ -1,20 +1,21 @@
 #pragma once
 
-#include "algorithms/eris/client.h"
-#include "algorithms/eris/config.h"
-#include "algorithms/eris/coordinator.pb.h"
-#include "algorithms/eris/split.h"
-#include "mock_zmq_socket.h"
+#include <algorithms/eris/client.h>
+#include <algorithms/eris/config.h>
+#include <algorithms/eris/coordinator.pb.h>
+#include <algorithms/eris/split.h>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <mock_zmq_socket.h>
 #include <string>
 #include <utility>
 #include <vector>
 
-class MockClient final : public ErisClient<MockZMQSocket> {
+class MockClient final : public ErisClient<std::vector<float>, MockZMQSocket> {
 public:
   explicit MockClient(const std::string &router, const std::string &subscribe)
-      : ErisClient<MockZMQSocket>{router, subscribe}, parameters_{} {}
+      : ErisClient<std::vector<float>, MockZMQSocket>{router, subscribe},
+        parameters_{} {}
 
   explicit MockClient(void)
       : MockClient{
@@ -36,8 +37,9 @@ public:
   inline void mock_listen_coordinator_updates(void) {
     listen_coordinator_updates();
   }
-  inline bool mock_receive_weights(uint32_t *round) {
-    return receive_weights(round);
+  inline bool mock_receive_weights(uint32_t *round,
+                                   std::vector<float> &parameters) {
+    return receive_weights(round, parameters);
   }
   inline bool mock_submit_weights(uint32_t round) {
 
