@@ -41,6 +41,43 @@ def setup_icml_plot(two_column=False):
     
     return (figure_width, figure_width * 0.85)
 
+def setup_icml_plot(two_column=False):
+    """Set up ICML-compatible plot settings."""
+    if two_column:
+        figure_width = 7  # Full-page width for two-column layout (in inches)
+    else:
+        figure_width = 3.5  # Half-page width for two-column layout (in inches)
+ 
+    rcParams.update({
+        # Font and text
+        "text.usetex": True,  # Use LaTeX for text rendering
+        "font.family": "serif",  # Use serif fonts
+        "font.serif": ["Times New Roman"],  # Set font to Times New Roman
+        "axes.labelsize": 10,  # Font size for axis labels
+        "axes.titlesize": 10,  # Font size for titles
+        "legend.fontsize": 14,  # Font size for legends
+        "xtick.labelsize": 10,  # Font size for x-axis ticks
+        "ytick.labelsize": 10,  # Font size for y-axis ticks
+ 
+        # Line and marker styles
+        "lines.linewidth": 1.2,  # Line width
+        "lines.markersize": 3,  # Marker size
+ 
+        # Figure dimensions
+        "figure.figsize": (figure_width, figure_width * 0.85),  # TODO change to better ratio
+        "figure.dpi": 300,  # High resolution for publication
+ 
+        # Grid
+        "axes.grid": True,  # Enable grid
+        "grid.alpha": 0.3,  # Grid transparency
+        "grid.linestyle": "--",  # Dashed grid lines
+ 
+        # Legend
+        "legend.frameon": False,  # No border around legends
+    })
+    
+    return (figure_width, figure_width * 0.85)
+
 
 
 results_4samples =  {
@@ -396,7 +433,7 @@ datasets = [(results_4samples, '4 samples'),
             (results_16samples, '16 samples')]
 
 # Create one figure with 3 subplots (side by side)
-fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(12, 4), sharey=True)
 
 # Loop over each dataset and its corresponding axis
 for ax, (results, title) in zip(axes, datasets):
@@ -442,11 +479,11 @@ for ax, (results, title) in zip(axes, datasets):
             label='Pareto Front')
     
     # Set the x-axis label and subplot title
-    ax.set_xlabel(r'1 - Privacy Leakage', fontsize=12)
+    ax.set_xlabel(r'1 - Privacy Leakage', fontsize=14)
     ax.set_title(title, fontsize=16)
 
 # Label y-axis only for the leftmost subplot
-axes[0].set_ylabel('Accuracy', fontsize=12)
+axes[0].set_ylabel('Accuracy', fontsize=14)
 
 # # Add legends for each subplot
 # axes[0].legend(
@@ -459,9 +496,15 @@ axes[0].set_ylabel('Accuracy', fontsize=12)
 #     bbox_to_anchor=(0.63, 1.019)  # x and y offset values; adjust these numbers to move the legend
 # )
 
-for ax in axes:
-    ax.legend(title='Method', fontsize=9.5, title_fontsize=10.5, frameon=True, framealpha=1)
+for i, ax in enumerate(axes):
+    if i == 1:
+        ax.legend(fontsize=9.8, frameon=True, framealpha=1, loc="lower left")
+    else:
+        ax.legend(fontsize=9.8, frameon=True, framealpha=1)
 
 plt.tight_layout()
 plt.savefig('combined_pareto_front_plots.pdf', bbox_inches='tight')
 # plt.show()
+
+
+
