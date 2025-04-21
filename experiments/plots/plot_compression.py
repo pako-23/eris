@@ -40,33 +40,25 @@ def setup_icml_plot(two_column=False):
     
     return (figure_width, figure_width * 0.85)
     
-# Use a style suitable for publication quality figures
-# plt.style.use('seaborn-whitegrid')
+# Data
+omega = np.array([85, 170, 340, 700, 1050])
+mia_accuracy_mean = np.array([0.686704, 0.684752, 0.678336, 0.643312, 0.635056])
+mia_accuracy_std = np.array([0.018281875, 0.022957887, 0.015947626, 0.010695686, 0.01948196]) / np.sqrt(5)
 
-# Data from the table
-# splits = np.array([5, 10, 15, 20, 25, 30, 35, 40, 45, 50])
-# mia_accuracy_mean = np.array([0.65056, 0.588, 0.568587, 0.56428, 0.559872, 0.55488, 0.55216, 0.5501, 0.549315556, 0.548416])
-# mia_accuracy_std = np.array([0.037664285, 0.032048963, 0.025793, 0.025114, 0.023035, 0.019464402, 0.017709, 0.017311384, 0.015499266, 0.016691])  / np.sqrt(5)
-# Updated data
-splits = np.array([10, 20, 30, 40, 50])
-mia_accuracy_mean = np.array([0.76744, 0.75568, 0.742666667, 0.7196, 0.707504])
-mia_accuracy_std = np.array([0.018489521, 0.016100484, 0.021330833, 0.026990072, 0.026983107]) / np.sqrt(5)
-# Minimum leakage and its std
-# min_leakage = 0.5456
-# min_leakage_std = 0.013994  / np.sqrt(5)
+# Minimum leakage and its std (same as previous plot) # 0.6544	0.024344198
 min_leakage = 0.6544
 min_leakage_std = 0.024344198 / np.sqrt(5)
 
 # Set up the plot
 fig_size = setup_icml_plot(two_column=True)
 
-# Create the figure and axis objects
+# Create the figure and axis
 fig, ax = plt.subplots(figsize=(5, 4))
 
 # Plot MIA Accuracy with error bars
-ax.errorbar(splits, mia_accuracy_mean, yerr=mia_accuracy_std, fmt='o-', 
+ax.errorbar(omega, mia_accuracy_mean, yerr=mia_accuracy_std, fmt='o-', 
             capsize=5, label='_nolegend_', color='black', markersize=4, linewidth=1.2, alpha=0.4)
-ax.plot(splits, mia_accuracy_mean, 'o-', color='black', markersize=4, label='ERIS', linewidth=1.2)
+ax.plot(omega, mia_accuracy_mean, 'o-', color='black', markersize=4, label='ERIS', linewidth=1.2)
 
 # Plot the dashed horizontal line for minimum leakage
 ax.axhline(min_leakage, color='green', linestyle='--', linewidth=1.2, label='Min. Leakage')
@@ -76,14 +68,13 @@ ax.axhspan(min_leakage - min_leakage_std, min_leakage + min_leakage_std,
            facecolor='green', alpha=0.2, )#label='Minimum Leakage Std')
 
 # Labeling and formatting
-ax.set_xlabel('Number of Aggregators', fontsize=14)
+ax.set_xlabel(r'$\omega$', fontsize=14)
 ax.set_ylabel('MIA Accuracy', fontsize=14)
-ax.set_title('Privacy Leakage vs. Number of Aggregators', fontsize=16)
-# set y-lim
-ax.set_ylim(0.625, 0.78)
+ax.set_title('Privacy Leakage vs. Shifted Compression', fontsize=16)
+# ax.set_ylim(0.625, 0.78)
 ax.legend(fontsize=12)
 plt.tight_layout()
 
-# Display the plot
-# plt.show()
-plt.savefig('plots-n_splits_cifar_same.pdf', bbox_inches='tight')
+# Save the plot as PDF
+file_path = 'fig_compression.pdf'
+plt.savefig(file_path, bbox_inches='tight')
