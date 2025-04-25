@@ -75,7 +75,7 @@ dataset_imdb = {
         'priv_leak': [0.552, 0.5136, 0.501090909, 0.500952381,0.501209302, 0.506447059],
         'priv_leak_std': [0.056316566, 0.034834466, 0.015833848, 0.018349097,0.009291156, 0.009237924] / np.sqrt(5)
     },
-    'Pruning (p=0.3)': {
+    'PriPrune (p=0.3)': {
         'accuracy':      [0.535192, 0.559248, 0.60318, 0.61198, 0.62008, 0.68945],
         'accuracy_std':  [0.027913414, 0.034909982, 0.057080648, 0.070242491, 0.059051008, 0.019244789] / np.sqrt(5),
         'priv_leak':     [0.704, 0.6576, 0.598181818, 0.564296788, 0.56627907, 0.542],
@@ -114,7 +114,7 @@ dataset_mnist = {
         'priv_leak': [0.714666667, 0.5768, 0.568727273, 0.532761905,0.521581395, 0.512894118],
         'priv_leak_std': [0.018086213, 0.018312837, 0.016876802, 0.005981074,0.008442085, 0.007725964] / np.sqrt(5)
     },
-    'Pruning (p=0.01)': {
+    'PriPrune (p=0.01)': {
         'accuracy':      [0.47886, 0.70604, 0.84808, 0.87772, 0.87012, 0.86378],
         'accuracy_std':  [0.083292199, 0.036687905, 0.00306294, 0.001506519, 0.001718604, 0.001875527] / np.sqrt(5),
         'priv_leak':     [0.772, 0.6832, 0.635636364, 0.569904762, 0.545395349, 0.526541176],
@@ -153,7 +153,7 @@ dataset_cifar = {
         'priv_leak': [0.698666667, 0.6416, 0.582545455, 0.556761905,0.529395349, 0.520658824],
         'priv_leak_std': [0.018571184, 0.01254751, 0.021034407, 0.010935391,0.007356487, 0.005478666] / np.sqrt(5)
     },
-    'Pruning (p=0.01)': {  # p 0.01
+    'PriPrune (p=0.01)': {  # p 0.01
         'accuracy': [0.1374, 0.28418, 0.29568, 0.29386, 0.28696, 0.27988],
         'accuracy_std': [0.020517017, 0.003927035, 0.00699068, 0.005035315,0.005140661, 0.003202124] / np.sqrt(5),
         'priv_leak': [0.748, 0.7536, 0.698181818, 0.637333333,0.570883721, 0.532188235],
@@ -178,8 +178,8 @@ baseline_colors = {
     # 'fedavg+DP':   'tab:green',
     'FedAvg ($\\varepsilon$, $\\delta$)-LDP': 'tab:green',
     'SoteriaFL':     'tab:red',
-    'Pruning (p=0.3)':  'tab:purple',
-    'Pruning (p=0.01)': mcolors.to_rgba('tab:purple', alpha=0.5),
+    'PriPrune (p=0.3)':  'tab:purple',
+    'PriPrune (p=0.01)': mcolors.to_rgba('tab:purple', alpha=0.5),
     'Min. Leakage': 'tab:gray',
 }
 
@@ -309,7 +309,7 @@ def plot_dataset(ax, dataset_name, data_dict):
     elif dataset_name == 'CIFAR-10':
         ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
     
-    ax.set_xlabel('1 - Privacy Leakage', fontsize=14)
+    ax.set_xlabel('1 - MIA Accuracy', fontsize=14)
     # ax.set_ylabel('Accuracy', fontsize=14)
 
 ###############################################################################

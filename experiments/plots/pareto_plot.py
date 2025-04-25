@@ -93,7 +93,7 @@ results_4samples =  {
         'priv_leak': [0.273253333, 0.306533333, 0.313333333, 0.329573333,0.341333333, 0.333948369, 0.345626667],
         'priv_leak_std': [0.049876976, 0.029545054, 0.033730962, 0.033970173,0.008399788, 0.011153863, 0.012688234] / np.sqrt(5)
     },
-    'Pruning': {  
+    'PriPrune': {  
         'accuracy': [0.27118, 0.24448, 0.21568, 0.18596, 0.1374, 0.1105, 0.10088],
         'accuracy_std': [0.012046477, 0.010036214, 0.035119875, 0.021529756,0.020517017, 0.012233397, 0.003614084] / np.sqrt(5),
         'priv_leak': [0.152, 0.146666667, 0.157333333, 0.222666667,0.252, 0.296, 0.326666667],
@@ -121,7 +121,7 @@ results_8samples = {
         'priv_leak': [0.333824, 0.366982809, 0.3867, 0.383981618,0.387584, 0.377904, 0.379608],
         'priv_leak_std': [0.022962169, 0.021002613, 0.034668222, 0.030906831,0.029202231, 0.020603962, 0.028817444] / np.sqrt(5)
     },
-    'Pruning': { 
+    'PriPrune': { 
         'accuracy': [0.32784, 0.30058, 0.28418, 0.19828, 0.15196, 0.14, 0.12766],
         'accuracy_std': [0.00608296, 0.023030884, 0.003927035, 0.01894966,0.026683223, 0.031823828, 0.025228603] / np.sqrt(5),
         'priv_leak': [0.2416, 0.2384, 0.2464, 0.3256, 0.364, 0.3736, 0.3832],
@@ -149,7 +149,7 @@ results_16samples = {
         'priv_leak': [0.411076364, 0.445476364, 0.454138182, 0.453563636,0.455076364, 0.458150056, 0.460094545],
         'priv_leak_std': [0.024482387, 0.017728451, 0.007673103, 0.007308602,0.011015376, 0.014533019, 0.011097896] / np.sqrt(5)
     },
-    'Pruning': {  
+    'PriPrune': {  
         'accuracy': [0.3443, 0.3267, 0.29568, 0.20984, 0.15076, 0.12792, 0.11552],
         'accuracy_std': [0.010382871, 0.0079307, 0.00699068, 0.017651697,0.024869869, 0.021711693, 0.018046761] / np.sqrt(5),
         'priv_leak': [0.298545455, 0.296363636, 0.301818182, 0.401454545,0.442545455, 0.448363636, 0.455636364],
@@ -168,7 +168,7 @@ results_16samples = {
 baseline_colors = {
     'FedAvg': 'tab:orange',
     'ERIS':   'tab:blue',
-    'Pruning': 'tab:purple',
+    'PriPrune': 'tab:purple',
     'SoteriaFL': 'tab:red',
 }
 
@@ -230,14 +230,14 @@ def compute_pareto_front(points):
 pareto_mask = compute_pareto_front(all_points)
 pareto_points = all_points[pareto_mask]
 
-# Sort Pareto front points by x-value (i.e. 1 - Privacy Leakage) for a smooth connected line
+# Sort Pareto front points by x-value (i.e. 1 - MIA Accuracy) for a smooth connected line
 pareto_points = pareto_points[np.argsort(pareto_points[:, 0])]
 
 # Plot the Pareto front connecting line (black solid line)
 ax.plot(pareto_points[:, 0], pareto_points[:, 1], color='k', linestyle='-', linewidth=1.5, label='Pareto Front')
 
 # Axis labels and legend (formatted for a scientific paper)
-ax.set_xlabel('1 - Privacy Leakage', fontsize=12)
+ax.set_xlabel('1 - MIA Accuracy', fontsize=12)
 ax.set_ylabel('Accuracy', fontsize=12)
 ax.legend(title='Method', fontsize=10, title_fontsize=11, frameon=True, framealpha=1)
 # legend.get_frame().set_facecolor('grey')
@@ -306,14 +306,14 @@ def compute_pareto_front(points):
 pareto_mask = compute_pareto_front(all_points)
 pareto_points = all_points[pareto_mask]
 
-# Sort Pareto front points by x-value (i.e. 1 - Privacy Leakage) for a smooth connected line
+# Sort Pareto front points by x-value (i.e. 1 - MIA Accuracy) for a smooth connected line
 pareto_points = pareto_points[np.argsort(pareto_points[:, 0])]
 
 # Plot the Pareto front connecting line (black solid line)
 ax.plot(pareto_points[:, 0], pareto_points[:, 1], color='k', linestyle='-', linewidth=1.5, label='Pareto Front')
 
 # Axis labels and legend (formatted for a scientific paper)
-ax.set_xlabel('1 - Privacy Leakage', fontsize=12)
+ax.set_xlabel('1 - MIA Accuracy', fontsize=12)
 ax.set_ylabel('Accuracy', fontsize=12)
 ax.legend(title='Method', fontsize=10, title_fontsize=11, frameon=True, framealpha=1)
 # legend.get_frame().set_facecolor('white')
@@ -382,14 +382,14 @@ def compute_pareto_front(points):
 pareto_mask = compute_pareto_front(all_points)
 pareto_points = all_points[pareto_mask]
 
-# Sort Pareto front points by x-value (i.e. 1 - Privacy Leakage) for a smooth connected line
+# Sort Pareto front points by x-value (i.e. 1 - MIA Accuracy) for a smooth connected line
 pareto_points = pareto_points[np.argsort(pareto_points[:, 0])]
 
 # Plot the Pareto front connecting line (black solid line)
 ax.plot(pareto_points[:, 0], pareto_points[:, 1], color='k', linestyle='-', linewidth=1.5, label='Pareto Front')
 
 # Axis labels and legend (formatted for a scientific paper)
-ax.set_xlabel('1 - Privacy Leakage', fontsize=12)
+ax.set_xlabel('1 - MIA Accuracy', fontsize=12)
 ax.set_ylabel('Accuracy', fontsize=12)
 ax.legend(title='Method', fontsize=10, title_fontsize=11, frameon=True, framealpha=1)
 # legend.get_frame().set_facecolor('white')
@@ -479,7 +479,7 @@ for ax, (results, title) in zip(axes, datasets):
             label='Pareto Front')
     
     # Set the x-axis label and subplot title
-    ax.set_xlabel(r'1 - Privacy Leakage', fontsize=14)
+    ax.set_xlabel(r'1 - MIA Accuracy', fontsize=14)
     ax.set_title(title, fontsize=16)
 
 # Label y-axis only for the leftmost subplot
