@@ -1,3 +1,16 @@
+"""
+This script defines the ERIS client node used in decentralized federated learning experiments.
+Each client performs local model training with optional differential privacy (DP), pruning, or sparsification,
+and evaluates privacy leakage through membership inference attacks (MIAs) depending on the experiment configuration.
+
+Clients communicate with aggregators and support multiple privacy-preserving mechanisms, 
+gradient compression techniques (e.g., shifted-k sparsification), and audit tools.
+Designed to be launched alongside coordinator.py for full experiment orchestration.
+
+This is code is set to be used locally, but it can be used in a distributed environment by changing the IP address of 
+each client.
+"""
+
 #!/usr/bin/env python3
 
 import numpy as np

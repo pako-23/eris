@@ -1,9 +1,16 @@
+"""
+This module defines a collection of neural network models (LeNet-5, ResNet-9, MLP, Transformer, LinearModel)
+suitable for both classification and regression tasks on various datasets (e.g., MNIST, CIFAR-10, tabular).
+It includes training functions with and without differential privacy via Opacus, a test evaluation routine, 
+and utilities for instantiating models with dataset-specific arguments.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from math import prod
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 import opacus # type: ignore
 from torch.utils.data import DataLoader
 from transformers import get_scheduler # type: ignore

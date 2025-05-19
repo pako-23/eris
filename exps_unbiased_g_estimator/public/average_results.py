@@ -1,3 +1,12 @@
+"""
+This script loads evaluation metrics from multiple test folds of a federated learning experiment,
+computes the mean and standard deviation for each metric (e.g., accuracy, F1-score), and saves
+the aggregated results to an Excel file.
+
+It supports dataset-specific renaming and cleans up temporary files.
+To run, specify the strategy, dataset, experiment index, and optional scaling flag.
+"""
+
 import numpy as np
 import os
 import pandas as pd

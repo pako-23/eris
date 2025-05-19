@@ -1,3 +1,22 @@
+"""
+DLG/iDLG Evaluation with Model Partitioning.
+
+This script evaluates the Deep Leakage from Gradients (DLG) and improved DLG (iDLG) attacks under different sparsity conditions.
+It supports MNIST, CIFAR10, CIFAR100, and LFW datasets, and includes:
+- LeNet model initialization and gradient computation
+- Simulated gradient pruning via random subset selection (controlled by `splits`=Number of aggregators)
+- Random reconstructions for baseline comparison
+- Image reconstruction using DLG and iDLG
+- Evaluation using MSE, PSNR, SSIM, and LPIPS metrics
+- Results saving and metric aggregation into Excel files
+
+Optional components include:
+- Download and processing of the LFW dataset
+- Dataset wrapping for LFW image structure
+- LPIPS perceptual similarity metric
+- Gradient sparsity logging
+"""
+
 import time
 import os
 import pandas as pd
@@ -11,7 +30,6 @@ from torchvision import datasets, transforms
 import pickle
 import PIL.Image as Image
 
-import os
 import sys
 import urllib.request
 import tarfile

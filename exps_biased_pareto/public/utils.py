@@ -1,3 +1,17 @@
+"""
+This module provides utility functions and classes to support federated learning experiments.
+It includes:
+- Device and seed management
+- Folder and checkpoint handling
+- Training and evaluation plotting
+- Local Differential Privacy (LDP) clipping and noise mechanisms
+- Metrics aggregation across clients
+- Auditing functions for differential privacy (DP) leakage
+- Visualization tools (metrics over rounds, gradients, histograms)
+
+Used by both server and client components in the Flower FL framework.
+"""
+
 import pandas as pd
 import numpy as np
 import scipy
@@ -8,15 +22,9 @@ import torch
 import os
 import csv
 from sklearn.metrics import accuracy_score, f1_score
-from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
-from flwr.common import (
-    NDArrays,
-    ndarrays_to_parameters,
-    parameters_to_ndarrays,
-)
+from flwr.common import NDArrays
 
 import sys
-import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)

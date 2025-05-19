@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from typing import List, Tuple, Union, Optional, Dict
+from typing import List, Tuple
 from torch.utils.data import random_split, Subset
 from torch.utils.data import DataLoader
 import sys
@@ -11,7 +11,6 @@ import time
 import copy
 import opacus # type: ignore
 from functools import reduce
-import concurrent.futures
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)

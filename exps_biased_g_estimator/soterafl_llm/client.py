@@ -1,13 +1,12 @@
 """
-This code creates a Flower client that can be used to train a model locally and share the updated 
-model with the server. When it is started, it connects to the Flower server and waits for instructions.
-If the server sends a model, the client trains the model locally and sends back the updated model.
-If abilitated, at the end of the training the client evaluates the last model, and plots the 
-metrics during the training.
+This script defines a Flower client for federated learning experiments reflecting SoteriaFL implementation
+with LLMs. Each client locally trains a model using the received global parameters, add differential privacy and 
+perform a shifted compression of the gradients before sending it to the server for aggregation. The client 
+also evaluates the model's performance and privacy leakage (MIA).
+It can be deployed locally or across distributed systems by adjusting `server_address`.
 
-This is code is set to be used locally, but it can be used in a distributed environment by changing the server_address.
-In a distributed environment, the server_address should be the IP address of the server, and each client machine should 
-have this code running.
+Clients are assigned dataset shards, train models locally, and optionally evaluate privacy leakage
+using canary samples. After training, results and plots are saved to track performance and leakage.
 """
 
 # Arguments
@@ -55,7 +54,6 @@ import opacus # type: ignore
 import gc
 
 from torch.utils.data import DataLoader
-from transformers import get_scheduler
 from torch.nn.functional import cross_entropy
 from datasets import concatenate_datasets, Dataset, load_from_disk # type: ignore
 from transformers import ( # type: ignore

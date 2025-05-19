@@ -1,3 +1,10 @@
+"""
+This script downloads and preprocesses various benchmark datasets (image, tabular, time series, and text) 
+into PyTorch-compatible formats. Datasets include MNIST, CIFAR-10, Fashion-MNIST, Adult, Breast Cancer, 
+Diabetes, Airline Passengers, LSST, and IMDb. Processed datasets are saved as `.pt` files or HuggingFace 
+datasets under the `datasets/` directory for streamlined use in machine learning experiments.
+"""
+
 #!/usr/bin/env python3
 
 # Libraries

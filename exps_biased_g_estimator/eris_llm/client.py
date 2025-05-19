@@ -1,3 +1,16 @@
+"""
+This script defines the ERIS client node used in decentralized federated learning experiments (with LLMs).
+Each client performs local model training with optional differential privacy (DP), pruning, or sparsification,
+and evaluates privacy leakage through membership inference attacks (MIAs) depending on the experiment configuration.
+
+Clients communicate with aggregators and support multiple privacy-preserving mechanisms, 
+gradient compression techniques (e.g., shifted-k sparsification), and audit tools.
+Designed to be launched alongside coordinator.py for full experiment orchestration.
+
+This is code is set to be used locally, but it can be used in a distributed environment by changing the IP address of 
+each client.
+"""
+
 #!/usr/bin/env python3
 
 # Arguments
@@ -60,13 +73,10 @@ from eris import ErisClient, ShiftedCompression
 import torch
 import torch.nn.functional as F
 from torch.nn.functional import cross_entropy
-from torch.utils.data import random_split, Subset
-from torch.utils.data import DataLoader
-from datasets import concatenate_datasets, Dataset, load_from_disk # type: ignore
+from datasets import concatenate_datasets, load_from_disk # type: ignore
 import argparse
 import time
 import copy
-import opacus # type: ignore
 from transformers import ( # type: ignore
     DistilBertForSequenceClassification,
     Trainer,
@@ -79,7 +89,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = device  # select the gpu
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
-from public import models
 from public import utils
 from public import config as cfg
 

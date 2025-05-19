@@ -1,9 +1,4 @@
-import sys
-import os
 from transformers import TrainingArguments # type: ignore
-
-
-# ADD DP TO REACH 0 MIA ACC
 
 # Training settings (for everyone)
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"

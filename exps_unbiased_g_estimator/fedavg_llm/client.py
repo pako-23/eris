@@ -1,13 +1,17 @@
 """
-This code creates a Flower client that can be used to train a model locally and share the updated 
-model with the server. When it is started, it connects to the Flower server and waits for instructions.
-If the server sends a model, the client trains the model locally and sends back the updated model.
-If abilitated, at the end of the training the client evaluates the last model, and plots the 
-metrics during the training.
+This script defines a Flower client for federated learning experiments involving privacy auditing,
+gradient sparsification, and differential privacy. Each client locally trains a LLM using the
+received global parameters and reports updated parameters to the server.
 
-This is code is set to be used locally, but it can be used in a distributed environment by changing the server_address.
-In a distributed environment, the server_address should be the IP address of the server, and each client machine should 
-have this code running.
+Features:
+- Supports membership inference attacks (MIAs) via white-box and black-box audit scores.
+- Integrates with Opacus (or a custom lighter version) to enable local differential privacy (LDP) training.
+- Allows pruning and k-random sparsification (e.g., for PriPrune defenses).
+- Collects and saves per-round training metrics and privacy leakage estimates.
+- Can be deployed locally or across distributed systems by adjusting `server_address`.
+
+Clients are assigned dataset shards, train models locally, and optionally evaluate privacy leakage
+using canary samples. After training, results and plots are saved to track performance and leakage.
 """
 
 # Arguments

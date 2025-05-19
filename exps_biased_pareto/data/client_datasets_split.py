@@ -1,9 +1,14 @@
+"""
+This script splits a dataset into multiple client-specific subsets for federated learning experiments. 
+It handles various datasets by downloading and loading them as needed.
+"""
+
 # Libraries
 # import experiments.data.download_datasets as
 import download_datasets
 import argparse
 import torch
-from torch.utils.data import Subset, DataLoader
+from torch.utils.data import Subset
 from datasets import load_from_disk
 import os
 import warnings

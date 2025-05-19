@@ -1,29 +1,31 @@
 """
-This code implements the FedAvg, when it starts, the server waits for the clients to connect. When the established number 
-of clients is reached, the learning process starts. The server sends the model to the clients, and the clients train the 
-model locally. After training, the clients send the updated model back to the server. Then client models are aggregated 
-with FedAvg. The aggregated model is then sent to the clients for the next round of training. The server saves the model 
-and metrics after each round.
+This script implements a Flower-based Federated Learning server using the FedAvg strategy.
+The server coordinates the training process by:
+- Waiting for clients to connect.
+- Distributing the current global model to clients.
+- Aggregating client updates after local training.
+- Saving model checkpoints and tracking evaluation metrics (e.g., accuracy, F1, privacy leakage).
 
-This is code is set to be used locally, but it can be used in a distributed environment by changing the server_address.
-In a distributed environment, the server_address should be the IP address of the server, and each client machine should 
-run the appopriate client code (client.py).
+Key Features:
+- Supports custom aggregation and evaluation logic.
+- Tracks and logs privacy metrics including membership inference attack (MIA) success and audit estimates.
+- Automatically saves the best-performing model and generates training plots.
+- Designed for both local and distributed deployments (server IP address configurable).
 
+This server must be started before clients connect. Compatible with client.py or FlowerClient-based implementations.
 """
 
 # Libraries
 import flwr as fl
-import copy
 import numpy as np
 from typing import List, Tuple, Union, Optional, Dict
 from flwr.common import Parameters, Scalar, Metrics
 from flwr.server.client_proxy import ClientProxy
-from datasets import Dataset, load_from_disk # type: ignore
+from datasets import load_from_disk # type: ignore
 from flwr.common import FitRes
 import argparse
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 from logging import WARNING
@@ -32,31 +34,25 @@ from collections import OrderedDict
 import json
 import time
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from flwr.common import (
-    EvaluateIns,
     EvaluateRes,
     FitRes,
-    FitIns,
     Parameters,
     Scalar,
     ndarrays_to_parameters,
     parameters_to_ndarrays,
 )
-from flwr.common import NDArray, NDArrays
+from flwr.common import NDArrays
 from functools import reduce
 from transformers import ( # type: ignore
     DistilBertForSequenceClassification,
     Trainer,
-    TrainingArguments,
 )
 
 import sys
-import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
-from public import models
 from public import utils
 from public import config as cfg
 

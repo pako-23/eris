@@ -1,13 +1,18 @@
+"""
+This script splits a dataset into multiple client-specific subsets for federated learning experiments. 
+It handles various datasets by downloading and loading them as needed.
+"""
+
+
 # Libraries
 # import experiments.data.download_datasets as
 import download_datasets
 import argparse
 import torch
-from torch.utils.data import Subset, DataLoader
+from torch.utils.data import Subset
 from datasets import load_from_disk
 import os
 import warnings
-
 warnings.filterwarnings("ignore")
 
 
@@ -246,6 +251,3 @@ if args.dataset == "imdb":
 else:
     IID_split_and_save_torch(X_train, args.n_clients, seed=args.seed)
 
-
-# -----  2) Non-IID-scenario -----
-# so far i dont think we need to implement this, but we can do it later if needed

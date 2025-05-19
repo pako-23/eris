@@ -1,5 +1,3 @@
-# import sys
-# import os
 from transformers import TrainingArguments # type: ignore
 
 
