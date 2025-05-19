@@ -1,4 +1,4 @@
-# ERIS
+# ERIS: Enhancing Privacy and Communication Efficiency in Decentralized Federated Learning
 
 ERIS is a decentralized Federated Learning (FL) framework that jointly addresses the challenges of communication bottlenecks and gradient-based privacy attacks without sacrificing model accuracy. By partitioning model updates across multiple client-side aggregators and employing a distributed shifted compression mechanism, ERIS eliminates the server bottleneck, provably converges under standard assumptions, and bounds mutual information leakage—establishing a new Pareto frontier for scalable, privacy-preserving FL on large models.
 
@@ -29,8 +29,8 @@ ERIS is a decentralized Federated Learning (FL) framework that jointly addresses
 
 ## ⚙️ Configuration
 Experiments are organized under method-specific folders: `eris/`, `fedavg/`, `soteriafl/`, and their respective variations with LLMs. Each contains a `public/config.py` and a `run.sh` script. Additionally, dedicated `exps_*` folders group privacy and attack scenarios:
-- `exps_unbiased_g_estimator` and `exps_unbiased_pareto`: Membership Inference Attacks (MIAs) with unbiased gradient estimator (\(\mathbb{E}_t[\tilde{\mathbf{g}}_k^t]\!=\!\nabla f_k(\mathbf{x^t})\)); varying local sample counts and privacy mechanism strengths to study privacy–utility trade-offs and construct Pareto fronts.
-- `exps_biased_g_estimator` and `exps_biased_pareto`: MIAs with biased gradient estimator (\(\mathbb{E}_t[\tilde{\mathbf{g}}_k^t]\!=\!\nabla f_k(\mathbf{x^t}) + C\)); analogous analyses under biased gradients.
+- `exps_unbiased_g_estimator` and `exps_unbiased_pareto`: Membership Inference Attacks (MIAs) with unbiased gradient estimator $\mathbb{E}_t[\tilde{\mathbf{g}}_k^t]\!=\!\nabla f_k(\mathbf{x^t})$; varying local sample counts and privacy mechanism strengths to study privacy–utility trade-offs and construct Pareto fronts.
+- `exps_biased_g_estimator` and `exps_biased_pareto`: MIAs with biased gradient estimator $\mathbb{E}_t[\tilde{\mathbf{g}}_k^t]\!=\!\nabla f_k(\mathbf{x^t}) + C$; analogous analyses under biased gradients.
 - `exps_dra`: Data Reconstruction Attacks (DRAs) analysis.
 
 Key configurable parameters in each MIA method folder’s `public/config.py` include:
