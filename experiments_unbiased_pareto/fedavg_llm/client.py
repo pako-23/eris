@@ -39,11 +39,12 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-# if args.id % 2 == 0:
-#     device = '2'
+# if args.id < 20:
+#     device = '0'
 # else:
-#     device = '3'
-device = str(args.id % 4)
+#     device = '1'
+# # device = str(args.id % 2)
+device = '2'  # set to 0 for all clients
 
 # Import Libraies
 from collections import OrderedDict
@@ -53,6 +54,7 @@ import numpy as np
 import copy
 import opacus # type: ignore
 import gc
+import time
 
 from torch.utils.data import DataLoader
 from transformers import get_scheduler
@@ -230,7 +232,11 @@ class FlowerClient(fl.client.NumPyClient):
         
 
     def fit(self, params_in, config):
-        self.set_parameters(params_in)  
+        self.set_parameters(params_in)
+        # self.model.to(self.trainer.args.device)
+        # self.trainer.model = self.model  
+        
+        # time.sleep(3.0*self.client_id)  # Simulate some delay for the client to process the incoming model
 
         # privacy auditing
         if self.privacy_audit:
@@ -313,8 +319,8 @@ class FlowerClient(fl.client.NumPyClient):
                 params_out = self.get_parameters(config)
 
             # normalize client update vector
-            client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in)
-            client_update = client_update / np.linalg.norm(client_update)
+            # client_update = utils.parameters_to_1d(params_out) - utils.parameters_to_1d(params_in)
+            # client_update = client_update / np.linalg.norm(client_update)
 
             # compute scores for each canary, used to predict membership            
             scores = []
@@ -434,7 +440,9 @@ class FlowerClient(fl.client.NumPyClient):
                 params_out = self.get_parameters(config)
         
         gc.collect() 
-        torch.cuda.empty_cache() 
+        torch.cuda.empty_cache()
+        # self.model.cpu()
+        # self.trainer.model.cpu()
         if self.client_id == 1:
             print(f"\033[91mTraining Round: {config["current_round"]}\033[0m")
         return params_out, self.num_examples["train"], {}
@@ -443,10 +451,14 @@ class FlowerClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
         self.trainer.model = self.model
+        # self.model.to(self.trainer.args.device)
         eval_results = self.trainer.evaluate(eval_dataset=self.val_data)
         loss = eval_results.get("eval_loss", None)
         accuracy = eval_results.get("eval_accuracy", None)
         f1_score = eval_results.get("eval_f1", None)
+        
+        # self.model.cpu()
+        # self.trainer.model.cpu()
         
         # save loss and accuracy client
         utils.save_client_metrics(config["current_round"], loss, accuracy, f1_score, client_id=self.client_id,
@@ -736,7 +748,7 @@ def main(args)->None:
                         config=config, 
                         exp_n=args.exp_n                        
                         ).to_client()
-    fl.client.start_client(server_address="[::]:8098", client=client, max_wait_time=40) # local host
+    fl.client.start_client(server_address="[::]:8098", client=client, max_wait_time=120) # local host
     
     # read saved data and plot
     utils.plot_client_metrics(args.id, config, show=False)

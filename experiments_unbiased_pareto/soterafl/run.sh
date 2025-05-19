@@ -55,48 +55,80 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 0 5); do
 
-    # Cycle through the folds
-    for fold in $(seq 1 $k_folds); do
-        if [ $k_folds -gt 1 ]; then
-            echo -e "\n\033[1;36mFold $fold\033[0m"
-        fi
-        
-        # Creating dataset
-        cd ../data
-        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
-        cd ../soterafl
+for exp_n in $(seq 5 5); do
 
-        echo -e "\n\033[1;36mStarting server with model \033[0m\n"
+    for scaling_dp in $(seq 0 0); do
+        echo -e "\n\033[1;36mStarting experiment $exp_n with scaling_dp $scaling_dp\033[0m\n"
+        # Cycle through the folds
 
-        python server.py --fold $fold --dataset $dataset_name --exp_n $exp_n &
-        sleep 2  # Sleep for 2s to give the server enough time to start
+        # Cycle through the folds
+        for fold in $(seq 4 $k_folds); do
+            if [ $k_folds -gt 1 ]; then
+                echo -e "\n\033[1;36mFold $fold\033[0m"
+            fi
+            
+            # Creating dataset
+            cd ../data
+            python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+            cd ../soterafl
 
-        for i in $(seq 1 $n_clients); do
-            echo "Starting client ID $i"
-            python client.py --id "$i" --dataset $dataset_name --exp_n $exp_n &
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 1
+
+            echo -e "\n\033[1;36mStarting server with model \033[0m\n"
+
+            python server.py --fold $fold --dataset $dataset_name --exp_n $exp_n &
+            sleep 2  # Sleep for 2s to give the server enough time to start
+
+            for i in $(seq 1 $n_clients); do
+                echo "Starting client ID $i"
+                python client.py --id "$i" --dataset $dataset_name --exp_n $exp_n --scaling_dp $scaling_dp &
+            done
+
+            # This will allow you to use CTRL+C to stop all background processes
+            trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM
+            # Wait for all background processes to complete
+            wait
+
+            # Clean up
+            echo "Fold completed correctly"
+            pkill -9 -f server.py
+            pkill -9 -f client.py
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+
+
         done
 
-        # This will allow you to use CTRL+C to stop all background processes
-        trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM
-        # Wait for all background processes to complete
-        wait
+        # Aggregate results
+        if [ $k_folds -gt 1 ]; then
+            echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
+            cd ../public
+            python average_results.py --strategy "soterafl" --dataset $dataset_name --exp_n $exp_n --scaling_dp $scaling_dp
+            sleep 1
+        fi
 
-        # Clean up
-        echo "Fold completed correctly"
-        pkill -9 -f server.py
-        pkill -9 -f client.py
+        echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
+
     done
-
-    # Aggregate results
-    if [ $k_folds -gt 1 ]; then
-        echo -e "\n\033[1;36mAveraging results from cross-validation...\033[0m\n"
-        cd ../public
-        python average_results.py --strategy "soterafl" --dataset $dataset_name --exp_n $exp_n
-        sleep 1
-    fi
-
-    echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
 
 done

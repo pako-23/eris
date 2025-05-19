@@ -53,7 +53,8 @@ class FlowerClient(fl.client.NumPyClient):
                  k_plus: float = 1 / 3, 
                  k_min: float = 1 / 3,
                  config: dict = {'dataset':'mnist', 'batch':64},
-                 exp_n: int = 0
+                 exp_n: int = 0,
+                 scaling_dp: int = 0
                 ):
         
         # Define the client
@@ -78,6 +79,7 @@ class FlowerClient(fl.client.NumPyClient):
         self.acc_accuracy_mia = -1
         self.config = config
         self.acc_scores = None
+        self.scaling_dp = scaling_dp
         
         # initialize reference vector
         self.reference_s = []
@@ -122,6 +124,7 @@ class FlowerClient(fl.client.NumPyClient):
                 epochs=int(self.config['epochs']), 
                 accountant='rdp',  
             ) 
+            # self.sigma = self.config['sigma'][self.scaling_dp]
 
             self.privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
             if cfg.privacy_audit:
@@ -130,7 +133,8 @@ class FlowerClient(fl.client.NumPyClient):
                     optimizer=self.optimizer,
                     data_loader=self.subsampled_train_loader,
                     noise_multiplier=self.sigma,
-                    max_grad_norm=cfg.sensitivity,
+                    # max_grad_norm=self.config['sensitivity'][self.scaling_dp],
+                    max_grad_norm=cfg.sensitivity
                     )
             else:
                 self.model, self.optimizer, self.train_loader = self.privacy_engine.make_private(
@@ -138,7 +142,8 @@ class FlowerClient(fl.client.NumPyClient):
                     optimizer=self.optimizer,
                     data_loader=self.train_loader,
                     noise_multiplier=self.sigma,
-                    max_grad_norm=cfg.sensitivity,
+                    # max_grad_norm=self.config['sensitivity'][self.scaling_dp],
+                    max_grad_norm=cfg.sensitivity
                     )           
             
             if client_id == 1:
@@ -172,7 +177,9 @@ class FlowerClient(fl.client.NumPyClient):
                     self.criterion, 
                     self.sigma, 
                     self.config["epochs"], 
-                    self.client_id
+                    self.client_id,
+                    # self.config["sensitivity"][self.scaling_dp]
+                    cfg.sensitivity
                     )
             # else:
             #     """
@@ -270,7 +277,9 @@ class FlowerClient(fl.client.NumPyClient):
                     self.criterion, 
                     self.sigma, 
                     self.config["epochs"], 
-                    self.client_id
+                    self.client_id,
+                    # self.config["sensitivity"][self.scaling_dp]
+                    cfg.sensitivity
                     )
             # else:
             #    """
@@ -569,6 +578,12 @@ def parse_args():
         help="exp number",
         default=0,
     )
+    parser.add_argument(
+        "--scaling_dp",
+        type=int,
+        help="scaling factor for differential privacy",
+        default=0,
+    )
     
     return parser.parse_args()
     
@@ -643,9 +658,10 @@ def main()->None:
                         k_plus=cfg.k_plus,
                         k_min=cfg.k_min,
                         config=config, 
-                        exp_n=args.exp_n                        
+                        exp_n=args.exp_n,
+                        scaling_dp=args.scaling_dp,                        
                           ).to_client()
-    fl.client.start_client(server_address="[::]:8098", client=client) # local host
+    fl.client.start_client(server_address="[::]:8088", client=client) # local host
     
     # read saved data and plot
     utils.plot_client_metrics(args.id, config, show=False)

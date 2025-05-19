@@ -43,7 +43,7 @@ args = parse_args()
 #     device = '2'
 # else:
 #     device = '3'
-device = str((args.id+1) % 4)
+device = '2'  # set the device to use for training
     
 # Import Libraies
 from collections import OrderedDict

@@ -58,9 +58,12 @@ fi
 
 
 
-for exp_n in $(seq 0 2); do
 
-    for scaling_dp in $(seq 0 5); do
+
+
+for exp_n in $(seq 4 4); do
+
+    for scaling_dp in $(seq 0 0); do
         echo -e "\n\033[1;36mStarting experiment $exp_n with scaling_dp $scaling_dp\033[0m\n"
         # Cycle through the folds
 
@@ -74,6 +77,10 @@ for exp_n in $(seq 0 2); do
             cd ../data
             python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
             cd ../fedavg
+
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 1
 
             echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 
@@ -94,6 +101,27 @@ for exp_n in $(seq 0 2); do
             echo "Fold completed correctly"
             pkill -9 -f server.py
             pkill -9 -f client.py
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+            pkill -u dario -f client.py -9
+            pkill -u dario -f server.py -9
+            sleep 3
+
+
         done
 
         # Aggregate results
@@ -109,6 +137,7 @@ for exp_n in $(seq 0 2); do
     done
 
 done
+
 
 
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-sleep 17000
+
 # This code is usually called from cross_validation.sh, and it starts the server and clients 
 # for the federated learning process. The server is started first, and then the clients are started.
 
@@ -55,7 +55,7 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 0 6); do
+for exp_n in $(seq 0 5); do
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do
@@ -67,6 +67,10 @@ for exp_n in $(seq 0 6); do
         cd ../data
         python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
         cd ../soterafl_llm
+
+        pkill -u dario -f client.py -9
+        pkill -u dario -f server.py -9
+        sleep 1
 
         echo -e "\n\033[1;36mStarting server with model \033[0m\n"
 
@@ -87,6 +91,17 @@ for exp_n in $(seq 0 6); do
         echo "Fold completed correctly"
         pkill -9 -f server.py
         pkill -9 -f client.py
+        pkill -u dario -f client.py -9
+        pkill -u dario -f server.py -9
+        sleep 1
+        pkill -u dario -f client.py -9
+        pkill -u dario -f server.py -9
+        sleep 1
+        pkill -u dario -f client.py -9
+        pkill -u dario -f server.py -9
+        sleep 1
+
+
     done
 
     # Aggregate results

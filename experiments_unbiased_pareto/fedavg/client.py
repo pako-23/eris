@@ -107,15 +107,15 @@ class FlowerClient(fl.client.NumPyClient):
             else:
                 sample_rate = min(1.0, self.train_loader.batch_size / len(self.train_loader.dataset))
 
-            # self.sigma = opacus.accountants.utils.get_noise_multiplier(
-            #     target_epsilon=cfg.epsilon,
-            #     target_delta=cfg.delta,
-            #     sample_rate=sample_rate,
-            #     epochs=int(self.config['epochs']), 
-            #     accountant='rdp',  
-            # ) 
+            self.sigma = opacus.accountants.utils.get_noise_multiplier(
+                target_epsilon=cfg.epsilon,
+                target_delta=cfg.delta,
+                sample_rate=sample_rate,
+                epochs=int(self.config['epochs']), 
+                accountant='rdp',  
+            ) 
             
-            self.sigma = self.config['sigma'][self.scaling_dp]
+            # self.sigma = self.config['sigma'][self.scaling_dp]
 
 
             self.privacy_engine = opacus.privacy_engine.PrivacyEngine(accountant='rdp', secure_mode=False)
@@ -125,7 +125,8 @@ class FlowerClient(fl.client.NumPyClient):
                     optimizer=self.optimizer,
                     data_loader=self.subsampled_train_loader,
                     noise_multiplier=self.sigma,
-                    max_grad_norm=self.config['sensitivity'][self.scaling_dp],
+                    # max_grad_norm=self.config['sensitivity'][self.scaling_dp],
+                    max_grad_norm=cfg.sensitivity
                     )
             else:
                 self.model, self.optimizer, self.train_loader = self.privacy_engine.make_private(
@@ -133,7 +134,8 @@ class FlowerClient(fl.client.NumPyClient):
                     optimizer=self.optimizer,
                     data_loader=self.train_loader,
                     noise_multiplier=self.sigma,
-                    max_grad_norm=self.config['sensitivity'][self.scaling_dp],
+                    # max_grad_norm=self.config['sensitivity'][self.scaling_dp],
+                    max_grad_norm=cfg.sensitivity
                     )           
             
             if client_id == 1:
@@ -168,7 +170,8 @@ class FlowerClient(fl.client.NumPyClient):
                     self.sigma, 
                     self.config["epochs"], 
                     self.client_id,
-                    self.config["sensitivity"][self.scaling_dp]
+                    # self.config["sensitivity"][self.scaling_dp]
+                    cfg.sensitivity,
                     )
             else:
                 """
@@ -199,7 +202,7 @@ class FlowerClient(fl.client.NumPyClient):
                     # pruning_rate = cfg.pruning_rate
                     pruning_rate=self.config['pruning_rate'][self.scaling_dp],
                     )
-                
+                                
                 # update model parameters
                 params_out = [param_in + grad for param_in, grad in zip(params_in, pruned_grads)]
             
@@ -286,7 +289,8 @@ class FlowerClient(fl.client.NumPyClient):
                     self.sigma, 
                     self.config["epochs"], 
                     self.client_id,
-                    self.config["sensitivity"][self.scaling_dp]
+                    # self.config["sensitivity"][self.scaling_dp]
+                    cfg.sensitivity,
                     )
             else:
                 for epoch in range(self.config["epochs"]):
