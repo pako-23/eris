@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 This script launches the central ERIS coordinator responsible for orchestrating communication across
 distributed clients and aggregators in decentralized federated learning experiments.
@@ -6,8 +8,6 @@ It configures the training setup (number of communication rounds, model splits, 
 the specified dataset and experiment index, then initializes and starts the coordinator node. Designed 
 to work jointly with client.py.
 """
-
-#!/usr/bin/env python3
 
 import argparse
 import sys

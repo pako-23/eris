@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
+
 """
 This script splits a dataset into multiple client-specific subsets for federated learning experiments. 
 It handles various datasets by downloading and loading them as needed.
 """
-
 
 # Libraries
 # import experiments.data.download_datasets as

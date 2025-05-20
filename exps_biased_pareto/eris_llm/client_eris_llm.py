@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 This script defines the ERIS client node used in decentralized federated learning experiments (with LLMs).
 Each client performs local model training with optional differential privacy (DP), pruning, or sparsification,
@@ -10,8 +12,6 @@ Designed to be launched alongside coordinator_llm.py for full experiment orchest
 This is code is set to be used locally, but it can be used in a distributed environment by changing the IP address of 
 each client.
 """
-
-#!/usr/bin/env python3
 
 # Arguments
 import argparse
