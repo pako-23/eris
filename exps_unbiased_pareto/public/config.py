@@ -1,11 +1,8 @@
 from transformers import TrainingArguments # type: ignore
 
-
-# ADD DP TO REACH 0 MIA ACC
-
 # Training settings (for everyone)
 dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 3  # Set 1 to disable cross validation
+k_folds = 5  # Set 1 to disable cross validation
 lr = 0.01
 momentum = 0.9
 seed = 1
@@ -63,8 +60,8 @@ experiments = {
     },
     "cifar10": {
         "dataset": "cifar10",
-        "client_train_samples": [8, 16, 32, 64, 128, 256], #[8, 16, 32, 64, 128, 256, 512] #[8, 16, 32, 64, 128, 256, 512],
-        "rounds": [80, 140, 140, 140, 140, 140], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
+        "client_train_samples": [8, 16, 32, 64, 128, 256], 
+        "rounds": [80, 140, 140, 140, 140, 140], 
         "clients": 50,
         "batch_test": 64,
         "epochs": 1,
@@ -87,8 +84,8 @@ experiments = {
     },
     "imdb": {
         "dataset": "imdb",
-        "client_train_samples": [8, 16, 32, 64, 128, 256], # avevo 100 sample, 10 epochs 100 steps, 95MIA vs 80MIA 
-        "rounds": [22, 20, 18, 18, 14, 14], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
+        "client_train_samples": [8, 16, 32, 64, 128, 256],  
+        "rounds": [22, 20, 18, 18, 14, 14], 
         "clients": 25,
         "splits": 25,
         "model_name": "distilbert-base-uncased",
@@ -111,121 +108,5 @@ experiments = {
             seed=42
         ),
         "n_classes": 2,
-    },
-    "fmnist": {
-        "dataset": "fmnist",
-        "client_train_samples": 1000,
-        "rounds": 2, # Originally 15
-        "clients": 10,
-        "batch": 64,
-        "batch_test": 64,
-        "epochs": 2,
-        "splits": 5,
-        "lr": 0.01,
-        "momentum": 0.9,
-        "model_name": "LeNet5",
-        "model_args": {
-            "in_channels": 1,
-            "num_classes": 10,
-            "input_size": (28, 28),
-        },
-        "n_classes": 10,
-    },
-    "breast": {
-        "dataset": "breast",
-        "client_train_samples": 100,
-        "rounds": 2, # Originally 200
-        "clients": 10,
-        "batch": 64,
-        "batch_test": 64,
-        "epochs": 2,
-        "splits": 5,
-        "lr": 0.01,
-        "momentum": 0.9,
-        "model_name": "MLP",
-        "model_args": {
-            "input_size": 30,
-            "num_classes": 2,
-            "hidden_dim": 128,
-        },
-        "n_classes": 2,
-    },
-    "diabetes": {
-        "dataset": "diabetes",
-        "client_train_samples": 1000,
-        "rounds": 2, # Originally 20
-        "clients": 10,
-        "batch": 64,
-        "batch_test": 64,
-        "epochs": 2,
-        "splits": 5,
-        "lr": 0.01,
-        "momentum": 0.9,
-        "model_name": "MLP",
-        "model_args": {
-            "input_size": 21,
-            "num_classes": 2,
-            "hidden_dim": 128,
-        },
-        "n_classes": 2,
-    },
-    "adult": {
-        "dataset": "adult",
-        "client_train_samples": 1000,
-        "rounds": 2, # Originally 50
-        "clients": 10,
-        "batch": 64,
-        "batch_test": 64,
-        "epochs": 2,
-        "splits": 5,
-        "lr": 0.01,
-        "momentum": 0.9,
-        "model_name": "MLP",
-        "model_args": {
-            "input_size": 105,
-            "num_classes": 2,
-            "hidden_dim": 128,
-        },
-        "n_classes": 2,
-    },
-    "airline": {
-        "dataset": "airline",
-        "client_train_samples": 1000,
-        "rounds": 2, # Originally 1000
-        "clients": 10,
-        "batch": 64,
-        "batch_test": 64,
-        "epochs": 2,
-        "splits": 5,
-        "lr": 0.01,
-        "momentum": 0.9,
-        "model_name": "LinearModel",
-        "model_args": {
-            "input_size": 30,
-            "num_classes": 1,
-        },
-        "n_classes": 1,
-    },
-    "lsst": {
-        "dataset": "lsst",
-        "client_train_samples": 1000,
-        "rounds": 2, # Originally 100
-        "clients": 10,
-        "batch": 64,
-        "batch_test": 64,
-        "epochs": 2,
-        "splits": 5,
-        "lr": 0.01,
-        "momentum": 0.9,
-        "model_name": "TransformerModelFlexible",
-        "model_args": {
-            "input_size": 6,
-            "sequence_length": 36,
-            "num_classes": 12,
-            "num_heads": 2,
-            "num_layers": 2,
-            "hidden_dim": 64,
-        },
-        "n_classes": 12,
     },
 }

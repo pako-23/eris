@@ -2,7 +2,7 @@ from transformers import TrainingArguments # type: ignore
 
 # Training settings (for everyone)
 dataset_name = "mnist"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 1  # Set 1 to disable cross validation
+k_folds = 5  # Set 1 to disable cross validation
 local_epochs = 2
 lr = 0.01
 momentum = 0.9
@@ -42,8 +42,8 @@ experiments = {
     "mnist": {
         "dataset": "mnist",
         "client_train_samples": [8, 16, 32, 64, 128, 256, 512], 
-        "rounds": [1, 100, 200, 180, 180, 180, 160],  # Originally 15
-        "clients": 2,
+        "rounds": [80, 100, 200, 180, 180, 180, 160],  
+        "clients": 50,
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
@@ -60,9 +60,9 @@ experiments = {
     },
     "cifar10": {
         "dataset": "cifar10",
-        "client_train_samples": [8, 16, 32, 64, 128, 256, 512], #[8, 16, 32, 64, 128, 256, 512] #[8, 16, 32, 64, 128, 256, 512],
-        "rounds": [1, 80, 100, 140, 100, 100, 100], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
-        "clients": 2,
+        "client_train_samples": [8, 16, 32, 64, 128, 256, 512], 
+        "rounds": [60, 80, 100, 140, 100, 100, 100],  
+        "clients": 50,
         "batch": 64,
         "batch_test": 64,
         "epochs": 2,
@@ -79,9 +79,9 @@ experiments = {
     },
     "imdb": {
         "dataset": "imdb",
-        "client_train_samples": [8, 16, 32, 64, 128, 256, 512], # avevo 100 sample, 10 epochs 100 steps, 95MIA vs 80MIA 
-        "rounds": [1, 16, 12, 10, 8, 6, 4], #[160, 140, 180, 160, 140, 100, 100], # Originally 20 
-        "clients": 2,
+        "client_train_samples": [8, 16, 32, 64, 128, 256, 512], 
+        "rounds": [16, 16, 12, 10, 8, 6, 4], 
+        "clients": 25,
         "splits": 25,
         "model_name": "distilbert-base-uncased",
         "training_args": TrainingArguments(
@@ -107,7 +107,7 @@ experiments = {
     "fmnist": {
         "dataset": "fmnist",
         "client_train_samples": 1000,
-        "rounds": 2, # Originally 15
+        "rounds": 15, 
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -126,7 +126,7 @@ experiments = {
     "breast": {
         "dataset": "breast",
         "client_train_samples": 100,
-        "rounds": 2, # Originally 200
+        "rounds": 200,
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -145,7 +145,7 @@ experiments = {
     "diabetes": {
         "dataset": "diabetes",
         "client_train_samples": 1000,
-        "rounds": 2, # Originally 20
+        "rounds": 20, 
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -164,7 +164,7 @@ experiments = {
     "adult": {
         "dataset": "adult",
         "client_train_samples": 1000,
-        "rounds": 2, # Originally 50
+        "rounds": 50, 
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -183,7 +183,7 @@ experiments = {
     "airline": {
         "dataset": "airline",
         "client_train_samples": 1000,
-        "rounds": 2, # Originally 1000
+        "rounds": 1000, 
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
@@ -201,7 +201,7 @@ experiments = {
     "lsst": {
         "dataset": "lsst",
         "client_train_samples": 1000,
-        "rounds": 2, # Originally 100
+        "rounds": 100,
         "clients": 10,
         "batch": 64,
         "batch_test": 64,
