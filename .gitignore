@@ -15,6 +15,9 @@ experiments/dlk_attacks/data
 # Power Point
 *.pptx
 
+# txt
+*.txt
+
 # C extensions
 *.so
 
