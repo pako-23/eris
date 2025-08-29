@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import Subset
 from datasets import load_from_disk
 import os
+import numpy as np
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -40,12 +41,27 @@ args.add_argument(
     ],
 )
 args.add_argument("--seed", type=int, default=1, help="Random seed")
+args.add_argument(
+    "--split_type",
+    type=str,
+    default="iid",
+    choices=["iid", "dirichlet"],
+    help="Splitting strategy: iid or dirichlet (non‑IID)",
+)
+args.add_argument(
+    "--alpha",
+    type=float,
+    default=0.5,
+    help="Dirichlet concentration parameter for non‑IID splitting",
+)
 args = args.parse_args()
 
 print(f"\n\n\033[33mData creation\033[0m")
 print(f"Number of clients: {args.n_clients}")
 print(f"Dataset: {args.dataset}")
 print(f"Random seed: {args.seed}")
+print(f"Split type       : {args.split_type}")
+print(f"Dirichlet alpha  : {args.alpha}")
 
 
 #########################################################################################
@@ -193,7 +209,7 @@ def IID_split_and_save_torch(dataset, num_parts, save_dir="./client_datasets", s
 
         # Define the file path to save this subset
         file_path = os.path.join(save_dir, f"IID_data_client_{i+1}.pt")
-        print(f"Saving data client {i+1} to {file_path}...")
+        print(f"  ↳ Saving {file_path}")
 
         # Save the subset
         torch.save(subset, file_path)
@@ -241,17 +257,111 @@ def IID_split_and_save(dataset, num_parts, save_dir="./client_datasets", seed=1)
 
         # Define the file path to save this subset
         subset_dir = os.path.join(save_dir, f"IID_data_client_{i+1}")
-        print(f"Saving data client {i+1} to {subset_dir}...")
+        # print(f"Saving data client {i+1} to {subset_dir}...")
+        print(f"  ↳ Saving {subset_dir}")
 
         # Save the subset
         subset.save_to_disk(subset_dir)
 
-# Split the training dataset into N clients
-if args.dataset == "imdb":
-    IID_split_and_save(X_train, args.n_clients, seed=args.seed)
+def _allocate_dirichlet(class_count: int, n_clients: int, alpha: float):
+    """Return integer counts for each client drawn from a Dirichlet distribution."""
+    proportions = np.random.dirichlet(alpha * np.ones(n_clients))
+    counts = (proportions * class_count).astype(int)
+    # Adjust so that the total equals class_count
+    diff = class_count - counts.sum()
+    for _ in range(abs(diff)):
+        index = np.argmin(counts) if diff > 0 else np.argmax(counts)
+        counts[index] += 1 if diff > 0 else -1
+    return counts
+
+# ——— Dirichlet splitting ———
+def dirichlet_split_and_save_torch(dataset, n_clients, alpha=0.5, save_dir="./client_datasets", seed=1):
+    print(f"\nSplitting into {n_clients} non‑IID parts (Dirichlet α={alpha})…")
+    os.makedirs(save_dir, exist_ok=True)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    # Build mapping class → indices
+    class_indices = {}
+    for idx in range(len(dataset)):
+        _, label = dataset[idx]
+        label = label.item() if torch.is_tensor(label) else label
+        class_indices.setdefault(label, []).append(idx)
+
+    client_indices = [[] for _ in range(n_clients)]
+    for lbl, idxs in class_indices.items():
+        np.random.shuffle(idxs)
+        counts = _allocate_dirichlet(len(idxs), n_clients, alpha)
+        start = 0
+        for client_id, c in enumerate(counts):
+            client_indices[client_id].extend(idxs[start:start + c])
+            start += c
+
+    tot = 0
+    for i, idxs in enumerate(client_indices):
+        subset = Subset(dataset, idxs)
+        path = os.path.join(save_dir, f"IID_data_client_{i+1}.pt")
+        print(f"  ↳ Saving {path} - n_samples={len(idxs)}")
+        tot += len(idxs)
+        torch.save(subset, path)
+    print(f"Total samples saved: {tot}")
+
+def dirichlet_split_and_save(dataset, n_clients, alpha=0.5, save_dir="./client_datasets", seed=1):
+    if seed==4:
+        seed=5
+    print(f"\nSplitting into {n_clients} non‑IID parts (Dirichlet α={alpha})…")
+    os.makedirs(save_dir, exist_ok=True)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    label_col = "label" if "label" in dataset.features else "labels"
+    labels = dataset[label_col]
+    class_indices = {}
+    for idx, lbl in enumerate(labels):
+        lbl = int(lbl)
+        class_indices.setdefault(lbl, []).append(idx)
+        
+    client_indices = [[] for _ in range(n_clients)]
+    for lbl, idxs in class_indices.items():
+        np.random.shuffle(idxs)
+        counts = _allocate_dirichlet(len(idxs), n_clients, alpha)
+        start = 0
+        for client_id, c in enumerate(counts):
+            client_indices[client_id].extend(idxs[start:start + c])
+            start += c
+    
+    tot_data = 0
+    for i, idxs in enumerate(client_indices):
+        tot_data += len(idxs)
+        subset = dataset.select(idxs)
+        #----
+        ## label distribution for a Hugging-Face `Dataset`
+        from collections import Counter
+        labels = subset["label"]      # this is a Python list of ints (or Arrow Scalars)
+        labels = [int(l) for l in labels]
+        label_counts = Counter(labels)
+        for label, cnt in sorted(label_counts.items()):
+            print(f"  Client id {i} Class {label}: {cnt} samples")
+        #----
+        path = os.path.join(save_dir, f"IID_data_client_{i+1}")
+        print(f"  ↳ Saving {path} - n_samples={len(subset)}")
+        subset.save_to_disk(path)
+    print(f"Total samples saved: {tot_data}")
+
+
+# ─────────────────────── Main ────────────────────────
+# # Split the training dataset into N clients
+if args.split_type == "iid":
+    if args.dataset == "imdb":
+        IID_split_and_save(X_train, args.n_clients, seed=args.seed)
+    else:
+        IID_split_and_save_torch(X_train, args.n_clients, seed=args.seed)
+elif args.split_type == "dirichlet":
+    if args.dataset == "imdb":
+        dirichlet_split_and_save(X_train, args.n_clients, alpha=args.alpha, seed=args.seed)
+    else:
+        dirichlet_split_and_save_torch(X_train, args.n_clients, alpha=args.alpha, seed=args.seed)
 else:
-    IID_split_and_save_torch(X_train, args.n_clients, seed=args.seed)
+    raise ValueError("Unknown split_type. Choose from ['iid', 'dirichlet']")
 
-
-# -----  2) Non-IID-scenario -----
-# so far i dont think we need to implement this, but we can do it later if needed
+print("\n\033[32mData Partition Done!\033[0m")

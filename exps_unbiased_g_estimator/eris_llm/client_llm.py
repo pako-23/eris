@@ -66,7 +66,8 @@ args = parse_args()
 #     device = '2'
 # else:
 #     device = '3'
-device = str(args.id % 4)
+device = str(args.id % 2)
+# device = '3'  # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Libraries
 import numpy as np
@@ -205,7 +206,7 @@ class ExampleClient(ErisClient):
     
     @property
     def gamma(self):
-        n = 4000
+        n = 2000 # 2000 4000
         self.k = int(self.n_params / (n * np.log2(self.config['rounds'][self.exp_n])))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
@@ -827,6 +828,7 @@ def start_node(
             time.sleep(1)
             
             # aggregated metrics
+            config['exp_n'] = exp_n
             aggregated_metrics = utils.aggregate_client_data(config)
             # utils.print_max_metrics(aggregated_metrics)
             
@@ -918,10 +920,16 @@ def main(args):
     train_size = config['client_train_samples'][args.exp_n]
     val_size = int(train_size * 0.3) # 30% for validation
     total_requested = train_size + val_size
+    #if total_requested > len(data):
+    #    raise ValueError(
+    #        f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+    #    )
     if total_requested > len(data):
-        raise ValueError(
-            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
-        )
+        val_size = len(data) - train_size # to be removed
+        if val_size < 0:
+            val_size = 0
+            train_size = len(data) # to be removed
+        total_requested = train_size + val_size # to be removed
         
     # select the first 1000 samples for the sub
     torch.manual_seed(cfg.seed)

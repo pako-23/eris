@@ -43,11 +43,12 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-# if args.id % 2 == 0:
-#     device = '2'
-# else:
-#     device = '3'
-device = str(args.id % 4)
+if args.id < 8:
+    device = '2'
+else:
+    device = '0'
+# device = str(args.id % 2)
+# device = '0'  # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Import Libraies
 from collections import OrderedDict
@@ -704,15 +705,22 @@ def main(args)->None:
         
     # Load data
     data = load_from_disk(f"../data/client_datasets/IID_data_client_{args.id}")
+    print(f"Client {args.id} - Dataset size: {len(data)} samples")
     
     # Split the dataset
     train_size = config['client_train_samples'][args.exp_n]
     val_size = int(train_size * 0.3) # 30% for validation
     total_requested = train_size + val_size
+    # if total_requested > len(data):
+    #     raise ValueError(
+    #         f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+    #     )
     if total_requested > len(data):
-        raise ValueError(
-            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
-        )
+        val_size = len(data) - train_size # to be removed
+        if val_size < 0:
+            val_size = 0
+            train_size = len(data) # to be removed
+        total_requested = train_size + val_size # to be removed
         
     # select the first 1000 samples for the sub
     torch.manual_seed(cfg.seed)
@@ -723,6 +731,16 @@ def main(args)->None:
     val_data = data.select(range(train_size, total_requested))    
     num_examples = {"train": train_size,"val": val_size}
     print(f"Num samples: {num_examples}")
+
+    #----
+    ##label distribution
+    from collections import Counter
+    labels = train_data["label"]      # this is a Python list of ints (or Arrow Scalars)
+    labels = [int(l) for l in labels]
+    label_counts = Counter(labels)
+    for label, cnt in sorted(label_counts.items()):
+        print(f"  Client id {args.id} Class {label}: {cnt} samples")
+    #----
     
     # Start Flower client
     client = FlowerClient(

@@ -292,7 +292,7 @@ def main() -> None:
 
     # Start Flower server for three rounds of federated learning
     history = fl.server.start_server(
-        server_address="0.0.0.0:6398",   # 0.0.0.0 listens to all available interfaces
+        server_address="0.0.0.0:8086",   # 0.0.0.0 listens to all available interfaces
         config=fl.server.ServerConfig(num_rounds=config['rounds'][args.exp_n]),
         strategy=strategy,
     )
@@ -313,7 +313,7 @@ def main() -> None:
 
     # Save loss and accuracy to a file
     print(f"Saving metrics to as .json in histories folder: histories/{config["model_name"]}/{args.dataset}/distributed_metrics_{args.fold}.json")
-    with open(f"histories/{config["model_name"]}/{args.dataset}/distributed_metrics_{args.fold}.json", "w") as f:
+    with open(f"histories/{config["model_name"]}/{args.dataset}/distributed_metrics_exp_{args.exp_n}_fold_{args.fold}.json", "w") as f:
         json.dump(metrics_distributed, f)
 
     # Single Plot

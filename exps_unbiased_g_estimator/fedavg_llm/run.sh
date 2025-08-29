@@ -46,6 +46,8 @@ except ImportError:
 k_folds=$(extract_config_var "k_folds")
 dataset_name=$(extract_config_var "dataset_name")
 n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
+split_type=$(extract_config_var "data_type")
+alpha_dirichlet=$(extract_config_var "alpha_dirichlet")
 
 # Print the number of clients
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
@@ -60,7 +62,9 @@ if [ $k_folds -eq 1 ]; then
 fi
 
 
-for exp_n in $(seq 0 5); do
+for exp_n in $(seq 0 4); do
+
+    echo -e "\n\033[1;36mStarting experiment number $exp_n\033[0m\n"
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do
@@ -70,7 +74,7 @@ for exp_n in $(seq 0 5); do
         
         # Creating dataset
         cd ../data
-        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold --split_type $split_type --alpha $alpha_dirichlet
         cd ../fedavg_llm
         pkill -9 -f server.py
         pkill -9 -f client.py
@@ -109,3 +113,7 @@ for exp_n in $(seq 0 5); do
     echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
 
 done
+
+
+
+

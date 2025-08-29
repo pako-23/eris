@@ -315,7 +315,11 @@ class FlowerClient(fl.client.NumPyClient):
     
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
-        loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
+        if len(self.val_loader) == 0:
+            print(f"Client {self.client_id} has no validation data.")
+            loss = accuracy = f1_score = 0.0
+        else:
+            loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
         
         # save loss and accuracy client
         utils.save_client_metrics(config["current_round"], loss, accuracy, f1_score, client_id=self.client_id,
@@ -601,10 +605,20 @@ def main()->None:
     train_size = config['client_train_samples'][args.exp_n]
     val_size = int(train_size * 0.3) # 30% for validation
     total_requested = train_size + val_size
+    # if total_requested > len(data):
+    #     raise ValueError(
+    #         f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+    #     )
     if total_requested > len(data):
-        raise ValueError(
-            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
-        )
+        # raise ValueError(
+        #     f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+        # )
+        val_size = len(data) - train_size # to be removed
+        if val_size < 0:
+            val_size = 0
+            train_size = len(data) # to be removed
+        total_requested = train_size + val_size # to be removed
+        
     torch.manual_seed(cfg.seed)
     indices = torch.randperm(len(data))[:total_requested]
     subset_data = Subset(data, indices)

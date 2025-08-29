@@ -1,13 +1,15 @@
 from transformers import TrainingArguments # type: ignore
 
 # Training settings (for everyone)
-dataset_name = "cifar10"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
-k_folds = 5  # Set 1 to disable cross validation
+dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
+data_type = "dirichlet" # Options: "iid", "dirichlet"
+alpha_dirichlet = 0.5  # Dirichlet distribution parameter for non-iid data
+k_folds = 4  # Set 1 to disable cross validation
 lr = 0.01
 momentum = 0.9
 seed = 1
 transform = None
-gpu = -2 # select the gpu, -1 use cpu, -2 multiple distributed gpus
+gpu = 3 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Privacy auditing
 privacy_audit = True
@@ -18,23 +20,23 @@ k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
 
 # Differential Privacy
-local_dp = False
+local_dp = True
 use_opacus = False
 clipping_norm = 1.0 # (float) limits the L2 norm of each data point’s contribution, affecting the sensitivity of the function (default: 1.0)
 sensitivity = 1.0 # (float) defines the maximum change to the function’s output that any single input can cause (default: 1.0) - generally equal to the clipping norm
-epsilon = 100.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
+epsilon = 10.0 # (float) A smaller epsilon value increases privacy (i.e., more noise) because it reduces the amount of information each output reveals about its inputs (default: 0.1)
 delta = 1e-5 # (float) Typically, a smaller delta offers more privacy but is used to account for the probability of the privacy guarantee not holding (default: 1e-5)
 
 # Pruning
 pruning = False
-pruning_rate = 0.01  # Fraction of weights to prune
+pruning_rate = 0.3  # Fraction of weights to prune
 
 # k-sparsification
 k_sparsification = False
 k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # shifted k-sparsification
-shifted_k_sparsification = False
+shifted_k_sparsification = True
 # k_sparsity = 0.01  # Fraction of weights to keep (can be automated)
 
 # Experiments config
@@ -43,10 +45,10 @@ experiments = {
         "dataset": "mnist",
         "client_train_samples": [8, 16, 32, 64, 128, 256], 
         "rounds": [120, 140, 200, 250, 250, 250],  
-        "clients": 50,
+        "clients": 25,
         "batch_test": 64,
         "epochs": 1,
-        "splits": 50,
+        "splits": 25,
         "lr": 0.01,
         "momentum": 0.9,
         "model_name": "LeNet5",
@@ -61,10 +63,10 @@ experiments = {
         "dataset": "cifar10",
         "client_train_samples": [8, 16, 32, 64, 128, 256], 
         "rounds": [80, 140, 140, 140, 140, 140], 
-        "clients": 50,
+        "clients": 25,
         "batch_test": 64,
         "epochs": 1,
-        "splits": 5,
+        "splits": 25,
         "lr": 0.01,
         "momentum": 0.9,
         "model_name": "ResNet9",
@@ -79,8 +81,8 @@ experiments = {
         "dataset": "imdb",
         "client_train_samples": [8, 16, 32, 64, 128, 256], 
         "rounds": [22, 20, 18, 18, 14, 14],  
-        "clients": 25,
-        "splits": 25,
+        "clients": 10,
+        "splits": 10,
         "model_name": "distilbert-base-uncased",
         "training_args": TrainingArguments(
             output_dir="./distilbert-imdb",

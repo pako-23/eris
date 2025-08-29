@@ -47,8 +47,10 @@ dataset_name=$(extract_config_var "dataset_name")
 n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
 aggregators=$(extract_config_var "experiments.${dataset_name}.splits")
 experiments=$(extract_config_var "experiments.${dataset_name}")
+split_type=$(extract_config_var "data_type")
+alpha_dirichlet=$(extract_config_var "alpha_dirichlet")
 
-# Print the number of clients
+# Print the number of clients  
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
 
 # if k_folds > 1, print "Cross validation with k_folds"
@@ -59,7 +61,7 @@ elif [ "$k_folds" -eq 1 ]; then # if k_folds = 1, print "No cross validation"
 fi
 
 
-for exp_n in $(seq 0 5); do
+for exp_n in $(seq 0 4); do
 
     # Cycle through the folds
     for fold in $(seq 1 $k_folds); do
@@ -69,10 +71,14 @@ for exp_n in $(seq 0 5); do
         
         # Creating dataset
         cd ../data
-        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold --split_type $split_type --alpha $alpha_dirichlet
+
         cd ../eris_llm
         pkill -9 -f coordinator_llm.py
         pkill -9 -f client_llm.py
+        sleep 2
+        pkill -u dario -f coordinator_llm.py -9
+        pkill -u dario -f client_llm.py -9
         sleep 2
 
         echo -e "\n\033[1;36mStarting server with model \033[0m\n"
@@ -104,6 +110,9 @@ for exp_n in $(seq 0 5); do
 
         pkill -9 -f coordinator_llm.py
         pkill -9 -f client_llm.py
+        sleep 2
+        pkill -u dario -f coordinator_llm.py -9
+        pkill -u dario -f client_llm.py -9
         sleep 2
     done
 

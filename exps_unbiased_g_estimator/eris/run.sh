@@ -48,6 +48,9 @@ dataset_name=$(extract_config_var "dataset_name")
 n_clients=$(extract_config_var "experiments.${dataset_name}.clients")
 aggregators=$(extract_config_var "experiments.${dataset_name}.splits")
 experiments=$(extract_config_var "experiments.${dataset_name}")
+split_type=$(extract_config_var "data_type")
+alpha_dirichlet=$(extract_config_var "alpha_dirichlet")
+
 
 # Print the number of clients
 echo -e "\n\033[1;36mStart training on $dataset_name with $n_clients clients\033[0m"
@@ -60,18 +63,25 @@ elif [ "$k_folds" -eq 1 ]; then # if k_folds = 1, print "No cross validation"
 fi
 
 
-for exp_n in $(seq 0 5); do
+
+for exp_n in $(seq 4 4); do
 
     # Cycle through the folds
-    for fold in $(seq 1 $k_folds); do
+    for fold in $(seq 2 $k_folds); do
         if [ $k_folds -gt 1 ]; then
             echo -e "\n\033[1;36mFold $fold\033[0m"
         fi
         
         # Creating dataset
         cd ../data
-        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold
+        python client_datasets_split.py --n_clients $n_clients --dataset $dataset_name --seed $fold --split_type $split_type --alpha $alpha_dirichlet
         cd ../eris
+        pkill -f coordinator.py -9 
+        pkill -f client_eris.py -9
+        sleep 2
+        pkill -f coordinator.py -9 
+        pkill -f client_eris.py -9
+        sleep 2
         pkill -f coordinator.py -9 
         pkill -f client_eris.py -9
         sleep 2
@@ -106,6 +116,12 @@ for exp_n in $(seq 0 5); do
         pkill -9 -f coordinator.py
         pkill -9 -f client_eris.py
         sleep 2
+        pkill -f coordinator.py -9 
+        pkill -f client_eris.py -9
+        sleep 2
+        pkill -f coordinator.py -9 
+        pkill -f client_eris.py -9
+        sleep 2
     done
 
     # Aggregate results
@@ -119,8 +135,6 @@ for exp_n in $(seq 0 5); do
     echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
 
 done
-
-
 
 
 

@@ -27,7 +27,7 @@ import argparse
 import torch
 import torch.nn.functional as F
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 from logging import WARNING
 from flwr.common.logger import log
 from collections import OrderedDict

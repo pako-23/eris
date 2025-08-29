@@ -153,7 +153,7 @@ class ExampleClient(ErisClient):
 
     @property
     def gamma(self):
-        n = 100
+        n = 4 # 4 for mnist, 24 cifar10
         self.k = int(self.n_params / (n * np.log2(self.config['rounds'][self.exp_n])))
         # self.k = k = int(self.n_params * cfg.k_sparsity)
         w = (self.n_params / self.k) - 1
@@ -465,9 +465,15 @@ class ExampleClient(ErisClient):
         self.model.eval()
         self.model.to(self.device)
 
-        loss, accuracy, f1_score = self.evaluate_fn(
-            self.model, self.device, self.val_loader, self.criterion, self.client_id
-        )
+        # loss, accuracy, f1_score = self.evaluate_fn(
+        #     self.model, self.device, self.val_loader, self.criterion, self.client_id
+        # )
+        
+        if len(self.val_loader) == 0:
+            print(f"Client {self.client_id} has no validation data.")
+            loss = accuracy = f1_score = 0.0
+        else:
+            loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
         
         # save loss and accuracy client
         utils.save_client_metrics(
@@ -887,6 +893,7 @@ def start_node(
             time.sleep(1)
             
             # aggregated metrics
+            config['exp_n'] = exp_n
             aggregated_metrics = utils.aggregate_client_data(config)
             # utils.print_max_metrics(aggregated_metrics)
             
@@ -977,12 +984,18 @@ def main():
 
     # Split the dataset
     train_size = config['client_train_samples'][args.exp_n]
-    val_size = int(train_size * 0.3) # 30% for validation
+    val_size = int(train_size * 0.5) # 30% for validation
     total_requested = train_size + val_size
     if total_requested > len(data):
-        raise ValueError(
-            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
-        )
+        # raise ValueError(
+        #     f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+        # )
+        val_size = len(data) - train_size # to be removed
+        if val_size < 0:
+            val_size = 0
+            train_size = len(data) # to be removed
+        total_requested = train_size + val_size # to be removed
+        
     torch.manual_seed(cfg.seed)
     indices = torch.randperm(len(data))[:total_requested]
     subset_data = Subset(data, indices)

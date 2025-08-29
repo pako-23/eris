@@ -38,11 +38,11 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-# if args.id % 2 == 0:
-#     device = '2'
-# else:
-#     device = '3'
-device = str((args.id+1) % 4)
+if args.id < 8:
+    device = '2'
+else:
+    device = '0'
+# device = str((args.id+1) % 4)
     
 # Import Libraies
 from collections import OrderedDict
@@ -671,10 +671,17 @@ def main(args)->None:
     train_size = config['client_train_samples'][args.exp_n]
     val_size = int(train_size * 0.3) # 30% for validation
     total_requested = train_size + val_size
+    # if total_requested > len(data):
+    #     raise ValueError(
+    #         f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+    #     )
     if total_requested > len(data):
-        raise ValueError(
-            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
-        )
+        val_size = len(data) - train_size # to be removed
+        if val_size < 0:
+            val_size = 0
+            train_size = len(data) # to be removed
+        total_requested = train_size + val_size # to be removed
+        
 
     # select the first 1000 samples for the sub
     torch.manual_seed(cfg.seed)

@@ -891,7 +891,7 @@ def aggregate_client_data(config):
     os.makedirs(output_folder, exist_ok=True)
     
     # Define the output file path
-    output_path = os.path.join(output_folder, "aggregated_metrics.csv")
+    output_path = os.path.join(output_folder, f"aggregated_metrics_scaling_{config['exp_n']}_fold_{config['fold']}.csv")
     
     # Save the aggregated DataFrame to CSV
     aggregated_df.to_csv(output_path, index=False)

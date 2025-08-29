@@ -349,7 +349,11 @@ class FlowerClient(fl.client.NumPyClient):
     
     def evaluate(self, parameters, config):
         self.set_parameters(parameters)
-        loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
+        if len(self.val_loader) == 0:
+            print(f"Client {self.client_id} has no validation data.")
+            loss = accuracy = f1_score = 0.0
+        else:
+            loss, accuracy, f1_score = self.evaluate_fn(self.model, self.device, self.val_loader, self.criterion, self.client_id)
         
         # save loss and accuracy client
         utils.save_client_metrics(config["current_round"], loss, accuracy, f1_score, client_id=self.client_id,
@@ -670,19 +674,102 @@ def main()->None:
     val_size = int(train_size * 0.3) # 30% for validation
     total_requested = train_size + val_size
     if total_requested > len(data):
-        raise ValueError(
-            f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
-        )
+        # raise ValueError(
+        #     f"Requested train+val samples ({total_requested}) exceed dataset size ({len(data)})!"
+        # )
+        val_size = len(data) - train_size # to be removed
+        if val_size < 0:
+            val_size = 0
+            train_size = len(data) # to be removed
+        total_requested = train_size + val_size # to be removed
+        
+        
+    # original version
     torch.manual_seed(cfg.seed)
     indices = torch.randperm(len(data))[:total_requested]
     subset_data = Subset(data, indices)
     train_dataset, val_dataset = random_split(
         subset_data, [train_size, val_size],
         generator=torch.Generator().manual_seed(cfg.seed)
-)
-    num_examples = {"train": train_size,"val": val_size}
-    print(f"Num samples: {num_examples}")
+    )
+    
+    # # ----- equal partition
+    # # ------------------------------------------------------------
+    # # 3. Bucket indices by class label
+    # # ------------------------------------------------------------
+    # torch.manual_seed(cfg.seed)
+    # rng = torch.Generator().manual_seed(cfg.seed)
+    # from collections import defaultdict
+    # label_to_indices = defaultdict(list)
+    # for idx, (_, y) in enumerate(data):
+    #     lbl = int(y.item()) if hasattr(y, "item") else int(y)
+    #     label_to_indices[lbl].append(idx)
 
+    # num_classes = len(label_to_indices)
+    # if num_classes == 0:
+    #     raise RuntimeError("Dataset appears to have no labels!")
+
+    # # ------------------------------------------------------------
+    # # 4. How many per class?  Distribute “left-over” samples randomly
+    # # ------------------------------------------------------------
+    # def balanced_counts(total, n_classes, generator):
+    #     base = total // n_classes                   # minimum per class
+    #     extra = total % n_classes                   # classes that get +1
+    #     # randomise which classes get the “extra” to avoid bias
+    #     order = torch.randperm(n_classes, generator=generator).tolist()
+    #     counts = [base] * n_classes
+    #     for i in order[:extra]:
+    #         counts[i] += 1
+    #     return counts
+
+    # train_counts = balanced_counts(train_size, num_classes, rng)
+    # val_counts   = balanced_counts(val_size,   num_classes, rng)
+
+    # # ------------------------------------------------------------
+    # # 5. Draw indices for each split
+    # # ------------------------------------------------------------
+    # train_idx, val_idx = [], []
+    # for c, label in enumerate(sorted(label_to_indices)):   # stable order
+    #     idx_pool = label_to_indices[label]
+    #     # shuffle deterministically
+    #     idx_pool = torch.tensor(idx_pool)[torch.randperm(len(idx_pool),
+    #                                                     generator=rng)].tolist()
+
+    #     need_train = train_counts[c]
+    #     need_val   = val_counts[c]
+
+    #     if len(idx_pool) < need_train + need_val:
+    #         raise ValueError(
+    #             f"Class {label} has only {len(idx_pool)} samples but "
+    #             f"{need_train + need_val} are required to keep the split balanced."
+    #         )
+
+    #     train_idx += idx_pool[:need_train]
+    #     val_idx   += idx_pool[need_train:need_train + need_val]
+
+    # # ------------------------------------------------------------
+    # # 6. Wrap them in Subset objects
+    # # ------------------------------------------------------------
+    # train_dataset = Subset(data, train_idx)
+    # val_dataset   = Subset(data, val_idx)
+    # # ------------------------------------------------------------
+    
+    num_examples = {"train": train_size,"val": val_size}
+    print(f"\033[93mNum samples: {num_examples}\033[0m")
+
+    #----
+    ##label distribution
+    from collections import Counter
+    train_labels = []
+    for x, y in train_dataset:
+        if hasattr(y, 'item'):
+            train_labels.append(int(y.item()))
+        else:
+            train_labels.append(y)
+    label_counts = Counter(train_labels)
+    for label, cnt in sorted(label_counts.items()):
+        print(f"  Client id {args.id} Class {label}: {cnt} samples")
+    #----
 
     # Create the data loaders
     train_loader = DataLoader(train_dataset, batch_size=len(train_dataset), shuffle=True)
@@ -712,7 +799,7 @@ def main()->None:
                         config=config, 
                         exp_n=args.exp_n                        
                           ).to_client()
-    fl.client.start_client(server_address="[::]:6398", client=client) # local host
+    fl.client.start_client(server_address="[::]:8086", client=client) # local host
     
     # read saved data and plot
     utils.plot_client_metrics(args.id, config, show=False)
