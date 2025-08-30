@@ -8,6 +8,13 @@ import math
 import argparse
 from dataclasses import dataclass
 from typing import Dict, List, Any
+from torch.utils.data import DataLoader
+try:
+    from opacus.accountants.utils import get_noise_multiplier
+    from opacus.accountants.rdp import RDPAccountant
+    _HAS_OPACUS = True
+except Exception:
+    _HAS_OPACUS = False
 
 import torch
 from tqdm import tqdm
@@ -116,6 +123,177 @@ def make_local_trainer(local_model, train_ds, collator, tokenizer, args, round_i
         processing_class=tokenizer,
         callbacks=[],
     )
+
+def get_model_norm(m, device):
+    params = [p.detach().flatten() for p in m.parameters()]
+    flat = torch.cat(params) if params else torch.tensor([], device=device)
+    return flat.norm().item()
+
+def dp_sgd_train_causallm(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    scheduler,
+    max_grad_norm: float,         # C
+    noise_multiplier: float,      # sigma
+    device: str,
+    num_epochs: int = 1,
+    grad_accum_steps: int = 1,
+    use_fp16: bool = False,
+):
+    """
+    DP-SGD for causal LM with -100-masked labels.
+    - Per-sample backward, global L2 clip to C, accumulate microbatches.
+    - After `grad_accum_steps` microbatches, average over total B, add N(0, (sigma*C/B)^2),
+      then optimizer.step().
+    """
+    scaler = torch.amp.GradScaler('cuda', enabled=use_fp16 and torch.cuda.is_available())
+
+    model.train()
+    model.to(device)
+
+    # Accumulators across microbatches (reset every optimizer step)
+    def _reset_micro_accum():
+        for p in model.parameters():
+            p.dp_accum = torch.zeros_like(p, device=p.device)
+
+    _reset_micro_accum()
+    mb_count = 0
+    mb_total_B = 0
+
+    for epoch in range(int(num_epochs)):
+        for batch in tqdm(dataloader, desc=f"DP Epoch {epoch+1}", leave=False):
+            input_ids      = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels         = batch["labels"].to(device)
+            B = input_ids.size(0)
+
+            # Per-sample loop
+            for p in model.parameters():
+                p.dp_batch_sum = torch.zeros_like(p, device=p.device)
+
+            for i in range(B):
+                model.zero_grad(set_to_none=True)
+                with torch.amp.autocast('cuda', enabled=use_fp16 and torch.cuda.is_available()):
+                    out = model(input_ids=input_ids[i:i+1],
+                                attention_mask=attention_mask[i:i+1],
+                                labels=labels[i:i+1])
+                    loss_i = out.loss
+
+                if scaler.is_enabled():
+                    scaler.scale(loss_i).backward()
+                    scaler.unscale_(optimizer)
+                else:
+                    loss_i.backward()
+
+                # global norm over all params for this sample
+                grad_sq_sum = 0.0
+                for p in model.parameters():
+                    if p.grad is not None:
+                        grad_sq_sum += p.grad.data.pow(2).sum().item()
+                grad_norm = math.sqrt(grad_sq_sum + 1e-12)
+                clip = min(1.0, max_grad_norm / (grad_norm + 1e-12))
+
+                for p in model.parameters():
+                    if p.grad is not None:
+                        p.dp_batch_sum.add_(p.grad.detach() * clip)
+
+            # Average this batch's clipped grads and add to microbatch accumulator (weighted by B)
+            for p in model.parameters():
+                p.dp_accum.add_(p.dp_batch_sum)  # weighted sum by B
+
+            mb_count += 1
+            mb_total_B += B
+
+            # Do an optimizer step every grad_accum_steps microbatches
+            if mb_count == grad_accum_steps:
+                # Final average across all microbatches in this step
+                for p in model.parameters():
+                    if p.requires_grad:
+                        final_grad = p.dp_accum / max(1, mb_total_B)
+                        # Gaussian noise
+                        if noise_multiplier > 0.0:
+                            noise = torch.normal(
+                                mean=0.0,
+                                std=(noise_multiplier * max_grad_norm) / max(1, mb_total_B),
+                                size=p.shape,
+                                device=p.device,
+                            )
+                            final_grad = final_grad + noise
+                        p.grad = final_grad
+
+                if scaler.is_enabled():
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
+
+                # reset microbatch accumulators
+                _reset_micro_accum()
+                mb_count = 0
+                mb_total_B = 0
+
+        # if leftover microbatches at epoch end
+        if mb_count > 0:
+            for p in model.parameters():
+                if p.requires_grad:
+                    final_grad = p.dp_accum / max(1, mb_total_B)
+                    if noise_multiplier > 0.0:
+                        noise = torch.normal(
+                            mean=0.0,
+                            std=(noise_multiplier * max_grad_norm) / max(1, mb_total_B),
+                            size=p.shape,
+                            device=p.device,
+                        )
+                        final_grad = final_grad + noise
+                    p.grad = final_grad
+            if scaler.is_enabled():
+                scaler.step(optimizer); scaler.update()
+            else:
+                optimizer.step()
+            if scheduler is not None:
+                scheduler.step()
+            optimizer.zero_grad(set_to_none=True)
+            _reset_micro_accum()
+            mb_count = 0
+            mb_total_B = 0
+
+def dp_prepare_client_sigma(N_client: int, batch_size: int, local_epochs: int, fl_rounds: int,
+                            target_epsilon: float, delta: float) -> float:
+    """
+    Compute sigma for total training on this client across all rounds:
+      total_epochs = local_epochs * fl_rounds
+    Uses Opacus RDP accountant if available; else raises if not installed.
+    """
+    if not _HAS_OPACUS:
+        raise RuntimeError("Opacus not available. Install `opacus>=1.4` or set sigma manually.")
+    sample_rate = min(1.0, batch_size / max(1, N_client))
+    total_epochs = max(1, int(local_epochs * fl_rounds))
+    sigma = get_noise_multiplier(
+        target_epsilon=target_epsilon,
+        target_delta=delta,
+        sample_rate=sample_rate,
+        epochs=total_epochs,
+        accountant="rdp",
+    )
+    sigma=1000
+    return float(sigma)
+
+def dp_report_epsilon(sigma: float, N_client: int, batch_size: int,
+                      local_epochs: int, fl_rounds: int, delta: float) -> float:
+    """Report achieved epsilon after training using RDP accountant."""
+    if not _HAS_OPACUS:
+        return float("nan")
+    sample_rate = min(1.0, batch_size / max(1, N_client))
+    steps_per_epoch = math.ceil(N_client / max(1, batch_size))
+    total_steps = int(steps_per_epoch * local_epochs * fl_rounds)
+    acc = RDPAccountant()
+    for _ in range(total_steps):
+        acc.step(noise_multiplier=sigma, sample_rate=sample_rate)
+    return float(acc.get_epsilon(delta))
 
 def evaluate_weighted_val_loss(global_model, val_splits: List, collator, tokenizer, args, round_idx: int) -> float:
     """Compute weighted mean eval_loss across client validation splits."""
@@ -614,6 +792,10 @@ def main():
     parser.add_argument("--client_canary_frac", type=float, default=0.2,help="Fraction of each client's train shard used as canary (members)")
     parser.add_argument("--mia_k_frac", type=float, default=1/3,help="Fraction for loss-threshold MIA (lowest/highest)")
     parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
+    parser.add_argument("--dp_epsilon", type=float, default=.001)
+    parser.add_argument("--dp_delta", type=float, default=None, help="If None, set to 1/N_client_samples")
+    parser.add_argument("--dp_max_grad_norm", type=float, default=1.0)   # C
+    parser.add_argument("--dp_accountant", type=str, default="rdp", choices=["rdp"])
     args = parser.parse_args()
     
     # update seed
@@ -833,10 +1015,57 @@ def main():
                 set_parameters_to_model(local_model, global_params)
 
                 # Train locally
-                local_trainer = make_local_trainer(
-                    local_model, client_trains[cid], collator, tokenizer, args, round_idx=rnd, client_id=cid
+                # Build DP dataloader for this client
+                dl = DataLoader(
+                    client_trains[cid],
+                    batch_size=args.train_batch_size,
+                    shuffle=True,
+                    collate_fn=collator,
+                    num_workers=2,
+                    pin_memory=torch.cuda.is_available(),
                 )
-                local_trainer.train()
+                N_client = len(client_trains[cid])
+                # delta default to 1/N_client_samples
+                delta = args.dp_delta if args.dp_delta is not None else 1.0 / max(1, N_client)
+
+                # Compute (or cache) sigma for this client across ALL rounds
+                sigma = dp_prepare_client_sigma(
+                    N_client=N_client,
+                    batch_size=args.train_batch_size,
+                    local_epochs=args.local_epochs,
+                    fl_rounds=args.fl_rounds,
+                    target_epsilon=args.dp_epsilon,
+                    delta=delta,
+                )
+
+                optimizer_dp = torch.optim.AdamW(local_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+                scheduler_dp = None  # optional: wire a real scheduler if you like
+
+                print(f"[DP] Client {cid}: sigma={sigma:.4f}, delta={delta:.2e}, C={args.dp_max_grad_norm}")
+                # print(f"Model norm before DP-SGD: {get_model_norm(local_model, device):.4f}")
+                dp_sgd_train_causallm(
+                    model=local_model,
+                    dataloader=dl,
+                    optimizer=optimizer_dp,
+                    scheduler=scheduler_dp,
+                    max_grad_norm=args.dp_max_grad_norm,
+                    noise_multiplier=sigma,
+                    device=device,
+                    num_epochs=args.local_epochs,                  # per-round local epochs
+                    grad_accum_steps=args.gradient_accumulation_steps,
+                    # use_fp16=args.fp16 and not args.bf16,         # DP in fp16 is okay if you keep noise in fp32 (we do)
+                )
+                # print(f"Model norm after DP-SGD: {get_model_norm(local_model, device):.4f}")
+
+                # (optional) Log achieved epsilon
+                eps_hat = dp_report_epsilon(
+                    sigma=sigma, N_client=N_client, batch_size=args.train_batch_size,
+                    local_epochs=args.local_epochs, fl_rounds=rnd,  # privacy spent up to current round
+                    delta=delta
+                )
+                results[f"round_{rnd}"][f"client_{cid}"]["dp"] = {
+                    "sigma": sigma, "delta": delta, "C": args.dp_max_grad_norm, "epsilon_so_far": eps_hat
+                }
                 
                 # ----------------- Membership Inference Attack (MIA) -----------------
                 print("\033[94mRunning per-client MIA on local model...\033[0m")
@@ -858,7 +1087,7 @@ def main():
                 client_results.append((client_params_np, len(client_trains[cid])))
 
                 # Cleanup GPU RAM
-                del local_trainer, local_model
+                del local_model
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 

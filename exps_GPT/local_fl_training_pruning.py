@@ -37,8 +37,55 @@ from transformers import (
 
 
 # -----------------------------
-# FL helpers: partitioning, params, FedAvg, local trainer, eval
+# FL helpers: partitioning, params, FedAvg, local trainer, eval, pruning
 # -----------------------------
+def prune_largest_grads(
+    grads: List[np.ndarray], pruning_rate: float = 0.3
+) -> tuple[List[np.ndarray], dict]:
+    """
+    Zero-out the top `pruning_rate` fraction of gradient magnitudes *globally*
+    across all tensors, then reshape back per tensor.
+
+    Returns:
+      pruned_grads: List[np.ndarray] shaped like `grads`
+      stats: {"threshold": float, "kept_frac": float, "pruning_rate": float}
+    """
+    assert 0.0 < pruning_rate < 1.0, "Pruning rate must be in (0, 1)."
+    if not grads:
+        return grads, {"threshold": None, "kept_frac": 1.0, "pruning_rate": pruning_rate}
+
+    # Flatten all grads into a single 1D vector
+    flat_parts, shapes, dtypes = [], [], []
+    for g in grads:
+        arr = np.asarray(g)
+        flat_parts.append(arr.reshape(-1))
+        shapes.append(arr.shape)
+        dtypes.append(arr.dtype)
+    flat = np.concatenate(flat_parts, axis=0)
+    abs_flat = np.abs(flat)
+
+    # Global threshold for top-k pruning
+    thr = np.percentile(abs_flat, 100.0 * (1.0 - pruning_rate))
+
+    # Keep only elements <= threshold (largest magnitudes are zeroed)
+    mask = (abs_flat <= thr)
+    pruned_flat = flat * mask
+
+    # Reconstruct per-tensor arrays
+    pruned, start = [], 0
+    for shape, dtype in zip(shapes, dtypes):
+        n = int(np.prod(shape))  # works for scalars too
+        chunk = pruned_flat[start:start + n].astype(dtype, copy=False).reshape(shape)
+        pruned.append(chunk)
+        start += n
+
+    stats = {
+        "threshold": float(thr),
+        "kept_frac": float(mask.mean()),
+        "pruning_rate": float(pruning_rate),
+    }
+    return pruned, stats
+
 def split_even_hf_dataset(ds, n_parts: int, seed: int) -> List:
     """Even random split of a HF dataset into n_parts (±1 sample)."""
     ds = ds.shuffle(seed=seed)
@@ -588,9 +635,9 @@ def main():
     parser.add_argument("--max_seq_len", type=int, default=1024)  # gpt2 context=1024; GPT-J supports 2048
     parser.add_argument("--train_batch_size", type=int, default=2)
     parser.add_argument("--eval_batch_size", type=int, default=8)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
     parser.add_argument("--num_train_epochs", type=float, default=10.0)
-    parser.add_argument("--learning_rate", type=float, default=2e-5) # try smaller e.g., 1e-5
+    parser.add_argument("--learning_rate", type=float, default=1e-3) # try smaller e.g., 1e-5
     parser.add_argument("--warmup_ratio", type=float, default=0.03) # try larger e.g., 0.06
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--logging_steps", type=int, default=50)
@@ -614,6 +661,7 @@ def main():
     parser.add_argument("--client_canary_frac", type=float, default=0.2,help="Fraction of each client's train shard used as canary (members)")
     parser.add_argument("--mia_k_frac", type=float, default=1/3,help="Fraction for loss-threshold MIA (lowest/highest)")
     parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
+    parser.add_argument("--pruning_rate", type=float, default=0.3, help="Fraction of largest-magnitude gradients to prune (0,1)")
     args = parser.parse_args()
     
     # update seed
@@ -837,6 +885,25 @@ def main():
                     local_model, client_trains[cid], collator, tokenizer, args, round_idx=rnd, client_id=cid
                 )
                 local_trainer.train()
+                
+                # ----------------- Gradient Pruning -----------------
+                # Current global weights (the "starting point" on this round)
+                params_in = global_params
+                # Client's weights after local training
+                params_out = get_parameters_from_model(local_model)
+                # Compute "gradients" as weight deltas
+                grads = [p_out - p_in for p_in, p_out in zip(params_in, params_out)]
+                pruned_grads, pstats = prune_largest_grads(grads, pruning_rate=args.pruning_rate)
+                # Recompose the pruned client weights to be sent
+                params_out_pruned = [p_in + g for p_in, g in zip(params_in, pruned_grads)]
+                client_params_np = params_out_pruned
+                # Load pruned weights back into local_model (only if you want local model == pruned)
+                set_parameters_to_model(local_model, client_params_np)
+
+                # (Optional) log pruning stats
+                results[f"round_{rnd}"][f"client_{cid}"]["pruning"] = {"enabled": True, **pstats}
+                print(f"[PRUNE] Client {cid}: rate={args.pruning_rate:.2f} "
+                    f"thr={pstats['threshold']:.4e} kept≈{pstats['kept_frac']:.2%}")
                 
                 # ----------------- Membership Inference Attack (MIA) -----------------
                 print("\033[94mRunning per-client MIA on local model...\033[0m")
