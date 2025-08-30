@@ -3,7 +3,7 @@
 # Optional (for ROUGE): pip install rouge-score
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import math
 import argparse
 from dataclasses import dataclass
@@ -19,6 +19,12 @@ import evaluate
 from datasets import load_dataset, DatasetDict
 import time
 import re, glob
+from collections import OrderedDict
+from functools import reduce
+from typing import Tuple
+import json
+import pandas as pd
+import shutil
 
 from transformers import (
     AutoTokenizer,
@@ -29,6 +35,224 @@ from transformers import (
     set_seed,
 )
 
+
+# -----------------------------
+# FL helpers: partitioning, params, FedAvg, local trainer, eval
+# -----------------------------
+def split_even_hf_dataset(ds, n_parts: int, seed: int) -> List:
+    """Even random split of a HF dataset into n_parts (±1 sample)."""
+    ds = ds.shuffle(seed=seed)
+    N = len(ds)
+    base = N // n_parts
+    rem  = N % n_parts
+    parts = []
+    start = 0
+    for i in range(n_parts):
+        end = start + base + (1 if i < rem else 0)
+        if end > start:
+            parts.append(ds.select(range(start, end)))
+        else:
+            parts.append(ds.select([]))
+        start = end
+    return parts
+
+def remove_empty_dirs(root_dir, patterns):
+    for pat in patterns:
+        for d in glob.glob(os.path.join(root_dir, pat)):
+            if os.path.isdir(d) and not os.listdir(d):
+                try:
+                    shutil.rmtree(d)
+                    print(f"Removed empty folder: {d}")
+                except Exception as e:
+                    print(f"Could not remove {d}: {e}")
+                        
+def select_fraction_subset(ds, frac: float, min_size: int = 1, seed: int = 0):
+    """Return a shuffled subset containing frac of the dataset (at least min_size)."""
+    if len(ds) == 0 or frac <= 0:
+        return ds.select([])
+    k = max(int(len(ds) * frac), min_size)
+    k = min(k, len(ds))
+    return ds.shuffle(seed=seed).select(range(k))
+
+def get_parameters_from_model(model) -> List[np.ndarray]:
+    # Ordered by state_dict() insertion order (stable across same model)
+    return [t.detach().cpu().numpy() for _, t in model.state_dict().items()]
+
+def set_parameters_to_model(model, parameters: List[np.ndarray]):
+    keys = list(model.state_dict().keys())
+    state_dict = OrderedDict({k: torch.tensor(v) for k, v in zip(keys, parameters)})
+    model.load_state_dict(state_dict, strict=True)
+
+def fedavg_weighted(results: List[Tuple[List[np.ndarray], int]]) -> List[np.ndarray]:
+    """List[(weights_as_np, num_samples)] -> weighted average parameter list."""
+    total = sum(n for _, n in results) or 1
+    weighted = [[w * n for w in weights] for weights, n in results]
+    avg: List[np.ndarray] = [reduce(np.add, layer_updates) / total
+                             for layer_updates in zip(*weighted)]
+    return avg
+
+def make_local_trainer(local_model, train_ds, collator, tokenizer, args, round_idx: int, client_id: int):
+    out_dir = os.path.join(args.output_dir, f"fl_r{round_idx}_c{client_id}")
+    train_args = TrainingArguments(
+        output_dir=out_dir,
+        per_device_train_batch_size=args.train_batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        num_train_epochs=args.local_epochs,
+        learning_rate=args.learning_rate,
+        warmup_ratio=args.warmup_ratio,
+        weight_decay=args.weight_decay,
+        logging_steps=args.logging_steps,
+        save_strategy="no",
+        eval_strategy="no",
+        dataloader_num_workers=2,
+        report_to="none",
+        remove_unused_columns=False,
+    )
+    return Trainer(
+        model=local_model,
+        args=train_args,
+        train_dataset=train_ds,
+        data_collator=collator,
+        processing_class=tokenizer,
+        callbacks=[],
+    )
+
+def evaluate_weighted_val_loss(global_model, val_splits: List, collator, tokenizer, args, round_idx: int) -> float:
+    """Compute weighted mean eval_loss across client validation splits."""
+    out_dir = os.path.join(args.output_dir, f"fl_eval_round_{round_idx}")
+    eval_args = TrainingArguments(
+        output_dir=out_dir,
+        per_device_eval_batch_size=args.eval_batch_size,
+        report_to="none",
+        save_strategy="no",
+        eval_strategy="no",
+        dataloader_num_workers=2,
+        remove_unused_columns=False,
+    )
+    trainer = Trainer(model=global_model, args=eval_args, data_collator=collator, processing_class=tokenizer)
+    losses, sizes = [], []
+    for ds in val_splits:
+        if len(ds) == 0:
+            continue
+        m = trainer.evaluate(eval_dataset=ds)
+        losses.append(m.get("eval_loss", float("nan")))
+        sizes.append(len(ds))
+    if not sizes:
+        return float("nan")
+    return float(sum(l * s for l, s in zip(losses, sizes)) / sum(sizes))
+
+def save_results_xlsx(results: dict, xlsx_path: str):
+    """
+    Create an Excel file with:
+      - summary: test loss/ppl, early stopping, best round by val loss,
+                 max client MIA across all rounds, max mean MIA across rounds
+      - rounds:  per-round weighted val loss + mean MIA across clients
+      - mia:     flattened per-(round, client) MIA details
+      - rouge:   ROUGE scores (single-row table)
+    """
+    # -------- collect per-round / per-client MIA + weighted val loss --------
+    round_rows = []
+    mia_rows = []
+
+    # Identify round keys
+    round_keys = [k for k in results.keys() if k.startswith("round_")]
+    # Sort by round number
+    def _rnum(k): 
+        try: 
+            return int(k.split("_")[1])
+        except Exception:
+            return 10**9
+    round_keys.sort(key=_rnum)
+
+    for rk in round_keys:
+        rnum = _rnum(rk)
+        rdict = results.get(rk, {})
+        w_loss = rdict.get("weighted_val_loss", float("nan"))
+
+        # collect per-client MIA
+        client_accs = []
+        for ck, cdict in rdict.items():
+            if ck.startswith("client_") and isinstance(cdict, dict) and ("mia" in cdict):
+                cid = int(ck.split("_")[1])
+                mia = cdict.get("mia", {}) or {}
+                acc = mia.get("accuracy", float("nan"))
+                client_accs.append(acc)
+                mia_rows.append({
+                    "round": rnum,
+                    "client": cid,
+                    "accuracy": acc,
+                    "k": mia.get("k", None),
+                    "thr_in": mia.get("thr_in", None),
+                    "thr_out": mia.get("thr_out", None),
+                })
+
+        mean_mia = float(np.nanmean(client_accs)) if client_accs else float("nan")
+        round_rows.append({
+            "round": rnum,
+            "weighted_val_loss": w_loss,
+            "mean_mia_acc": mean_mia,
+            "num_clients": len(client_accs),
+        })
+
+    # -------- compute summary stats --------
+    test_loss = results.get("test_loss", float("nan"))
+    test_ppl  = results.get("test_ppl", float("nan"))
+    early_stop_reached = results.get("early_stop_reached", False)
+    early_stop_round   = results.get("early_stop_round", None)
+
+    # best round by weighted val loss
+    best_round = None
+    best_val  = float("nan")
+    if round_rows:
+        # filter out NaNs
+        valid = [(r["round"], r["weighted_val_loss"]) for r in round_rows if not (isinstance(r["weighted_val_loss"], float) and math.isnan(r["weighted_val_loss"]))]
+        if valid:
+            best_round, best_val = min(valid, key=lambda x: x[1])
+
+    # max client MIA over all rounds/clients
+    max_client_mia = float("nan")
+    if mia_rows:
+        accs = [r["accuracy"] for r in mia_rows if r["accuracy"] is not None and not (isinstance(r["accuracy"], float) and math.isnan(r["accuracy"]))]
+        if accs:
+            max_client_mia = float(np.max(accs))
+
+    # max mean MIA across rounds
+    max_mean_mia = float("nan")
+    if round_rows:
+        means = [r["mean_mia_acc"] for r in round_rows if r["mean_mia_acc"] is not None and not (isinstance(r["mean_mia_acc"], float) and math.isnan(r["mean_mia_acc"]))]
+        if means:
+            max_mean_mia = float(np.max(means))
+
+    rouge_scores = results.get("rouge", {}) or {}
+
+    # -------- build dataframes --------
+    df_rounds = pd.DataFrame(round_rows).sort_values("round") if round_rows else pd.DataFrame(columns=["round","weighted_val_loss","mean_mia_acc","num_clients"])
+    df_mia    = pd.DataFrame(mia_rows).sort_values(["round","client"]) if mia_rows else pd.DataFrame(columns=["round","client","accuracy","k","thr_in","thr_out"])
+    df_rouge  = pd.DataFrame([rouge_scores]) if rouge_scores else pd.DataFrame(columns=["rouge1","rouge2","rougeL","rougeLsum"])
+
+    df_summary = pd.DataFrame([{
+        "test_loss": test_loss,
+        "test_ppl": test_ppl,
+        "early_stop_reached": early_stop_reached,
+        "early_stop_round": early_stop_round,
+        "best_round_by_val": best_round,
+        "best_weighted_val_loss": best_val,
+        "max_client_mia_accuracy": max_client_mia,
+        "max_mean_mia_accuracy_across_rounds": max_mean_mia,
+    }])
+
+    # -------- write Excel --------
+    os.makedirs(os.path.dirname(xlsx_path), exist_ok=True)
+    try:
+        writer = pd.ExcelWriter(xlsx_path, engine="xlsxwriter")
+    except Exception:
+        writer = pd.ExcelWriter(xlsx_path)  # fallback (openpyxl)
+
+    with writer:
+        df_summary.to_excel(writer, sheet_name="summary", index=False)
+        df_rounds.to_excel(writer, sheet_name="rounds", index=False)
+        df_mia.to_excel(writer, sheet_name="mia", index=False)
+        df_rouge.to_excel(writer, sheet_name="rouge", index=False)  
 
 # -----------------------------
 # Collator that preserves labels and pads them with -100
@@ -130,7 +354,6 @@ def preprocess_example(
         "attention_mask": attention_mask,
         "labels": labels,
     }
-
 
 def tokenize_dataset(
     ds,
@@ -306,7 +529,6 @@ def per_example_losses(model, dataset, device, collator, batch_size=4):
 
     return losses
 
-
 def run_simple_mia(model, device, collator, canary_ds, non_canary_ds, k_frac=1/3, batch_size=4):
     """
     Loss-based MIA:
@@ -357,14 +579,14 @@ def find_latest_checkpoint(output_dir: str) -> str | None:
 # -----------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="gpt2-xl",
+    parser.add_argument("--model_name", type=str, default="gpt2", #default="gpt2-xl",
                         help="gpt2-xl or EleutherAI/gpt-j-6B")
-    parser.add_argument("--output_dir", type=str, default="./outputs_gpt_cnn_dm")
+    parser.add_argument("--output_dir", type=str, default="./outputs_gpt_cnn_dm_light")
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--max_source_len", type=int, default=800)
     parser.add_argument("--max_target_len", type=int, default=128)
     parser.add_argument("--max_seq_len", type=int, default=1024)  # gpt2 context=1024; GPT-J supports 2048
-    parser.add_argument("--train_batch_size", type=int, default=4)
+    parser.add_argument("--train_batch_size", type=int, default=2)
     parser.add_argument("--eval_batch_size", type=int, default=8)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--num_train_epochs", type=float, default=10.0)
@@ -381,11 +603,25 @@ def main():
     parser.add_argument("--num_proc", type=int, default=4)
     parser.add_argument("--eval_rouge_samples", type=int, default=20)
     parser.add_argument("--device_idx", type=int, default=0, help="GPU device index (if using CUDA)")
-    parser.add_argument("--tot_samples", type=int, default=1000, help="Total samples to use from CNN/DM")
+    parser.add_argument("--tot_samples", type=int, default=100, help="Total samples to use from CNN/DM")
     parser.add_argument("--skip_train", action="store_true", help="Skip training and only run eval/MIA on a trained checkpoint")
     parser.add_argument("--ckp", type=str, default="", help="Path to a HF checkpoint dir to load (e.g., ./outputs_gpt_cnn_dm/checkpoint-86)")
+    parser.add_argument("--n_clients", type=int, default=3)
+    parser.add_argument("--fl_rounds", type=int, default=2)
+    parser.add_argument("--local_epochs", type=float, default=1.0)
+    parser.add_argument("--partition_seed", type=int, default=123)
+    parser.add_argument("--save_global_each_round", action="store_true")
+    parser.add_argument("--client_canary_frac", type=float, default=0.2,
+                        help="Fraction of each client's train shard used as canary (members)")
+    parser.add_argument("--mia_k_frac", type=float, default=1/3,
+                        help="Fraction for loss-threshold MIA (lowest/highest)")
+    parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
     args = parser.parse_args()
-
+    
+    # update seed
+    args.seed = args.seed + args.fold
+    args.partition_seed = args.partition_seed + args.fold
+    
     # Set total number of samples and split proportions
     total_samples = args.tot_samples
     train_prop = 0.7
@@ -435,6 +671,7 @@ def main():
     model.resize_token_embeddings(len(tokenizer))
     model.config.pad_token_id = pad_id
     model.config.use_cache = False
+    model.config.loss_type = "ForCausalLMLoss"
 
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
@@ -465,6 +702,27 @@ def main():
         canary_ds    = torch.load(dataset_paths["canary"], weights_only=False)
         non_canary_ds= torch.load(dataset_paths["non_canary"], weights_only=False)
         raw = load_dataset("cnn_dailymail", "3.0.0")
+
+        # ----------------- Client splits -----------------
+        n_clients = args.n_clients
+        print(f"\nSplitting into {n_clients} clients (train/val)...")
+        client_trains = split_even_hf_dataset(train_ds, n_clients, seed=args.partition_seed)
+        client_vals   = split_even_hf_dataset(val_ds,   n_clients, seed=args.partition_seed)
+
+        for cid, (tr, va) in enumerate(zip(client_trains, client_vals)):
+            print(f"Client {cid}: train={len(tr)}, val={len(va)}")
+
+        # Prepare per-client MIA splits
+        # - Canary per client: subset of its own train shard (members)
+        # - Non-canary per client: split the global non_canary_ds evenly (non-members)
+        print("\nPreparing per-client canary/non-canary splits for MIA...")
+        client_canaries = [
+            select_fraction_subset(tr, frac=args.client_canary_frac, seed=args.partition_seed + cid)
+            for cid, tr in enumerate(client_trains)
+        ]
+        noncanary_splits = split_even_hf_dataset(non_canary_ds, n_clients, seed=args.partition_seed)
+        client_noncanaries = [noncanary_splits[cid] for cid in range(n_clients)]
+
     else:
         print("Loading CNN/DailyMail...")
         raw = load_dataset("cnn_dailymail", "3.0.0")
@@ -494,6 +752,15 @@ def main():
             max_seq_len=args.max_seq_len, num_proc=args.num_proc,
         )
         train_ds, val_ds, test_ds = proc["train"], proc["validation"], proc["test"]
+        
+        # ----------------- Client splits -----------------
+        n_clients = args.n_clients
+        print(f"\nSplitting into {n_clients} clients (train/val)...")
+        client_trains = split_even_hf_dataset(train_ds, n_clients, seed=args.partition_seed)
+        client_vals   = split_even_hf_dataset(val_ds,   n_clients, seed=args.partition_seed)
+
+        for cid, (tr, va) in enumerate(zip(client_trains, client_vals)):
+            print(f"Client {cid}: train={len(tr)}, val={len(va)}")
 
         # Tokenize canary/non-canary
         print("\033[93m\nTokenizing canary/non-canary...\033[0m")
@@ -506,6 +773,15 @@ def main():
         canary_ds     = proc_mia["canary"]
         non_canary_ds = proc_mia["non_canary"]
 
+        # Prepare per-client MIA splits
+        print("\nPreparing per-client canary/non-canary splits for MIA...")
+        client_canaries = [
+            select_fraction_subset(tr, frac=args.client_canary_frac, seed=args.partition_seed + cid)
+            for cid, tr in enumerate(client_trains)
+        ]
+        noncanary_splits = split_even_hf_dataset(non_canary_ds, n_clients, seed=args.partition_seed)
+        client_noncanaries = [noncanary_splits[cid] for cid in range(n_clients)]
+
         # Save all
         torch.save(train_ds,      dataset_paths["train"])
         torch.save(val_ds,        dataset_paths["validation"])
@@ -517,69 +793,197 @@ def main():
     collator = DataCollatorForCausalLMWithLabelMask(tokenizer, pad_to_multiple_of=8)
 
     # ----------------- Training -----------------
-    total_train_steps = (len(train_ds) // (args.train_batch_size * max(1, args.gradient_accumulation_steps))) * math.ceil(args.num_train_epochs)
-    print(f"\nTrain examples: {len(train_ds)} | Val: {len(val_ds)} | Test: {len(test_ds)}")
+    print(f"\nTotal train examples: {len(train_ds)} | Val: {len(val_ds)} | Test: {len(test_ds)}")
+    print("\033[93m\nStarting Federated Averaging training...\033[0m")
+    # Track best checkpoint directory across rounds
+    best_ckpt_dir = None
+    if not args.skip_train:
+        # Initialize "global" weights from the current model
+        global_params = get_parameters_from_model(model)
 
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        per_device_train_batch_size=args.train_batch_size,
-        per_device_eval_batch_size=args.eval_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        num_train_epochs=args.num_train_epochs,
-        learning_rate=args.learning_rate,
-        warmup_ratio=args.warmup_ratio,
-        weight_decay=args.weight_decay,
-        logging_steps=args.logging_steps,
-        eval_strategy="steps",
-        eval_steps=args.eval_steps,
-        save_steps=args.save_steps,
-        save_total_limit=2,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
-        # fp16=(args.fp16 and device.startswith("cuda")),
-        # bf16=(args.bf16 and device != "cpu"),
-        dataloader_num_workers=2,
-        report_to="none",
-    )
+        best_w_loss = float("inf")
+        patience = args.patience
+        no_improve = 0
+        results = {"early_stop_reached": False, "early_stop_round": None}
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_ds,
-        eval_dataset=val_ds,
-        data_collator=collator,
-        processing_class=tokenizer,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.patience)],
-    )
+        for rnd in range(1, args.fl_rounds + 1):
+            print(f"\033[92m\n--> FL ROUND {rnd}/{args.fl_rounds}\033[0m")
+
+            client_results: List[Tuple[List[np.ndarray], int]] = []
+            results[f"round_{rnd}"] = {}
+
+            # Sequential local training per client (each starts from the same global weights)
+            for cid in range(n_clients):
+                print(f"\033[93mClient {cid}: local training on {len(client_trains[cid])} samples\033[0m")
+                results[f"round_{rnd}"][f"client_{cid}"] = {}
+
+                # Fresh local model with the right embedding size & config
+                local_model = AutoModelForCausalLM.from_pretrained(
+                    model_src,
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True,
+                )
+                local_model.resize_token_embeddings(len(tokenizer))
+                local_model.config.pad_token_id = pad_id
+                local_model.config.use_cache = False
+                local_model.config.loss_type = "ForCausalLMLoss"
+                if args.gradient_checkpointing:
+                    local_model.gradient_checkpointing_enable()
+                local_model.to(device)
+
+                # Load global weights
+                set_parameters_to_model(local_model, global_params)
+
+                # Train locally
+                local_trainer = make_local_trainer(
+                    local_model, client_trains[cid], collator, tokenizer, args, round_idx=rnd, client_id=cid
+                )
+                local_trainer.train()
+                
+                # ----------------- Membership Inference Attack (MIA) -----------------
+                print("\033[94mRunning per-client MIA on local model...\033[0m")
+                mia_result = run_simple_mia(
+                    model=local_model,
+                    device=device,
+                    collator=collator,
+                    canary_ds=client_canaries[cid],
+                    non_canary_ds=client_noncanaries[cid],
+                    k_frac=args.mia_k_frac,
+                    batch_size=args.eval_batch_size,
+                )
+                # Save MIA summary for this round/client
+                print(f"\033[94mMIA result: {mia_result}\033[0m")
+                results[f"round_{rnd}"][f"client_{cid}"]["mia"] = mia_result
+
+                # Collect updated weights and “importance” (=num samples)
+                client_params_np = get_parameters_from_model(local_model)
+                client_results.append((client_params_np, len(client_trains[cid])))
+
+                # Cleanup GPU RAM
+                del local_trainer, local_model
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            # FedAvg aggregation
+            print(f"\033[93mAggregating {len(client_results)} client models (FedAvg)\033[0m")
+            global_params = fedavg_weighted(client_results)
+
+            # Load aggregated weights into the global model object
+            set_parameters_to_model(model, global_params)
+            model.to(device)
+
+            # (Optional) evaluate on client validation shards (weighted loss)
+            print(f"\033[93mEvaluating aggregated model on client validation sets\033[0m")
+            w_val_loss = evaluate_weighted_val_loss(model, client_vals, collator, tokenizer, args, round_idx=rnd)
+            results[f"round_{rnd}"]["weighted_val_loss"] = w_val_loss
+            print(f"\033[92m✅ Round {rnd}: weighted val_loss={w_val_loss:.4f}\033[0m")
+
+            # Early stopping on weighted val loss (like your example)
+            improved = w_val_loss < best_w_loss
+            if improved:
+                best_w_loss = w_val_loss
+                no_improve = 0
+                # Save the current best global model (checkpoint-style)
+                best_dir = os.path.join(args.output_dir, f"global_round_{rnd}")
+                os.makedirs(best_dir, exist_ok=True)
+                model.save_pretrained(best_dir)
+                tokenizer.save_pretrained(best_dir)
+                best_ckpt_dir = best_dir
+            else:
+                no_improve += 1
+
+            if args.save_global_each_round:
+                round_dir = os.path.join(args.output_dir, f"global_round_{rnd}_always")
+                os.makedirs(round_dir, exist_ok=True)
+                model.save_pretrained(round_dir)
+                tokenizer.save_pretrained(round_dir)
+
+            if no_improve >= patience:
+                print(f"\033[91mEarly stopping: no improvement for {patience} rounds.\033[0m")
+                results["early_stop_reached"] = True
+                results["early_stop_round"] = rnd
+                break
+
 
     # ----------------- Eval: test loss & perplexity -----------------
-    print("\033[93m\nEvaluating on test set (loss/perplexity) before training...\033[0m")
+    print("\033[93m\nLoading best global model from disk...\033[0m")
+    # Load best model from training, or provided checkpoint if skipping training
+    if args.skip_train:
+        # When skipping training, use the already loaded model (from --ckp or base)
+        best_model = model
+    else:
+        if best_ckpt_dir and os.path.isdir(best_ckpt_dir):
+            best_model = AutoModelForCausalLM.from_pretrained(best_ckpt_dir, torch_dtype=torch.float32, low_cpu_mem_usage=True)
+            best_model.resize_token_embeddings(len(tokenizer))
+            best_model.config.pad_token_id = tokenizer.pad_token_id
+            best_model.config.use_cache = False
+            best_model.config.loss_type = "ForCausalLMLoss"
+            if args.gradient_checkpointing:
+                best_model.gradient_checkpointing_enable()
+            best_model.to(device)
+        else:
+            # Fallback to current in-memory model if no improvement was saved
+            best_model = model
+    eval_args = TrainingArguments(
+        output_dir=args.output_dir,
+        per_device_eval_batch_size=args.eval_batch_size,
+        report_to="none",
+        save_strategy="no",
+        eval_strategy="no",
+        dataloader_num_workers=2,
+        remove_unused_columns=False,
+    )
+    trainer = Trainer(model=best_model, args=eval_args, data_collator=collator, processing_class=tokenizer)
+    print("\033[93m\nEvaluating on test set (loss/perplexity)...\033[0m")
     test_metrics = trainer.evaluate(eval_dataset=test_ds)
     test_loss = test_metrics.get("eval_loss", float("nan"))
     test_ppl = math.exp(test_loss) if test_loss < 20 else float("inf")
     print(f"[Test] loss: {test_loss:.4f} | ppl: {test_ppl:.2f}")
+    results["test_loss"] = test_loss
+    results["test_ppl"] = test_ppl
 
     # ----------------- Eval: ROUGE on generated summaries (subset) -----------------
-    # print("\033[93m\nEvaluating ROUGE (subset) before training...\033[0m")
-    # rouge_scores = evaluate_rouge(model, tokenizer, test_ds, device, num_samples=args.eval_rouge_samples)
-    # print("ROUGE:", {k: round(v, 4) for k, v in rouge_scores.items()})
+    print("\033[93m\nEvaluating ROUGE (subset)...\033[0m")
+    rouge_scores = evaluate_rouge(best_model, tokenizer, test_ds, device, num_samples=args.eval_rouge_samples)
+    print("ROUGE:", {k: round(v, 4) for k, v in rouge_scores.items()})
+    results["rouge"] = rouge_scores
 
-    print("\033[93m\nStarting training...\033[0m")
-    if not args.skip_train:
-        trainer.train()
+    # ----------------- Membership Inference Attack (MIA) -----------------
+    # print("\033[93m\nRunning loss-based MIA (⅓ lowest vs ⅓ highest)...\033[0m")
+    # _ = run_simple_mia(
+    #     model=best_model,
+    #     device=device,
+    #     collator=collator,
+    #     canary_ds=canary_ds,
+    #     non_canary_ds=non_canary_ds,
+    #     k_frac=1/3,
+    #     batch_size=args.eval_batch_size,
+    # )
 
-        # ----------------- Eval: test loss & perplexity -----------------
-        print("\033[93m\nEvaluating on test set (loss/perplexity)...\033[0m")
-        test_metrics = trainer.evaluate(eval_dataset=test_ds)
-        test_loss = test_metrics.get("eval_loss", float("nan"))
-        test_ppl = math.exp(test_loss) if test_loss < 20 else float("inf")
-        print(f"[Test] loss: {test_loss:.4f} | ppl: {test_ppl:.2f}")
+    # Save results summary
+    results_path = os.path.join(args.output_dir, f"results_summary_F{args.fold}.json")
+    os.makedirs(os.path.dirname(results_path), exist_ok=True)
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=4)  
 
-        # # ----------------- Eval: ROUGE on generated summaries (subset) -----------------
-        # print("\033[93m\nEvaluating ROUGE (subset)...\033[0m")
-        # rouge_scores = evaluate_rouge(model, tokenizer, test_ds, device, num_samples=args.eval_rouge_samples)
-        # print("ROUGE:", {k: round(v, 4) for k, v in rouge_scores.items()})
+    # XLSX export with key metrics
+    xlsx_path = os.path.join(args.output_dir, f"results_summary_F{args.fold}.xlsx")
+    save_results_xlsx(results, xlsx_path)
+    print(f"[OK] Wrote {results_path} and {xlsx_path}")
+    
+    # Cleanup: remove intermediate round checkpoints
+    remove_empty_dirs(args.output_dir, ["fl_eval_round_*", "fl_r*_c*"])
+    
+
+if __name__ == "__main__":
+    start_time = time.time()
+    main()
+    end_time = time.time()
+    print(f"\033[90mTotal training time: {end_time - start_time:.2f} seconds\033[0m")
+
+
+
+
 
     # # ----------------- Single-example inference + loss + gradient -----------------
     # print("\033[93m\nRunning single-example inference & gradient...\033[0m")
@@ -606,22 +1010,3 @@ def main():
     # grad_path = os.path.join(args.output_dir, "single_example_flat_grad.pt")
     # torch.save(single["flat_grad"].detach().cpu(), grad_path)
     # print(f"Saved flat gradient vector to: {grad_path}")
-
-    # ----------------- Membership Inference Attack (MIA) -----------------
-    print("\033[93m\nRunning loss-based MIA (⅓ lowest vs ⅓ highest)...\033[0m")
-    _ = run_simple_mia(
-        model=model,
-        device=device,
-        collator=collator,
-        canary_ds=canary_ds,
-        non_canary_ds=non_canary_ds,
-        k_frac=1/3,
-        batch_size=args.eval_batch_size,
-    )
-
-
-if __name__ == "__main__":
-    start_time = time.time()
-    main()
-    end_time = time.time()
-    print(f"\033[90mTotal training time: {end_time - start_time:.2f} seconds\033[0m")
