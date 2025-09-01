@@ -3,11 +3,13 @@
 # Optional (for ROUGE): pip install rouge-score
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import math
 import argparse
 from dataclasses import dataclass
 from typing import Dict, List, Any
+import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 from tqdm import tqdm
@@ -578,9 +580,6 @@ def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None
       - Right: mean and max MIA accuracy across rounds (in %), with peak values annotated
     Saves the figure as a vector PDF at `pdf_path`.
     """
-    import math
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # ---- Extract series from results ----
     def _round_num(k: str) -> int:
@@ -669,6 +668,7 @@ def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None
         fig.suptitle(title, y=1.02, fontsize=12)
 
     # ---- Save as PDF ----
+    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
     fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     
@@ -677,7 +677,7 @@ def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None
 # -----------------------------
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="gpt2", #default="gpt2-xl",
+    parser.add_argument("--model_name", type=str, default="EleutherAI/gpt-neo-1.3B", #default="gpt2-xl", gpt2 good for testing
                         help="gpt2-xl or EleutherAI/gpt-j-6B")
     parser.add_argument("--output_dir", type=str, default="./outputs_gpt_cnn_dm_light")
     parser.add_argument("--seed", type=int, default=123)
@@ -687,21 +687,21 @@ def main():
     parser.add_argument("--train_batch_size", type=int, default=2)
     parser.add_argument("--eval_batch_size", type=int, default=8)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
-    parser.add_argument("--num_train_epochs", type=float, default=10.0)
-    parser.add_argument("--learning_rate", type=float, default=2e-5) # try smaller e.g., 1e-5
+    parser.add_argument("--learning_rate", type=float, default=1e-4) # try smaller e.g., 1e-5
     parser.add_argument("--warmup_ratio", type=float, default=0.03) # try larger e.g., 0.06
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--logging_steps", type=int, default=50)
     parser.add_argument("--eval_steps", type=int, default=200)
     parser.add_argument("--save_steps", type=int, default=200)
-    parser.add_argument("--patience", type=int, default=3)
+    parser.add_argument("--patience", type=int, default=2)
     parser.add_argument("--bf16", action="store_true")
     parser.add_argument("--fp16", action="store_true", default=True)
     parser.add_argument("--gradient_checkpointing", action="store_true", default=True)
     parser.add_argument("--num_proc", type=int, default=4)
     parser.add_argument("--eval_rouge_samples", type=int, default=20)
     parser.add_argument("--device_idx", type=int, default=0, help="GPU device index (if using CUDA)")
-    parser.add_argument("--tot_samples", type=int, default=100, help="Total samples to use from CNN/DM")
+    parser.add_argument("--tot_samples", type=int, default=914, help="Total samples to use from CNN/DM")
+    parser.add_argument("--client_training_samples", type=int, default=0, help="Number of training samples per client.")
     parser.add_argument("--skip_train", action="store_true", help="Skip training and only run eval/MIA on a trained checkpoint")
     parser.add_argument("--ckp", type=str, default="", help="Path to a HF checkpoint dir to load (e.g., ./outputs_gpt_cnn_dm/checkpoint-86)")
     parser.add_argument("--n_clients", type=int, default=5)
@@ -719,9 +719,12 @@ def main():
     args.partition_seed = args.partition_seed + args.fold
     
     # Set total number of samples and split proportions
-    total_samples = args.tot_samples
     train_prop = 0.7
     val_prop = 0.15
+    if args.client_training_samples > 0:
+        total_samples = int(round(args.client_training_samples * args.n_clients * 1 / train_prop))
+    else: 
+        total_samples = args.tot_samples
     
     set_seed(args.seed)
     device_index = args.device_idx
@@ -910,7 +913,7 @@ def main():
 
             # Sequential local training per client (each starts from the same global weights)
             for cid in range(n_clients):
-                print(f"\033[93mClient {cid}: local training on {len(client_trains[cid])} samples\033[0m")
+                print(f"\033[93mClient {cid} - Round {rnd}: local training on {len(client_trains[cid])} samples\033[0m")
                 results[f"round_{rnd}"][f"client_{cid}"] = {}
 
                 # Fresh local model with the right embedding size & config
@@ -1073,7 +1076,7 @@ def main():
     print(f"[OK] Wrote {results_path} and {xlsx_path}")
 
     # save figure
-    fig_path = os.path.join(args.output_dir, f"training_mia_trends_F{args.fold}.pdf")
+    fig_path = os.path.join(args.output_dir, f"images/training_mia_trends_FedAvg_F{args.fold}.pdf")
     plot_training_and_mia(results, fig_path, title=None)
     print(f"[OK] Saved trends figure to {fig_path}")
     

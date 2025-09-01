@@ -130,7 +130,7 @@ def main():
     p.add_argument("--n_folds", type=int, required=True)
     p.add_argument("--pattern", type=str, default="results_summary_F{fold}.xlsx",
                    help="Filename pattern; {fold} will be replaced by fold index")
-    p.add_argument("--method", type=str, default="FedAvg", choices=["FedAvg", "ERIS"],)
+    p.add_argument("--method", type=str, default="FedAvg", choices=["FedAvg", "ERIS", "SoteriaFL", "PriPrune", "FedAvg+DP"],)
     p.add_argument("--n_samples", type=int, default=None, help="(optional) total number of samples (for info only)")
     args = p.parse_args()
 
@@ -182,7 +182,7 @@ def main():
     agg_rouge   = _agg_rouge(dfs_rouge)
 
     # Write output Excel
-    out_xlsx = f"results_summary_{args.method}_F{len(fold_paths)}_N{args.n_samples}.xlsx"
+    out_xlsx = f"summaries/results_summary_{args.method}_F{len(fold_paths)}_N{args.n_samples}.xlsx"
     out_path = os.path.join(args.results_dir, out_xlsx)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     try:
