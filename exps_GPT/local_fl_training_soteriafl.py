@@ -18,7 +18,6 @@ except Exception:
 
 import torch
 from tqdm import tqdm
-from torch.nn.utils import clip_grad_norm_
 import numpy as np
 
 from datasets import load_dataset
@@ -38,7 +37,6 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    EarlyStoppingCallback,
     set_seed,
 )
 
@@ -1221,6 +1219,9 @@ def main():
                     "k": cstats["k"], "d": cstats["d"], "kept_frac": cstats["kept_frac"]
                 }
                 client_params_np = sent_params
+                set_parameters_to_model(local_model, client_params_np)
+                # Collect updated weights and “importance” (=num samples)
+                client_results.append((client_params_np, len(client_trains[cid])))
                 
                 # ----------------- Membership Inference Attack (MIA) -----------------
                 print("\033[94mRunning per-client MIA on local model...\033[0m")
@@ -1237,18 +1238,19 @@ def main():
                 print(f"\033[94mMIA result: {mia_result}\033[0m")
                 results[f"round_{rnd}"][f"client_{cid}"]["mia"] = mia_result
 
-                # Collect updated weights and “importance” (=num samples)
-                client_params_np = get_parameters_from_model(local_model)
-                client_results.append((client_params_np, len(client_trains[cid])))
-
                 # Cleanup GPU RAM
                 del local_model
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
-            # FedAvg aggregation
-            print(f"\033[93mAggregating {len(client_results)} client models (FedAvg)\033[0m")
-            global_params = fedavg_weighted(client_results)
+            # SoteriaFL aggregation
+            print(f"\033[93mAggregating {len(client_results)} client models (SoteriaFL)\033[0m")
+            global_params, server_ref_s = soteria_aggregate(
+                results=client_results,
+                params_in=global_params,
+                ref_s=server_ref_s,
+                gamma=soteria_gamma,
+            )
 
             # Load aggregated weights into the global model object
             set_parameters_to_model(model, global_params)
@@ -1365,30 +1367,3 @@ if __name__ == "__main__":
 
 
 
-
-
-    # # ----------------- Single-example inference + loss + gradient -----------------
-    # print("\033[93m\nRunning single-example inference & gradient...\033[0m")
-    # # Take one test sample
-    # ex = raw["test"][0]
-    # article = ex["article"]
-    # reference = ex["highlights"]
-
-    # single = single_example_inference_and_gradient(
-    #     model, tokenizer, device,
-    #     article=article,
-    #     reference_summary=reference,
-    #     max_source_len=args.max_source_len,
-    #     max_target_len=args.max_target_len,
-    #     max_seq_len=args.max_seq_len,
-    # )
-    # print(f"Single-example loss: {single['loss']:.6f}")
-    # print(f"Single-example grad L2-norm: {single['grad_norm']:.4f}")
-    # print("Generated summary:")
-    # print(single["generated_summary"][:1000])
-
-    # # Optionally save the flat gradient vector for MIA experiments
-    # os.makedirs(args.output_dir, exist_ok=True)
-    # grad_path = os.path.join(args.output_dir, "single_example_flat_grad.pt")
-    # torch.save(single["flat_grad"].detach().cpu(), grad_path)
-    # print(f"Saved flat gradient vector to: {grad_path}")

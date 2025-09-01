@@ -35,55 +35,167 @@ from transformers import (
 
 
 # -----------------------------
-# FL helpers: partitioning, params, FedAvg, local trainer, eval, pruning
+# ERIS compression and aggregation
 # -----------------------------
-def prune_largest_grads(
-    grads: List[np.ndarray], pruning_rate: float = 0.3
-) -> tuple[List[np.ndarray], dict]:
-    """
-    Zero-out the top `pruning_rate` fraction of gradient magnitudes *globally*
-    across all tensors, then reshape back per tensor.
+def flatten_params(params):
+    shape_list = [p.shape for p in params]
+    flattened_params = np.concatenate([p.flatten() for p in params])
+    return flattened_params, shape_list
 
+def unflatten_params(flattened_params, shape_list):
+    params = []
+    start_idx = 0
+    for shape in shape_list:
+        size = np.prod(shape)
+        param = flattened_params[start_idx:start_idx + size].reshape(shape)
+        params.append(param)
+        start_idx += size
+    return params
+
+def create_mask(params, n_splits, seed):
+    flat_params, shape_list = flatten_params(params)
+    aggregators_ass = np.zeros_like(flat_params)
+    n_elements_per_aggr = len(aggregators_ass)//n_splits
+    rest = len(aggregators_ass) % n_splits
+    i = 0
+    for aggr in range(0,n_splits):
+        fragment_size = n_elements_per_aggr + (1 if aggr < rest else 0)
+        aggregators_ass[i:i+fragment_size] = aggr
+        i = i + fragment_size
+    
+    # Create a random generator with the given seed
+    gen = np.random.MT19937(seed=seed)
+    rng = np.random.Generator(gen)
+    # Randomly shuffle the aggregator assignments
+    rng.shuffle(aggregators_ass)
+    
+    return unflatten_params(aggregators_ass, shape_list)
+
+def count_state_params(model: torch.nn.Module) -> int:
+    return int(sum(t.numel() for _, t in model.state_dict().items()))
+
+def init_eris_state(
+    model: torch.nn.Module,
+    fl_rounds: int,
+    k: int | None = None,
+    k_frac: float | None = None,
+) -> tuple[int, int, float, List[np.ndarray]]:
+    """
     Returns:
-      pruned_grads: List[np.ndarray] shaped like `grads`
-      stats: {"threshold": float, "kept_frac": float, "pruning_rate": float}
+      d: total params
+      k: number of kept coordinates for random-k
+      gamma: SoteriaFL gamma
+      s: reference vector list (zeros), one np.ndarray per tensor
     """
-    assert 0.0 < pruning_rate < 1.0, "Pruning rate must be in (0, 1)."
-    if not grads:
-        return grads, {"threshold": None, "kept_frac": 1.0, "pruning_rate": pruning_rate}
+    d = count_state_params(model)
+    if k is None:
+        if k_frac is not None and k_frac > 0 and k_frac < 1:
+            k = max(1, int(d * k_frac))
+        else:
+            # paper’s heuristic (your earlier code)
+            k = max(1, int(d / max(1.0, math.log2(max(2, fl_rounds)))))
 
-    # Flatten all grads into a single 1D vector
-    flat_parts, shapes, dtypes = [], [], []
-    for g in grads:
-        arr = np.asarray(g)
-        flat_parts.append(arr.reshape(-1))
+    # gamma formula used in your prior implementation
+    w = (d / k) - 1.0
+    gamma = math.sqrt((1.0 + 2.0 * w) / (2.0 * (1.0 + w) ** 3))
+
+    s = []
+    for _, t in model.state_dict().items():
+        s.append(np.zeros_like(t.detach().cpu().numpy()))
+    return d, k, float(gamma), s
+
+def compress_random_k(params: List[np.ndarray], k: int, rng: np.random.Generator) -> List[np.ndarray]:
+    """
+    Random-k compressor with scaling d/k (unbiased).
+    Works on a list of arrays (e.g., grads), flattening globally then reshaping back.
+    """
+    flats, shapes, dtypes = [], [], []
+    for p in params:
+        arr = np.asarray(p)
+        flats.append(arr.reshape(-1))
         shapes.append(arr.shape)
         dtypes.append(arr.dtype)
-    flat = np.concatenate(flat_parts, axis=0)
-    abs_flat = np.abs(flat)
+    flat = np.concatenate(flats, axis=0)
+    d = flat.size
+    if k >= d:
+        return params  # nothing to compress
 
-    # Global threshold for top-k pruning
-    thr = np.percentile(abs_flat, 100.0 * (1.0 - pruning_rate))
+    idx = rng.choice(d, size=k, replace=False)
+    mask = np.zeros(d, dtype=bool); mask[idx] = True
+    scale = d / k
+    comp = np.zeros_like(flat)
+    comp[mask] = flat[mask] * scale
 
-    # Keep only elements <= threshold (largest magnitudes are zeroed)
-    mask = (abs_flat <= thr)
-    pruned_flat = flat * mask
-
-    # Reconstruct per-tensor arrays
-    pruned, start = [], 0
+    out, start = [], 0
     for shape, dtype in zip(shapes, dtypes):
-        n = int(np.prod(shape))  # works for scalars too
-        chunk = pruned_flat[start:start + n].astype(dtype, copy=False).reshape(shape)
-        pruned.append(chunk)
+        n = int(np.prod(shape))
+        out.append(comp[start:start+n].astype(dtype, copy=False).reshape(shape))
         start += n
+    return out
 
-    stats = {
-        "threshold": float(thr),
-        "kept_frac": float(mask.mean()),
-        "pruning_rate": float(pruning_rate),
-    }
-    return pruned, stats
+def eris_pack_client_update(
+    params_in: List[np.ndarray],
+    params_out: List[np.ndarray],
+    ref_s: List[np.ndarray],
+    k: int,
+    rng: np.random.Generator,
+) -> tuple[List[np.ndarray], dict]:
+    """
+    Client-side step *after* local training:
+      grads = params_out - params_in
+      shifted = grads - s
+      shifted_sparse = RandomK(shifted)
+      send params_in + shifted_sparse
+    """
+    grads = [p_out - p_in for p_in, p_out in zip(params_in, params_out)]
+    shifted = [g - s for g, s in zip(grads, ref_s)]
+    shifted_sparse = compress_random_k(shifted, k=k, rng=rng)
+    # what we transmit: params_in + shifted_sparse
+    sent = [p_in + gsp for p_in, gsp in zip(params_in, shifted_sparse)]
+    d = int(sum(p.size for p in grads))
+    stats = {"k": int(k), "d": d, "kept_frac": float(k / d)}
+    return sent, stats
 
+def eris_aggregate(
+    results: List[Tuple[List[np.ndarray], int]],
+    params_in: List[np.ndarray],
+    ref_s: List[np.ndarray],
+    gamma: float,
+) -> tuple[List[np.ndarray], List[np.ndarray]]:
+    """
+    Server aggregation for SoteriaFL:
+      For each client result (weights), compute (weights - params_in) = shifted_sparse_grad.
+      Average them with example-weighting, then:
+        sparse_grads' = s + avg(shifted_sparse_grads)
+        params' = params_in + sparse_grads'
+        s' = s + gamma * avg(shifted_sparse_grads)
+    """
+    if not results:
+        return params_in, ref_s
+
+    num_total = sum(n for _, n in results) or 1
+    # per-client shifted-sparse grads (weighted by num_examples)
+    weighted = [
+        [(p_out - p_in) * n for p_out, p_in in zip(weights, params_in)]
+        for weights, n in results
+    ]
+    # avg shifted-sparse grads
+    avg_shifted_sparse = [
+        reduce(np.add, layer_updates) / num_total for layer_updates in zip(*weighted)
+    ]
+
+    # remove shift
+    sparse_grads_prime = [s + g for s, g in zip(ref_s, avg_shifted_sparse)]
+    params_prime = [p_in + g for p_in, g in zip(params_in, sparse_grads_prime)]
+
+    # update reference
+    ref_next = [s + gamma * g for s, g in zip(ref_s, avg_shifted_sparse)]
+    return params_prime, ref_next
+
+
+# -----------------------------
+# FL helpers: partitioning, params, FedAvg, local trainer, eval
+# -----------------------------
 def split_even_hf_dataset(ds, n_parts: int, seed: int) -> List:
     """Even random split of a HF dataset into n_parts (±1 sample)."""
     ds = ds.shuffle(seed=seed)
@@ -161,6 +273,11 @@ def make_local_trainer(local_model, train_ds, collator, tokenizer, args, round_i
         processing_class=tokenizer,
         callbacks=[],
     )
+
+def get_model_norm(m, device):
+    params = [p.detach().flatten() for p in m.parameters()]
+    flat = torch.cat(params) if params else torch.tensor([], device=device)
+    return flat.norm().item()
 
 def evaluate_weighted_val_loss(global_model, val_splits: List, collator, tokenizer, args, round_idx: int) -> float:
     """Compute weighted mean eval_loss across client validation splits."""
@@ -633,9 +750,9 @@ def main():
     parser.add_argument("--max_seq_len", type=int, default=1024)  # gpt2 context=1024; GPT-J supports 2048
     parser.add_argument("--train_batch_size", type=int, default=2)
     parser.add_argument("--eval_batch_size", type=int, default=8)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--num_train_epochs", type=float, default=10.0)
-    parser.add_argument("--learning_rate", type=float, default=1e-3) # try smaller e.g., 1e-5
+    parser.add_argument("--learning_rate", type=float, default=2e-5) # try smaller e.g., 1e-5
     parser.add_argument("--warmup_ratio", type=float, default=0.03) # try larger e.g., 0.06
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--logging_steps", type=int, default=50)
@@ -659,7 +776,8 @@ def main():
     parser.add_argument("--client_canary_frac", type=float, default=0.2,help="Fraction of each client's train shard used as canary (members)")
     parser.add_argument("--mia_k_frac", type=float, default=1/3,help="Fraction for loss-threshold MIA (lowest/highest)")
     parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
-    parser.add_argument("--pruning_rate", type=float, default=0.3, help="Fraction of largest-magnitude gradients to prune (0,1)")
+    parser.add_argument("--k_frac", type=float, default=0.5, help="Fraction of gradients to keep during shifted compression")
+    parser.add_argument("--n_aggregators", type=int, default=2, help="Number of aggregators (for mask generation)")
     args = parser.parse_args()
     
     # update seed
@@ -721,6 +839,25 @@ def main():
         model.gradient_checkpointing_enable()
 
     model.to(device)
+    
+    # erisfl initialization
+    # n_params = sum(p.numel() for p in model.parameters())
+    # self.k = int(n_params / np.log2(self.config['rounds'][exp_n]))  # as in SoteriaFL
+    # k = int(n_params / 20) # as in SoteriaFL
+    # n = 4000
+    # k = int(n_params / (n * np.log2(args.fl_rounds)))
+    k = None
+
+    d, eris_k, eris_gamma, server_ref_s = init_eris_state(
+        model, fl_rounds=args.fl_rounds,
+        k=None,
+        k_frac=args.k_frac,  # fraction of gradients to keep
+    )
+    print(f"[ERIS] d={d:,} | k={eris_k:,} | gamma={eris_gamma:.4f}")
+    
+    # get mask
+    model_params = get_parameters_from_model(model)
+    masks = create_mask(model_params, args.n_aggregators, seed=args.seed)
 
     # ----------------- Load or preprocess dataset -----------------
     print("\033[93m\nPreparing CNN/DailyMail datasets...\033[0m")
@@ -849,6 +986,7 @@ def main():
         patience = args.patience
         no_improve = 0
         results = {"early_stop_reached": False, "early_stop_round": None}
+        results["eris"] = {"d": d, "k": eris_k, "gamma": eris_gamma}
 
         for rnd in range(1, args.fl_rounds + 1):
             print(f"\033[92m\n--> FL ROUND {rnd}/{args.fl_rounds}\033[0m")
@@ -883,27 +1021,39 @@ def main():
                     local_model, client_trains[cid], collator, tokenizer, args, round_idx=rnd, client_id=cid
                 )
                 local_trainer.train()
-                
-                # ----------------- Gradient Pruning -----------------
-                # Current global weights (the "starting point" on this round)
-                params_in = global_params
-                # Client's weights after local training
-                params_out = get_parameters_from_model(local_model)
-                # Compute "gradients" as weight deltas
-                grads = [p_out - p_in for p_in, p_out in zip(params_in, params_out)]
-                pruned_grads, pstats = prune_largest_grads(grads, pruning_rate=args.pruning_rate)
-                # Recompose the pruned client weights to be sent
-                params_out_pruned = [p_in + g for p_in, g in zip(params_in, pruned_grads)]
-                client_params_np = params_out_pruned
-                # Load pruned weights back into local_model (only if you want local model == pruned)
-                set_parameters_to_model(local_model, client_params_np)
 
-                # (Optional) log pruning stats
-                results[f"round_{rnd}"][f"client_{cid}"]["pruning"] = {"enabled": True, **pstats}
-                print(f"[PRUNE] Client {cid}: rate={args.pruning_rate:.2f} "
-                    f"thr={pstats['threshold']:.4e} kept≈{pstats['kept_frac']:.2%}")
+                # ----------------- Compression via ERIS -----------------
+                params_in = global_params
+                params_out = get_parameters_from_model(local_model)
+                # deterministic rng per (round, client) if you like
+                rng = np.random.default_rng(args.seed + rnd * 1000 + cid)
+                sent_params, cstats = eris_pack_client_update(
+                    params_in=params_in,
+                    params_out=params_out,
+                    ref_s=server_ref_s,
+                    k=eris_k,
+                    rng=rng,
+                )
+                results[f"round_{rnd}"][f"client_{cid}"]["eris"] = {
+                    "k": cstats["k"], "d": cstats["d"], "kept_frac": cstats["kept_frac"]
+                }
+                client_params_np = sent_params
+                client_results.append((client_params_np, len(client_trains[cid])))
                 
                 # ----------------- Membership Inference Attack (MIA) -----------------
+                # simulation of parameter split across aggregation
+                rng = np.random.default_rng(args.seed + cid)     # stable per-client choice
+                random_aggregator = int(rng.integers(0, args.n_aggregators))
+
+                # Start from global params
+                agg_view_params = [p.copy() for p in params_in]
+                for j in range(len(agg_view_params)):
+                    mask = (masks[j] == random_aggregator)       # boolean mask for this aggregator's coordinates
+                    agg_view_params[j][mask] = client_params_np[j][mask]
+
+                # Evaluate MIA on this partial model (what that aggregator could assemble on its own)
+                set_parameters_to_model(local_model, agg_view_params)
+                
                 print("\033[94mRunning per-client MIA on local model...\033[0m")
                 mia_result = run_simple_mia(
                     model=local_model,
@@ -918,18 +1068,19 @@ def main():
                 print(f"\033[94mMIA result: {mia_result}\033[0m")
                 results[f"round_{rnd}"][f"client_{cid}"]["mia"] = mia_result
 
-                # Collect updated weights and “importance” (=num samples)
-                client_params_np = get_parameters_from_model(local_model)
-                client_results.append((client_params_np, len(client_trains[cid])))
-
                 # Cleanup GPU RAM
-                del local_trainer, local_model
+                del local_model
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
-            # FedAvg aggregation
-            print(f"\033[93mAggregating {len(client_results)} client models (FedAvg)\033[0m")
-            global_params = fedavg_weighted(client_results)
+            # ERIS aggregation
+            print(f"\033[93mAggregating {len(client_results)} client models (ERIS)\033[0m")
+            global_params, server_ref_s = eris_aggregate(
+                results=client_results,
+                params_in=global_params,
+                ref_s=server_ref_s,
+                gamma=eris_gamma,
+            )
 
             # Load aggregated weights into the global model object
             set_parameters_to_model(model, global_params)
@@ -1046,30 +1197,3 @@ if __name__ == "__main__":
 
 
 
-
-
-    # # ----------------- Single-example inference + loss + gradient -----------------
-    # print("\033[93m\nRunning single-example inference & gradient...\033[0m")
-    # # Take one test sample
-    # ex = raw["test"][0]
-    # article = ex["article"]
-    # reference = ex["highlights"]
-
-    # single = single_example_inference_and_gradient(
-    #     model, tokenizer, device,
-    #     article=article,
-    #     reference_summary=reference,
-    #     max_source_len=args.max_source_len,
-    #     max_target_len=args.max_target_len,
-    #     max_seq_len=args.max_seq_len,
-    # )
-    # print(f"Single-example loss: {single['loss']:.6f}")
-    # print(f"Single-example grad L2-norm: {single['grad_norm']:.4f}")
-    # print("Generated summary:")
-    # print(single["generated_summary"][:1000])
-
-    # # Optionally save the flat gradient vector for MIA experiments
-    # os.makedirs(args.output_dir, exist_ok=True)
-    # grad_path = os.path.join(args.output_dir, "single_example_flat_grad.pt")
-    # torch.save(single["flat_grad"].detach().cpu(), grad_path)
-    # print(f"Saved flat gradient vector to: {grad_path}")

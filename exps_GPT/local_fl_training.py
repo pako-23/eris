@@ -11,7 +11,6 @@ from typing import Dict, List, Any
 
 import torch
 from tqdm import tqdm
-from torch.nn.utils import clip_grad_norm_
 import numpy as np
 
 from datasets import load_dataset
@@ -31,7 +30,6 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    EarlyStoppingCallback,
     set_seed,
 )
 
