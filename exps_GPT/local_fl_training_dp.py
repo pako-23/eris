@@ -749,7 +749,107 @@ def find_latest_checkpoint(output_dir: str) -> str | None:
     )
     return cand[0] if cand else None
 
+def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None):
+    """
+    Plot training trends for FL rounds:
+      - Left: weighted validation loss across rounds
+      - Right: mean and max MIA accuracy across rounds (in %), with peak values annotated
+    Saves the figure as a vector PDF at `pdf_path`.
+    """
+    import math
+    import numpy as np
+    import matplotlib.pyplot as plt
 
+    # ---- Extract series from results ----
+    def _round_num(k: str) -> int:
+        try:
+            return int(k.split("_")[1])
+        except Exception:
+            return 10**9
+
+    round_keys = sorted([k for k in results.keys() if k.startswith("round_")], key=_round_num)
+    if not round_keys:
+        raise ValueError("No 'round_*' entries found in results.")
+
+    rounds, wloss, mia_mean, mia_max = [], [], [], []
+    for rk in round_keys:
+        r = _round_num(rk)
+        rd = results.get(rk, {})
+        rounds.append(r)
+
+        # weighted val loss (float or NaN)
+        w = rd.get("weighted_val_loss", float("nan"))
+        wloss.append(float(w) if w is not None else float("nan"))
+
+        # MIA metrics saved as fractions in your loop
+        mia = rd.get("mia", {}) or {}
+        mmean = mia.get("avg_accuracy", float("nan"))
+        mmax  = mia.get("max_accuracy", float("nan"))
+        # convert to %
+        mia_mean.append(100.0 * float(mmean) if mmean is not None else float("nan"))
+        mia_max.append(100.0 * float(mmax) if mmax is not None else float("nan"))
+
+    rounds = np.array(rounds, dtype=int)
+    wloss  = np.array(wloss, dtype=float)
+    mia_mean = np.array(mia_mean, dtype=float)
+    mia_max  = np.array(mia_max, dtype=float)
+
+    # ---- Figure style tuned for papers ----
+    plt.rcParams.update({
+        "figure.dpi": 300,
+        "savefig.dpi": 300,
+        "font.size": 11,
+        "axes.labelsize": 11,
+        "axes.titlesize": 11,
+        "legend.fontsize": 10,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "axes.grid": True,
+        "grid.linestyle": "--",
+        "grid.alpha": 0.3,
+    })
+
+    # Wide, compact: good for 2-column or 1.5-column widths
+    fig, ax = plt.subplots(1, 2, figsize=(7.2, 3.2), constrained_layout=True)
+
+    # ---- Left: weighted validation loss ----
+    ax[0].plot(rounds, wloss, marker="o", linewidth=2)
+    ax[0].set_xlabel("Federated round")
+    ax[0].set_ylabel("Weighted validation loss")
+    ax[0].set_xticks(rounds)
+    ax[0].set_title("Validation loss by round")
+
+    # ---- Right: MIA accuracy curves ----
+    ax[1].plot(rounds, mia_mean, marker="o", linewidth=2, label="Mean MIA acc")
+    ax[1].plot(rounds, mia_max,  marker="s", linewidth=2, label="Max MIA acc")
+    ax[1].set_xlabel("Federated round")
+    ax[1].set_ylabel("MIA accuracy (%)")
+    ax[1].set_xticks(rounds)
+    ax[1].set_title("MIA accuracy by round")
+    ax[1].legend(loc="best", frameon=False)
+
+    # Annotate top points for the accuracy curves (peak values)
+    def _annotate_peak(yvals, label, axis):
+        # handle all-NaN safely
+        if not np.isfinite(yvals).any():
+            return
+        idx = int(np.nanargmax(yvals))
+        x, y = rounds[idx], yvals[idx]
+        axis.scatter([x], [y], s=36)
+        axis.annotate(f"{label}: {y:.1f}%", xy=(x, y),
+                      xytext=(0, 8), textcoords="offset points",
+                      ha="center", va="bottom")
+
+    _annotate_peak(mia_mean, "", ax[1])
+    _annotate_peak(mia_max,  "",  ax[1])
+
+    if title:
+        fig.suptitle(title, y=1.02, fontsize=12)
+
+    # ---- Save as PDF ----
+    fig.savefig(pdf_path, bbox_inches="tight")
+    plt.close(fig)
+    
 # -----------------------------
 # Main
 # -----------------------------
@@ -1102,6 +1202,11 @@ def main():
             w_val_loss = evaluate_weighted_val_loss(model, client_vals, collator, tokenizer, args, round_idx=rnd)
             results[f"round_{rnd}"]["weighted_val_loss"] = w_val_loss
             print(f"\033[92m✅ Round {rnd}: weighted val_loss={w_val_loss:.4f}\033[0m")
+            # aggregate MIA results
+            avg_mia_acc = np.mean([results[f"round_{rnd}"][f"client_{cid}"]["mia"]["accuracy"] for cid in range(n_clients)])
+            max_mia_acc = np.max([results[f"round_{rnd}"][f"client_{cid}"]["mia"]["accuracy"] for cid in range(n_clients)])
+            results[f"round_{rnd}"]["mia"] = {"avg_accuracy": avg_mia_acc, "max_accuracy": max_mia_acc}
+            print(f"\033[92m✅ Round {rnd}: MIA avg_acc={avg_mia_acc*100:.2f}% | max_acc={max_mia_acc*100:.2f}%\033[0m")
 
             # Early stopping on weighted val loss (like your example)
             improved = w_val_loss < best_w_loss
@@ -1195,6 +1300,11 @@ def main():
     xlsx_path = os.path.join(args.output_dir, f"results_summary_F{args.fold}.xlsx")
     save_results_xlsx(results, xlsx_path)
     print(f"[OK] Wrote {results_path} and {xlsx_path}")
+    
+    # save figure
+    fig_path = os.path.join(args.output_dir, f"training_mia_trends_F{args.fold}.pdf")
+    plot_training_and_mia(results, fig_path, title=None)
+    print(f"[OK] Saved trends figure to {fig_path}")
     
     # Cleanup: remove intermediate round checkpoints
     remove_empty_dirs(args.output_dir, ["fl_eval_round_*", "fl_r*_c*"])
