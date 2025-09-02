@@ -443,7 +443,7 @@ def evaluate_weighted_val_loss(global_model, val_splits: List, collator, tokeniz
         return float("nan")
     return float(sum(l * s for l, s in zip(losses, sizes)) / sum(sizes))
 
-def save_results_xlsx(results: dict, xlsx_path: str):
+def save_results_xlsx(results: dict, xlsx_path: str, max_rounds: int | None = None):
     """
     Create an Excel file with:
       - summary: test loss/ppl, early stopping, best round by val loss,
@@ -465,6 +465,10 @@ def save_results_xlsx(results: dict, xlsx_path: str):
         except Exception:
             return 10**9
     round_keys.sort(key=_rnum)
+    
+    # Limit to max_rounds if max_rounds is set
+    if max_rounds is not None:
+        round_keys = [rk for rk in round_keys if _rnum(rk) < max_rounds]
 
     for rk in round_keys:
         rnum = _rnum(rk)
@@ -875,7 +879,7 @@ def find_latest_checkpoint(output_dir: str) -> str | None:
     )
     return cand[0] if cand else None
 
-def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None):
+def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None, max_rounds: int | None = None):
     """
     Plot training trends for FL rounds:
       - Left: weighted validation loss across rounds
@@ -893,6 +897,10 @@ def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None
     round_keys = sorted([k for k in results.keys() if k.startswith("round_")], key=_round_num)
     if not round_keys:
         raise ValueError("No 'round_*' entries found in results.")
+
+    # Limit to max_rounds if max_rounds is set
+    if max_rounds is not None:
+        round_keys = [rk for rk in round_keys if _round_num(rk) < max_rounds]
 
     rounds, wloss, mia_mean, mia_max = [], [], [], []
     for rk in round_keys:
@@ -952,19 +960,19 @@ def plot_training_and_mia(results: dict, pdf_path: str, title: str | None = None
     ax[1].legend(loc="best", frameon=False)
 
     # Annotate top points for the accuracy curves (peak values)
-    def _annotate_peak(yvals, label, axis):
+    def _annotate_peak(yvals, axis):
         # handle all-NaN safely
         if not np.isfinite(yvals).any():
             return
         idx = int(np.nanargmax(yvals))
         x, y = rounds[idx], yvals[idx]
         axis.scatter([x], [y], s=36)
-        axis.annotate(f"{label}: {y:.1f}%", xy=(x, y),
+        axis.annotate(f"{y:.1f}%", xy=(x, y),
                       xytext=(0, 8), textcoords="offset points",
                       ha="center", va="bottom")
 
-    _annotate_peak(mia_mean, "", ax[1])
-    _annotate_peak(mia_max,  "",  ax[1])
+    _annotate_peak(mia_mean, ax[1])
+    _annotate_peak(mia_max, ax[1])
 
     if title:
         fig.suptitle(title, y=1.02, fontsize=12)
@@ -989,7 +997,7 @@ def main():
     parser.add_argument("--train_batch_size", type=int, default=2)
     parser.add_argument("--eval_batch_size", type=int, default=8)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
-    parser.add_argument("--learning_rate", type=float, default=1e-4) # try smaller e.g., 1e-5
+    parser.add_argument("--learning_rate", type=float, default=1e-5) # try smaller e.g., 1e-5
     parser.add_argument("--warmup_ratio", type=float, default=0.03) # try larger e.g., 0.06
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--logging_steps", type=int, default=50)
@@ -1214,6 +1222,7 @@ def main():
     print("\033[93m\nStarting Federated Averaging training...\033[0m")
     # Track best checkpoint directory across rounds
     best_ckpt_dir = None
+    best_round = None
     if not args.skip_train:
         # Initialize "global" weights from the current model
         global_params = get_parameters_from_model(model)
@@ -1380,6 +1389,7 @@ def main():
                 model.save_pretrained(best_dir)
                 tokenizer.save_pretrained(best_dir)
                 best_ckpt_dir = best_dir
+                best_round = rnd
             else:
                 no_improve += 1
 
@@ -1459,12 +1469,12 @@ def main():
 
     # XLSX export with key metrics
     xlsx_path = os.path.join(args.output_dir, f"results_summary_F{args.fold}.xlsx")
-    save_results_xlsx(results, xlsx_path)
+    save_results_xlsx(results, xlsx_path, max_rounds=best_round+1)
     print(f"[OK] Wrote {results_path} and {xlsx_path}")
 
     # save figure
     fig_path = os.path.join(args.output_dir, f"images/training_mia_trends_SoteriaFL_F{args.fold}.pdf")
-    plot_training_and_mia(results, fig_path, title=None)
+    plot_training_and_mia(results, fig_path, title=None, max_rounds=None) # None so it will plot all rounds
     print(f"[OK] Saved trends figure to {fig_path}")
     
     # Cleanup: remove intermediate round checkpoints
