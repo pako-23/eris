@@ -8,6 +8,78 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.optim.optimizer import Optimizer
+from typing import List
+
+def get_parameters_from_model(model) -> List[np.ndarray]:
+    # Ordered by state_dict() insertion order (stable across same model)
+    return [t.detach().cpu().numpy() for _, t in model.state_dict().items()]
+
+def flatten_params(params):
+    shape_list = [p.shape for p in params]
+    flattened_params = np.concatenate([p.flatten() for p in params])
+    return flattened_params, shape_list
+
+def unflatten_params(flattened_params, shape_list):
+    params = []
+    start_idx = 0
+    for shape in shape_list:
+        size = np.prod(shape)
+        param = flattened_params[start_idx:start_idx + size].reshape(shape)
+        params.append(param)
+        start_idx += size
+    return params
+
+def create_mask(params, n_splits, seed):
+    flat_params, shape_list = flatten_params(params)
+    aggregators_ass = np.zeros_like(flat_params)
+    n_elements_per_aggr = len(aggregators_ass)//n_splits
+    rest = len(aggregators_ass) % n_splits
+    i = 0
+    for aggr in range(0,n_splits):
+        fragment_size = n_elements_per_aggr + (1 if aggr < rest else 0)
+        aggregators_ass[i:i+fragment_size] = aggr
+        i = i + fragment_size
+    
+    # Create a random generator with the given seed
+    gen = np.random.MT19937(seed=seed)
+    rng = np.random.Generator(gen)
+    # Randomly shuffle the aggregator assignments
+    rng.shuffle(aggregators_ass)
+    
+    return unflatten_params(aggregators_ass, shape_list)
+
+def count_state_params(model: torch.nn.Module) -> int:
+    return int(sum(t.numel() for _, t in model.state_dict().items()))
+
+def init_eris_state(
+    model: torch.nn.Module,
+    fl_rounds: int,
+    k: int | None = None,
+    k_frac: float | None = None,
+) -> tuple[int, int, float, List[np.ndarray]]:
+    """
+    Returns:
+      d: total params
+      k: number of kept coordinates for random-k
+      gamma: SoteriaFL gamma
+      s: reference vector list (zeros), one np.ndarray per tensor
+    """
+    d = count_state_params(model)
+    if k is None:
+        if k_frac is not None and k_frac > 0 and k_frac < 1:
+            k = max(1, int(d * k_frac))
+        else:
+            # paper’s heuristic (your earlier code)
+            k = max(1, int(d / max(1.0, math.log2(max(2, fl_rounds)))))
+
+    # gamma formula used in your prior implementation
+    w = (d / k) - 1.0
+    gamma = math.sqrt((1.0 + 2.0 * w) / (2.0 * (1.0 + w) ** 3))
+
+    s = []
+    for _, t in model.state_dict().items():
+        s.append(np.zeros_like(t.detach().cpu().numpy()))
+    return d, k, float(gamma), s
 
 def init_outputfolder(config):
     if not os.path.exists(config.output_folder):

@@ -6,4 +6,5 @@ compress_registry = {
     "qsgd": QsgdQuantizer,
     "DPSGD": DPSGDCompressor,
     "pruning": PruneLargest,
+    "eris": ErisCompressor,
 }

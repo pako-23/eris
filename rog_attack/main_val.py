@@ -20,6 +20,13 @@ def main(config_file):
     # Load dataset and fetch the data
     train_loader = fetch_trainloader(config, shuffle=True)
     rec_samples, ori_samples = [], []
+    
+    # if eris prepare mask once
+    model = nn_registry[config.model](config)
+    d, eris_k, eris_gamma, server_ref_s = init_eris_state(model, fl_rounds=-1,k=None, k_frac=config.k_frac)
+    model_params = get_parameters_from_model(model)
+    masks = create_mask(model_params, config.n_aggregators, seed=1)
+    
     for batch_idx, (x, y) in tqdm(enumerate(train_loader), total=config.n_val_batches):
         if batch_idx == config.n_val_batches:
             break
@@ -36,12 +43,33 @@ def main(config_file):
 
         # gradient postprocessing
         if config.compress != "none":
-            compressor = compress_registry[config.compress](config)
-            if getattr(compressor, "requires_prefit", False):
-                compressor.prefit(grad)  # compute global threshold once per step - only for pruning
-            for i, g in enumerate(grad):
-                compressed_res = compressor.compress(g)
-                grad[i] = compressor.decompress(compressed_res)
+            
+            if config.compress == "eris":
+                compressor = compress_registry["eris"](eris_k, config)
+
+                # choose the aggregator shard this client will expose
+                rng = np.random.default_rng(1)  # or your (seed + rnd*1000 + cid)
+                aggregator_id = int(rng.integers(0, config.n_aggregators))
+
+                # prefit builds per-tensor keep masks + scale
+                compressor.prefit(
+                    grads_list=grad,
+                    masks=masks,
+                    aggregator_id=aggregator_id,
+                    k=eris_k,
+                    seed=1
+                )
+
+                for i, g in enumerate(grad):
+                    grad[i] = compressor.decompress(compressor.compress(g))
+            
+            else:
+                compressor = compress_registry[config.compress](config)
+                if getattr(compressor, "requires_prefit", False):
+                    compressor.prefit(grad)  # compute global threshold once per step - only for pruning
+                for i, g in enumerate(grad):
+                    compressed_res = compressor.compress(g)
+                    grad[i] = compressor.decompress(compressed_res)
 
         # initialize an attacker and perform the attack 
         attacker = Attacker(config, criterion)
