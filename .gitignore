@@ -11,9 +11,17 @@ experiments/dlk_attacks/exps_results/
 # Folder 
 experiments/dlk_attacks/data
 **/distilbert-imdb/
+**/model_zoos/
+**/rog_attack/data/
 
 # Power Point
 *.pptx
+
+# log
+*.log
+
+# dat
+*.dat
 
 # safetensor
 *.safetensors
@@ -73,6 +81,11 @@ experiments/dlk_attacks/data
 *.gif
 *.svg
 *.ico
+
+# mat
+*.mat
+
+
 
 # Distribution / packaging
 .Python
