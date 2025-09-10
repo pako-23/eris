@@ -1,0 +1,96 @@
+# device: "cuda" | "cpu"
+device: cuda:3
+gpu:
+- 3
+
+# federated learning algorithm, federated model, and simulation settings
+fedalg: "fedavg"
+model: "resnet18" # resnet9, resnet18, lenet
+
+# compress: "qsgd"
+# quant_level: 16
+
+compress: "none"
+
+fed_lr: 0.003
+tau: 1 # local epochs
+n_val_batches: 3
+
+batch_size: 1
+rog_lr: 0.05
+
+T_max: 100
+half: True
+half: False
+sf: 4
+
+thres: 2
+dpsnr: -20
+
+# # IMAGENET
+# train_data_dir: data/imagenet
+# test_data_dir: data/imagenet
+# sample_size:  # dim image
+# - 128
+# - 128
+# channels: 3
+# num_classes: 1000
+
+# MNIST
+# train_data_dir: data/mnist
+# test_data_dir: data/mnist
+# sample_size: 
+# - 32 
+# - 32    # optional; 28x28 works too, but 32 is common for LeNet
+# channels: 3              # OK because loader converts to RGB
+# num_classes: 10
+
+# # CIFAR10
+# train_data_dir: data/cifar10
+# test_data_dir: data/cifar10
+# sample_size: 
+# - 128 
+# - 128    # optional; 28x28 works too, but 32 is common for LeNet
+# channels: 3              # OK because loader converts to RGB
+# num_classes: 10
+
+# CIFAR-10 data (we'll still read your datapair.dat)
+train_data_dir: data/cifar10
+test_data_dir: data/cifar10
+sample_size: [64, 64]
+channels: 3
+num_classes: 10
+
+postprocess:
+  enable: true
+  generator_ckpt: "model_zoos/postmodel_cifar10_6464.pth"   # <- we’ll train this
+  denoiser_ckpt: null                                   # start without
+  usrnet_ckpt: null                                      # start without
+  kernel_mat: null
+  noise_level: 0.0
+
+
+
+#------------------------------------ use it for imagenet dataset
+# # pre-trained model
+# postprocess:
+#   enable: true
+#   generator_ckpt: model_zoos/postmodel.pth
+#   # optional
+
+# denoiser: model_zoos/denoiser.pth
+# usrnet: model_zoos/usrgan.pth
+# kernel:  model_zoos/kernels_bicubicx234.mat
+# noise_level: 0.01
+#------------------------------------
+
+# tresnet
+refine: False
+# refine: True
+tresnet: model_zoos/tresnet.pth
+
+
+# Log configurations
+output_folder: "experiments"
+printevery: 1000
+
