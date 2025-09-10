@@ -5,16 +5,21 @@ gpu:
 
 # federated learning algorithm, federated model, and simulation settings
 fedalg: "fedavg"
-model: "resnet18" # resnet9, resnet18, lenet
+model: "resnet9" # resnet9, resnet18, lenet
 
 # compress: "qsgd"
 # quant_level: 16
 
-compress: "none"
+compress: "pruning" # none, uniform, topk, DPSGD
+sparsity: 0.3
+dp_clip: 10.0
+dp_sigma: 0.01
+pruning_rate: 0.00001
+pruning_mode: global
 
 fed_lr: 0.003
 tau: 1 # local epochs
-n_val_batches: 3
+n_val_batches: 4
 
 batch_size: 1
 rog_lr: 0.05

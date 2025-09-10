@@ -85,6 +85,9 @@ class Metrics:
         avg_ssim = 0
         avg_lpips = 0
         avg_jaccard = 0
+        list_psnr = []
+        list_ssim = []
+        list_jaccard = []
         # ori_labels_tag, rec_labels_tag = self.semantic_labels(original_img, recon_img)
         batch_size = original_img.shape[0]
         for i in range(batch_size):
@@ -101,15 +104,24 @@ class Metrics:
             avg_ssim += ssim_val
             avg_jaccard += jaccard_val
             
-            logger.info("{:d} PSNR: {:.3f} SSIM: {:.3f} Jaccard {:.3f}".format(i, psnr_val, ssim_val, jaccard_val))
+            list_psnr.append(psnr_val)
+            list_ssim.append(ssim_val)
+            list_jaccard.append(jaccard_val)
             
+            logger.info("{:d} PSNR: {:.3f} SSIM: {:.3f} Jaccard {:.3f}".format(i, psnr_val, ssim_val, jaccard_val))
+
         avg_psnr /= original_img.shape[0]
         avg_ssim /= original_img.shape[0]
         avg_jaccard /= original_img.shape[0]
         print(f"Device lpips: {original_img.device}, {recon_img.device}")
         avg_lpips = lpips_metric(2*original_img-1, 2*recon_img-1).mean().item()
+        
+        std_psnr = np.std(np.array(list_psnr))
+        std_ssim = np.std(np.array(list_ssim))
+        std_jaccard = np.std(np.array(list_jaccard))
+        std_lpips = lpips_metric(2*original_img-1, 2*recon_img-1).std().item()        
 
-        return avg_psnr, avg_ssim, avg_jaccard, avg_lpips
+        return avg_psnr, std_psnr, avg_ssim, std_ssim, avg_jaccard, std_jaccard, avg_lpips, std_lpips
 
 def psnr(img1, img2):
     """
