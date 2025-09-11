@@ -91,7 +91,7 @@ def main(config_file):
     metrics = Metrics(config)
     snr, std_snr, ssim, std_ssim, jaccard, std_jaccard, lpips, std_lpips = metrics.evaluate(ori_samples, rec_samples, logger)
 
-    logger.info("PSNR: {:.3f} SSIM: {:.3f} Jaccard {:.3f} Lpips {:.3f}".format(snr, ssim, jaccard, lpips))
+    logger.info("\nPSNR: {:.3f} SSIM: {:.3f} Jaccard {:.3f} Lpips {:.3f}".format(snr, ssim, jaccard, lpips))
 
     save_batch(output_dir, ori_samples, rec_samples)
 

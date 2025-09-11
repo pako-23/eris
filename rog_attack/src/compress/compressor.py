@@ -126,7 +126,6 @@ class DPSGDCompressor:
         
         l2 = tensor.norm(2)
         clip_factor = min(1.0, float(self.dp_clip) / (l2.item() + 1e-12))
-        print("Before clipping, L2 norm: {:.3f}, clip factor: {:.3f}".format(l2.item(), clip_factor))
         clipped = tensor * clip_factor
 
         # Add Gaussian noise (single-shot, not batch-averaged)
