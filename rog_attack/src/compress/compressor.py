@@ -403,3 +403,18 @@ class ErisCompressor:
     def decompress(self, tensor):
         # Identity — already sparse/scaled
         return tensor
+
+
+
+class RandomCompressor:
+    def __init__(self, config):
+        self.config = config
+
+    def compress(self, arr):
+        """
+        give a random array with the same shape as arr.
+        """
+        return torch.randn_like(arr) * 0.002
+
+    def decompress(self, arr):
+        return arr

@@ -1,5 +1,5 @@
 # device: "cuda" | "cpu"
-device: cuda:3
+device: cuda:1
 gpu:
 - 3
 
@@ -10,7 +10,7 @@ model: "resnet9" # resnet9, resnet18, lenet
 # compress: "qsgd"
 # quant_level: 16
 
-compress: "eris" # none, uniform, topk, DPSGD, eris, pruning
+compress: "random" # none, uniform, topk, DPSGD, eris, pruning, random, randomcompress
 
 quant_level: 4  # for uniform quantization
 sparsity: 0.99

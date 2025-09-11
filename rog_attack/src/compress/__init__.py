@@ -7,4 +7,5 @@ compress_registry = {
     "DPSGD": DPSGDCompressor,
     "pruning": PruneLargest,
     "eris": ErisCompressor,
+    "randomcompress": RandomCompressor,
 }

@@ -26,7 +26,9 @@ def main(config_file):
     d, eris_k, eris_gamma, server_ref_s = init_eris_state(model, fl_rounds=-1,k=None, k_frac=config.k_frac)
     model_params = get_parameters_from_model(model)
     masks = create_mask(model_params, config.n_aggregators, seed=1)
-    
+    # grad_mean, grad_std = [], []
+    # img_mean, img_std = [], []
+
     for batch_idx, (x, y) in tqdm(enumerate(train_loader), total=config.n_val_batches):
         if batch_idx == config.n_val_batches:
             break
@@ -36,48 +38,59 @@ def main(config_file):
 
         onehot = label_to_onehot(y, num_classes=config.num_classes)
         x, y, onehot, model = preprocess(config, x, y, onehot, model)
+        # img_mean.append(torch.mean(x).item())
+        # img_std.append(torch.std(x).item())
 
         # federated learning algorithm on a single device
         fedalg = fedlearning_registry[config.fedalg](criterion, model, config) 
         grad = fedalg.client_grad(x, onehot)
+        
+        # calculate mean and std of the gradients for reporting
+        # grad_mean.append(torch.mean(torch.cat([g.flatten() for g in grad])))
+        # grad_std.append(torch.std(torch.cat([g.flatten() for g in grad])))
 
-        # gradient postprocessing
-        if config.compress != "none":
-            
-            if config.compress == "eris":
-                compressor = compress_registry["eris"](eris_k, config)
+        if config.compress == "random":
+            # random noise as a baseline
+            recon_data = torch.randn_like(x).to(config.device) * 0.2 + 0.5
+        
+        else:
+            # gradient postprocessing
+            if config.compress != "none":
+                
+                if config.compress == "eris":
+                    compressor = compress_registry["eris"](eris_k, config)
 
-                # choose the aggregator shard this client will expose
-                rng = np.random.default_rng(1)  # or your (seed + rnd*1000 + cid)
-                aggregator_id = int(rng.integers(0, config.n_aggregators))
+                    # choose the aggregator shard this client will expose
+                    rng = np.random.default_rng(1)  # or your (seed + rnd*1000 + cid)
+                    aggregator_id = int(rng.integers(0, config.n_aggregators))
 
-                # prefit builds per-tensor keep masks + scale
-                compressor.prefit(
-                    grads_list=grad,
-                    masks=masks,
-                    aggregator_id=aggregator_id,
-                    k=eris_k,
-                    seed=1
-                )
+                    # prefit builds per-tensor keep masks + scale
+                    compressor.prefit(
+                        grads_list=grad,
+                        masks=masks,
+                        aggregator_id=aggregator_id,
+                        k=eris_k,
+                        seed=1
+                    )
 
-                for i, g in enumerate(grad):
-                    grad[i] = compressor.decompress(compressor.compress(g))
-            
-            else:
-                compressor = compress_registry[config.compress](config)
-                if getattr(compressor, "requires_prefit", False):
-                    compressor.prefit(grad)  # compute global threshold once per step - only for pruning
-                for i, g in enumerate(grad):
-                    compressed_res = compressor.compress(g)
-                    grad[i] = compressor.decompress(compressed_res)
+                    for i, g in enumerate(grad):
+                        grad[i] = compressor.decompress(compressor.compress(g))
+                
+                else:
+                    compressor = compress_registry[config.compress](config)
+                    if getattr(compressor, "requires_prefit", False):
+                        compressor.prefit(grad)  # compute global threshold once per step - only for pruning
+                    for i, g in enumerate(grad):
+                        compressed_res = compressor.compress(g)
+                        grad[i] = compressor.decompress(compressed_res)
 
-        # initialize an attacker and perform the attack 
-        attacker = Attacker(config, criterion)
-        # attacker.init_attacker_models(config)
-        recon_data = grad_inv(attacker, grad, x, onehot, model, config, logger)
+            # initialize an attacker and perform the attack 
+            attacker = Attacker(config, criterion)
+            # attacker.init_attacker_models(config)
+            recon_data = grad_inv(attacker, grad, x, onehot, model, config, logger)
 
-        synth_data, recon_data = attacker.joint_postprocess(recon_data, y) 
-        # recon_data = synth_data
+            synth_data, recon_data = attacker.joint_postprocess(recon_data, y) 
+            # recon_data = synth_data
         
         rec_samples.append(recon_data)
         ori_samples.append(x)
@@ -85,6 +98,9 @@ def main(config_file):
     # concatenate all samples
     rec_samples = torch.cat(rec_samples, dim=0)
     ori_samples = torch.cat(ori_samples, dim=0)
+    
+    # logger.info(f"Gradient mean: {torch.mean(torch.tensor(grad_mean)):.4f} std: {torch.mean(torch.tensor(grad_std)):.4f}")
+    # logger.info(f"Image mean: {np.mean(img_mean):.4f} std: {np.mean(img_std):.4f}")
     
     # Report the result first 
     logger.info("=== Evaluate the performance ====")
