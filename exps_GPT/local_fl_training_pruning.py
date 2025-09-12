@@ -59,7 +59,7 @@ def main():
     parser.add_argument("--max_seq_len", type=int, default=1024)  # gpt2 context=1024; GPT-J supports 2048
     parser.add_argument("--train_batch_size", type=int, default=2)
     parser.add_argument("--eval_batch_size", type=int, default=8)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
     parser.add_argument("--learning_rate", type=float, default=5e-5) # try smaller e.g., 1e-5
     parser.add_argument("--warmup_ratio", type=float, default=0.03) # try larger e.g., 0.06
     parser.add_argument("--weight_decay", type=float, default=0.01)

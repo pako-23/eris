@@ -152,6 +152,7 @@ def save_results_xlsx(results: dict, xlsx_path: str, max_rounds: int = None):
     # -------- collect per-round / per-client MIA + weighted val loss --------
     round_rows = []
     mia_rows = []
+    sia_rows = []  
 
     # Identify round keys
     round_keys = [k for k in results.keys() if k.startswith("round_")]
@@ -171,6 +172,7 @@ def save_results_xlsx(results: dict, xlsx_path: str, max_rounds: int = None):
         rnum = _rnum(rk)
         rdict = results.get(rk, {})
         w_loss = rdict.get("weighted_val_loss", float("nan"))
+        sia_rows.append(rdict.get("sia", float("nan")).get("accuracy", float("nan")))
 
         # collect per-client MIA
         client_accs = []
@@ -242,6 +244,8 @@ def save_results_xlsx(results: dict, xlsx_path: str, max_rounds: int = None):
         "best_weighted_val_loss": best_val,
         "max_client_mia_accuracy": max_client_mia,
         "max_mean_mia_accuracy_across_rounds": max_mean_mia,
+        "mean_sia_accuracy_across_rounds": float(np.nanmean(sia_rows)) if sia_rows else float("nan"),
+        "max_sia_accuracy_across_rounds": float(np.nanmax(sia_rows)) if sia_rows else float("nan"),
     }])
 
     # -------- write Excel --------
