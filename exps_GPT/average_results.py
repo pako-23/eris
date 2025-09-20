@@ -130,7 +130,7 @@ def main():
     p.add_argument("--n_folds", type=int, required=True)
     p.add_argument("--pattern", type=str, default="results_summary_F{fold}.xlsx",
                    help="Filename pattern; {fold} will be replaced by fold index")
-    p.add_argument("--method", type=str, default="FedAvg", choices=["FedAvg", "ERIS", "SoteriaFL", "PriPrune", "FedAvg+DP"],)
+    p.add_argument("--method", type=str, default="FedAvg", choices=["FedAvg", "ERIS", "SoteriaFL", "PriPrune", "FedAvg+DP", "Shatter"],)
     p.add_argument("--n_samples", type=int, default=None, help="(optional) total number of samples (for info only)")
     args = p.parse_args()
 

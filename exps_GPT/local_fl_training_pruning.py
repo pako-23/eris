@@ -3,7 +3,7 @@
 # Optional (for ROUGE): pip install rouge-score
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import math
 import argparse
 import numpy as np
@@ -85,7 +85,7 @@ def main():
     parser.add_argument("--client_canary_frac", type=float, default=0.2,help="Fraction of each client's train shard used as canary (members)")
     parser.add_argument("--mia_k_frac", type=float, default=1/3,help="Fraction for loss-threshold MIA (lowest/highest)")
     parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
-    parser.add_argument("--pruning_rate", type=float, default=0.3, help="Fraction of largest-magnitude gradients to prune (0,1)")
+    parser.add_argument("--pruning_rate", type=float, default=0.1, help="Fraction of largest-magnitude gradients to prune (0,1)")
     parser.add_argument("--run_sia", action="store_true", default=True, help="Run Source Inference Attack each round (text SIA).")
     parser.add_argument("--sia_per_client_max", type=int, default=32, help="Max SIA samples per client (from client val split). Use small for speed.")
     args = parser.parse_args()

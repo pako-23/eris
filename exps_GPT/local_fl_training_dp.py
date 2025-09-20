@@ -3,7 +3,7 @@
 # Optional (for ROUGE): pip install rouge-score
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import math
 import argparse
 import numpy as np
@@ -87,7 +87,7 @@ def main():
     parser.add_argument("--client_canary_frac", type=float, default=0.2,help="Fraction of each client's train shard used as canary (members)")
     parser.add_argument("--mia_k_frac", type=float, default=1/3,help="Fraction for loss-threshold MIA (lowest/highest)")
     parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
-    parser.add_argument("--dp_epsilon", type=float, default=10)
+    parser.add_argument("--dp_epsilon", type=float, default=100)
     parser.add_argument("--dp_delta", type=float, default=None, help="If None, set to 1/N_client_samples")
     parser.add_argument("--dp_max_grad_norm", type=float, default=1.0)   # C
     parser.add_argument("--dp_accountant", type=str, default="rdp", choices=["rdp"])

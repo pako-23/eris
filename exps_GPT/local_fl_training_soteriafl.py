@@ -3,7 +3,7 @@
 # Optional (for ROUGE): pip install rouge-score
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 import argparse
 import numpy as np
 from typing import List, Tuple

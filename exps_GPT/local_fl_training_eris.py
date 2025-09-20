@@ -3,7 +3,7 @@
 # Optional (for ROUGE): pip install rouge-score
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import math
 import argparse
 import numpy as np
@@ -88,7 +88,7 @@ def main():
     parser.add_argument("--client_canary_frac", type=float, default=0.2,help="Fraction of each client's train shard used as canary (members)")
     parser.add_argument("--mia_k_frac", type=float, default=1/3,help="Fraction for loss-threshold MIA (lowest/highest)")
     parser.add_argument("--fold", type=int, default=0, help="Experiment fold number (for logging)")
-    parser.add_argument("--k_frac", type=float, default=0.5, help="Fraction of gradients to keep during shifted compression")
+    parser.add_argument("--k_frac", type=float, default=0.99999999999999, help="Fraction of gradients to keep during shifted compression")
     parser.add_argument("--n_aggregators", type=int, default=10, help="Number of aggregators (for mask generation)")
     parser.add_argument("--run_sia", action="store_true", default=True, help="Run Source Inference Attack each round (text SIA).")
     parser.add_argument("--sia_per_client_max", type=int, default=32, help="Max SIA samples per client (from client val split). Use small for speed.")
@@ -427,7 +427,7 @@ def main():
                 sia_metrics = run_sia_attack_llm(
                     probe_model=model,
                     sia_loader=sia_loader,
-                    client_params=client_results,   # list of (weights_np, n_samples)
+                    client_params=client_results,   # list of (weights_np, n_samples)  === TODO: correct this because client_results is not chunked
                     device=device,
                     set_params_fn=set_parameters_to_model,
                 )

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Any
 import numpy as np
 import matplotlib.pyplot as plt
+import gc
 
 import torch
 from torch.utils.data import DataLoader
@@ -20,11 +21,13 @@ from functools import reduce
 from typing import Tuple
 import pandas as pd
 import shutil
+import random
 
 from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
+    AutoModelForCausalLM,
 )
 
 try:
@@ -33,6 +36,306 @@ try:
     _HAS_OPACUS = True
 except Exception:
     _HAS_OPACUS = False
+
+
+
+# -----------------------------
+# Shatter
+# -----------------------------
+
+def params_copy(params: List[np.ndarray]) -> List[np.ndarray]:
+    return [p.copy() for p in params]
+
+def params_add(a: List[np.ndarray], b: List[np.ndarray]) -> List[np.ndarray]:
+    return [x + y for x, y in zip(a, b)]
+
+def params_sub(a: List[np.ndarray], b: List[np.ndarray]) -> List[np.ndarray]:
+    return [x - y for x, y in zip(a, b)]
+
+def params_mask(delta: List[np.ndarray], mask: List[np.ndarray]) -> List[np.ndarray]:
+    # mask is boolean/int array per layer; cast to delta dtype to avoid numpy warnings
+    return [d * m.astype(d.dtype, copy=False) for d, m in zip(delta, mask)]
+
+def params_mean(list_of_params: List[List[np.ndarray]]) -> List[np.ndarray]:
+    # elementwise mean across a list of param lists
+    n = len(list_of_params)
+    assert n > 0
+    acc = [np.zeros_like(x) for x in list_of_params[0]]
+    for P in list_of_params:
+        for i, x in enumerate(P):
+            acc[i] += x
+    return [x / n for x in acc]
+
+def assignment_to_bool_masks(aggregator_assignments: List[np.ndarray],
+                             n_splits: int) -> List[List[np.ndarray]]:
+    """
+    aggregator_assignments: per-layer int arrays in [0..n_splits-1], shapes == param shapes
+    returns: masks[k][layer] is boolean mask for split k, disjoint & covering all elements
+    """
+    masks = []
+    for k in range(n_splits):
+        masks.append([ (ass == k) for ass in aggregator_assignments ])
+    return masks
+
+def recombine_from_splits(prev_full: List[np.ndarray],
+                          agg_split_params: List[List[np.ndarray]],
+                          masks_bool: List[List[np.ndarray]]) -> List[np.ndarray]:
+    """
+    prev_full: params before local train this round (per client)
+    agg_split_params: list over splits k of the aggregated split param (same shapes as params)
+    masks_bool: boolean masks[k][layer]
+    """
+    out = [pf.copy() for pf in prev_full]
+    for k in range(len(agg_split_params)):
+        for i in range(len(out)):
+            # contribution only where mask is True: prev + M_k ⊙ (agg_k - prev)
+            out[i] += (agg_split_params[k][i] - prev_full[i]) * masks_bool[k][i].astype(out[i].dtype, copy=False)
+    return out
+
+def shatter_train_one_round(
+    rnd: int,
+    model_src: str,
+    tokenizer,
+    collator,
+    args,
+    device,
+    client_trains: List,               # tokenized HF datasets per client
+    client_canaries: List,             # for MIA (optional)
+    client_noncanaries: List,          # for MIA (optional)
+    client_full_params: List[List[np.ndarray]],  # current full params per client
+    masks_assignment: List[np.ndarray],          # per-layer int array in [0..n_splits-1]
+    n_splits: int,
+    degree_graph: int,
+    results_sink: Dict,
+    masks_bool,
+) -> Tuple[List[List[np.ndarray]], List[np.ndarray]]:
+    """
+    Returns:
+      - updated client_full_params for next round
+      - global_view_params (mean of client models, for logging/eval)
+    """
+    n_clients = len(client_trains)
+    rng = np.random.default_rng(args.seed + 1009 * rnd)
+    py_rng = random.Random(args.seed + 997 * rnd)
+
+    # boolean masks per split (shared across clients & rounds)
+    # masks_bool = assignment_to_bool_masks(masks_assignment, n_splits)
+
+    # Phase A: local train → split params
+    prev_params_per_client: List[List[np.ndarray]] = []
+    split_params_per_client: List[List[List[np.ndarray]]] = []  # [cid][k]=params list
+
+    for cid in range(n_clients):
+        print(f"\033[93mClient {cid} - Round {rnd}: local training on {len(client_trains[cid])} samples\033[0m")
+
+        # Build local model
+        local_model = AutoModelForCausalLM.from_pretrained(
+            model_src,
+            torch_dtype=torch.float32,
+            low_cpu_mem_usage=True,
+        )
+        local_model.resize_token_embeddings(len(tokenizer))
+        pad_ = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+        local_model.config.pad_token_id = pad_
+        local_model.config.use_cache = False
+        local_model.config.loss_type = "ForCausalLMLoss"
+        if getattr(args, "gradient_checkpointing", False):
+            local_model.gradient_checkpointing_enable()
+        local_model.to(device)
+
+        # start from client's current full params
+        prev_full = params_copy(client_full_params[cid])
+        set_parameters_to_model(local_model, prev_full)
+
+        # local train (HF Trainer you already use)
+        local_trainer = make_local_trainer(
+            local_model, client_trains[cid], collator, tokenizer, args, round_idx=rnd, client_id=cid
+        )
+        local_trainer.train()
+
+        # post-train params & delta
+        w_after = get_parameters_from_model(local_model)
+        delta = params_sub(w_after, prev_full)
+
+        # make split params: s_k = prev_full + M_k ⊙ delta
+        client_splits = []
+        for k in range(n_splits):
+            masked_delta_k = params_mask(delta, masks_bool[k])
+            s_k = params_add(prev_full, masked_delta_k)
+            client_splits.append(s_k)
+
+        prev_params_per_client.append(prev_full)
+        split_params_per_client.append(client_splits)
+
+        # free GPU
+        del local_model, local_trainer, w_after, delta
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
+    # Phase B: decentralized per-split peer averaging
+    # For each client & split, pick degree_graph peers and average (own split + peers' splits).
+    agg_split_params_per_client: List[List[List[np.ndarray]]] = []
+    all_cids = list(range(n_clients))
+
+    print(f"\033[93m\nRound {rnd}: decentralized per-split peer averaging (degree {degree_graph})\033[0m")
+    for cid in tqdm(range(n_clients)):
+        agg_splits = []
+        gc.collect()
+        for k in range(n_splits):
+            # sample peers (no replacement), could be less than degree_graph if not enough clients
+            others = [j for j in all_cids if j != cid]
+            sample_size = min(degree_graph, len(others))
+            peers = py_rng.sample(others, sample_size) if sample_size > 0 else []
+            # gather own + peers' split params
+            mix = [split_params_per_client[cid][k]] + [split_params_per_client[j][k] for j in peers]
+            agg_k = params_mean(mix)
+            agg_splits.append(agg_k)
+        agg_split_params_per_client.append(agg_splits)
+
+    # Phase C: recombine splits into next full params (piecewise by mask)
+    print(f"\033[93mRound {rnd}: recombining split params into full client models\033[0m")
+    next_full_params: List[List[np.ndarray]] = []
+    for cid in tqdm(range(n_clients)):
+        prev_full = prev_params_per_client[cid]
+        agg_splits = agg_split_params_per_client[cid]
+        merged = recombine_from_splits(prev_full, agg_splits, masks_bool)
+        next_full_params.append(merged)
+        gc.collect()
+
+    # Optional: per-client MIA on the merged view (mirrors your existing flow)
+    results_sink[f"round_{rnd}"] = results_sink.get(f"round_{rnd}", {})
+    # for cid in range(n_clients):
+    #     if getattr(args, "run_mia_each_round", False):
+    #         print("\033[94mRunning per-client MIA on merged model (SHATTER)...\033[0m")
+    #         local_model = AutoModelForCausalLM.from_pretrained(
+    #             model_src, torch_dtype=torch.float32, low_cpu_mem_usage=True
+    #         )
+    #         local_model.resize_token_embeddings(len(tokenizer))
+    #         pad_ = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+    #         local_model.config.pad_token_id = pad_
+    #         local_model.config.use_cache = False
+    #         local_model.config.loss_type = "ForCausalLMLoss"
+    #         if getattr(args, "gradient_checkpointing", False):
+    #             local_model.gradient_checkpointing_enable()
+    #         local_model.to(device)
+    #         set_parameters_to_model(local_model, next_full_params[cid])
+
+    #         mia_result = run_simple_mia(
+    #             model=local_model,
+    #             device=device,
+    #             collator=collator,
+    #             canary_ds=client_canaries[cid],
+    #             non_canary_ds=client_noncanaries[cid],
+    #             k_frac=args.mia_k_frac,
+    #             batch_size=args.eval_batch_size,
+    #         )
+    #         results_sink[f"round_{rnd}"][f"client_{cid}"] = results_sink[f"round_{rnd}"].get(f"client_{cid}", {})
+    #         results_sink[f"round_{rnd}"][f"client_{cid}"]["mia"] = mia_result
+
+            # del local_model
+            # if torch.cuda.is_available():
+            #     torch.cuda.empty_cache()
+
+    # Also compute a global-view (just for logging/eval/checkpointing consistency)
+    # global_view_params = params_mean(next_full_params)
+    global_view_params = None
+    print("\n")
+    del split_params_per_client, agg_split_params_per_client, prev_params_per_client, prev_full
+    gc.collect()
+
+    return next_full_params, global_view_params
+
+
+# ======= Client-wise evaluation helpers =======
+
+def _build_eval_model(model_src, tokenizer, device, args):
+    m = AutoModelForCausalLM.from_pretrained(
+        model_src, torch_dtype=torch.float32, low_cpu_mem_usage=True
+    )
+    m.resize_token_embeddings(len(tokenizer))
+    pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+    m.config.pad_token_id = pad_id
+    m.config.use_cache = False
+    m.config.loss_type = "ForCausalLMLoss"
+    if getattr(args, "gradient_checkpointing", False):
+        m.gradient_checkpointing_enable()
+    m.to(device)
+    return m
+
+def _eval_loss_ppl_for_params(model_src, tokenizer, collator, device, params, dataset, args):
+    """Instantiate a model, load params, evaluate loss → (loss, ppl)."""
+    m = _build_eval_model(model_src, tokenizer, device, args)
+    set_parameters_to_model(m, params)
+
+    eval_args = TrainingArguments(
+        output_dir=args.output_dir,
+        per_device_eval_batch_size=args.eval_batch_size,
+        report_to="none",
+        save_strategy="no",
+        eval_strategy="no",
+        dataloader_num_workers=2,
+        remove_unused_columns=False,
+    )
+    trainer = Trainer(model=m, args=eval_args, data_collator=collator, processing_class=tokenizer)
+    metrics = trainer.evaluate(eval_dataset=dataset)
+    loss = float(metrics.get("eval_loss", float("nan")))
+    ppl = math.exp(loss) if loss < 20 else float("inf")
+
+    del m
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return loss, ppl
+
+def evaluate_clients_loss_ppl(model_src, tokenizer, collator, device,
+                              client_params_list, datasets_per_client, args, tag="val"):
+    """
+    Evaluate each client model on its dataset; return mean + per-client metrics.
+    datasets_per_client: list length == n_clients (e.g., client_vals or [test_ds]*n_clients)
+    """
+    per_client = []
+    for cid, (params, ds) in enumerate(zip(client_params_list, datasets_per_client)):
+        loss, ppl = _eval_loss_ppl_for_params(model_src, tokenizer, collator, device, params, ds, args)
+        per_client.append({"client": cid, "n": len(ds), "loss": loss, "ppl": ppl})
+
+    mean_loss = float(np.nanmean([x["loss"] for x in per_client]))
+    finite_ppls = [x["ppl"] for x in per_client if np.isfinite(x["ppl"])]
+    mean_ppl = float(np.mean(finite_ppls)) if finite_ppls else float("inf")
+
+    # (optional) weighted means by dataset size
+    total_n = sum(x["n"] for x in per_client) or 1
+    w_mean_loss = float(sum(x["loss"] * x["n"] for x in per_client) / total_n)
+
+    return {
+        "tag": tag,
+        "mean_loss": mean_loss,
+        "mean_ppl": mean_ppl,
+        "weighted_mean_loss": w_mean_loss,
+        "per_client": per_client,
+    }
+
+def evaluate_clients_rouge(model_src, tokenizer, device, collator,
+                           client_params_list, test_ds, args):
+    """
+    Run your existing ROUGE on the same test set for every client model, then average scores.
+    """
+    per_client = []
+    for cid, params in enumerate(client_params_list):
+        m = _build_eval_model(model_src, tokenizer, device, args)
+        set_parameters_to_model(m, params)
+        scores = evaluate_rouge(m, tokenizer, test_ds, device, num_samples=args.eval_rouge_samples)
+        per_client.append({"client": cid, **{k: float(v) for k, v in scores.items()}})
+        del m
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    # Average each ROUGE metric across clients
+    keys = [k for k in per_client[0].keys() if k != "client"]
+    mean_scores = {k: float(np.mean([row[k] for row in per_client])) for k in keys}
+    return {"mean": mean_scores, "per_client": per_client}
+
+
+
 
 
 # -----------------------------
