@@ -47,6 +47,7 @@ baseline_colors = {
     'Pruning': 'tab:purple',
     'SoteriaFL': 'tab:red',
     'Ako': 'tab:green',
+    'Shatter': 'tab:olive',
 }
 
 
@@ -69,6 +70,7 @@ y_eris50 = 2 * (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (50
 y_priprune = 2 * (clients * x * multiplier * (1 - 0.3) * 8 * 4) / rate
 y_soteria = 2 * (clients * x * multiplier * compression_rate * 8 * 4) / rate
 y_ako = (x * multiplier * 8 * 4) / rate
+y_shatter = np.maximum(((clients-1)*x*multiplier)/(rate*clients), ((clients-1)*x*multiplier)/rate)
 print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
@@ -82,6 +84,7 @@ ax2.plot(x, y_eris50, label='ERIS (A=50)', color=baseline_colors['ERIS'], marker
 ax2.plot(x, y_priprune, label='PriPrune', color=baseline_colors['Pruning'], marker='o', markersize=4, linewidth=1)
 ax2.plot(x, y_soteria, label='SoteriaFL', color=baseline_colors['SoteriaFL'], marker='o', markersize=4, linewidth=1)
 ax2.plot(x, y_ako, label='Ako', color=baseline_colors['Ako'], marker='o', markersize=4, linewidth=1)
+ax2.plot(x, y_shatter, label='Shatter', color=baseline_colors['Shatter'], marker='o', markersize=4, linewidth=1)
 
 ax2.set_yscale('log')
 ax2.set_xlabel('Parameters', fontsize=14)
@@ -106,6 +109,7 @@ y_eris50 = 2 * (compr_size * (x - 1)) / (50 * rate)
 y_priprune = 2 * (x * priprune_size) / rate
 y_soteria = 2 * (x * compr_size) / rate
 y_ako = (model_size / rate) * np.ones(x.shape)
+y_shatter = np.maximum(((x-1)*model_size)/(rate*x), ((x-1)*model_size)/rate)
 print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
@@ -120,6 +124,7 @@ ax1.plot(x, y_eris50, label='ERIS (A=50)', color=baseline_colors['ERIS'], marker
 ax1.plot(x, y_priprune, label='PriPrune', color=baseline_colors['Pruning'], marker='o', markersize=4, linewidth=1)
 ax1.plot(x, y_soteria, label='SoteriaFL', color=baseline_colors['SoteriaFL'], marker='o', markersize=4, linewidth=1)
 ax1.plot(x, y_ako, label='Ako', color=baseline_colors['Ako'], marker='o', markersize=4, linewidth=1)
+ax1.plot(x, y_shatter, label='Shatter', color=baseline_colors['Shatter'], marker='o', markersize=4, linewidth=1)
 
 ax1.set_yscale('log')
 ax1.set_xlabel('Clients', fontsize=14)
