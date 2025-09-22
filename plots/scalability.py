@@ -70,7 +70,7 @@ y_eris50 = 2 * (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (50
 y_priprune = 2 * (clients * x * multiplier * (1 - 0.3) * 8 * 4) / rate
 y_soteria = 2 * (clients * x * multiplier * compression_rate * 8 * 4) / rate
 y_ako = (x * multiplier * 8 * 4) / rate
-y_shatter = np.maximum(((clients-1)*x*multiplier)/(rate*clients), ((clients-1)*x*multiplier)/rate)
+y_shatter = np.maximum((4*x*multiplier*8*4)/(rate*clients), (4*x*multiplier*8*4)/rate)
 print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
@@ -109,7 +109,7 @@ y_eris50 = 2 * (compr_size * (x - 1)) / (50 * rate)
 y_priprune = 2 * (x * priprune_size) / rate
 y_soteria = 2 * (x * compr_size) / rate
 y_ako = (model_size / rate) * np.ones(x.shape)
-y_shatter = np.maximum(((x-1)*model_size)/(rate*x), ((x-1)*model_size)/rate)
+y_shatter = np.maximum((4*model_size)/(rate*x), (4*model_size)/rate)
 print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
