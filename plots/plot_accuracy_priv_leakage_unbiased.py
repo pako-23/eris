@@ -16,11 +16,11 @@ def setup_icml_plot(two_column=False):
         "text.usetex": True,  # Use LaTeX for text rendering
         "font.family": "serif",  # Use serif fonts
         "font.serif": ["Times New Roman"],  # Set font to Times New Roman
-        "axes.labelsize": 10,  # Font size for axis labels
-        "axes.titlesize": 10,  # Font size for titles
+        "axes.labelsize": 11,  # Font size for axis labels
+        "axes.titlesize": 11,  # Font size for titles
         "legend.fontsize": 14,  # Font size for legends
-        "xtick.labelsize": 10,  # Font size for x-axis ticks
-        "ytick.labelsize": 10,  # Font size for y-axis ticks
+        "xtick.labelsize": 11,  # Font size for x-axis ticks
+        "ytick.labelsize": 11,  # Font size for y-axis ticks
  
         # Line and marker styles
         "lines.linewidth": 1.2,  # Line width
@@ -51,6 +51,12 @@ def setup_icml_plot(two_column=False):
 samples = [4, 8, 16, 32, 64, 128] # 256
 
 dataset_imdb = {
+    'Shatter': {
+        'accuracy': [0.685176, 0.748424, 0.779128, 0.793368, 0.801864, 0.808424],
+        'accuracy_std': [0.04662688152, 0.01875747531, 0.00554259145, 0.00639521071, 0.00483790037, 0.00194022679] / np.sqrt(5),
+        'priv_leak': [0.676666667, 0.62448, 0.5472, 0.539790476, 0.535386047, 0.520847059],
+        'priv_leak_std': [0.028867513, 0.037861896, 0.018989758, 0.014811395, 0.009304874, 0.010741995] / np.sqrt(5)
+    },
     'ERIS': {  # compression 2000 
         'accuracy': [0.712808, 0.792848, 0.801064, 0.809856, 0.811584, 0.815912],
         'accuracy_std': [0.047428757, 0.007079182, 0.004625951, 0.002154749,0.001894936, 0.002143104] / np.sqrt(5),
@@ -90,6 +96,12 @@ dataset_imdb = {
 }
 
 dataset_mnist = {
+    'Shatter': {
+        'accuracy': [0.1195536667, 0.1232192, 0.1455024, 0.1651232, 0.1850225, 0.212887],
+        'accuracy_std': [0.02332434071, 0.02921841866, 0.04236111163, 0.06159952491, 0.06061265952, 0.0722007673] / np.sqrt(5),
+        'priv_leak': [0.70392, 0.563536, 0.556043636, 0.520838095, 0.514472558, 0.515301647],
+        'priv_leak_std': [0.021896825, 0.028905868, 0.012681735, 0.010380802, 0.008539584, 0.007897464] / np.sqrt(5)
+    },
     'ERIS': {   # compression 4
         'accuracy': [0.78716, 0.84838, 0.9026, 0.92564, 0.93576, 0.94024],
         'accuracy_std': [0.01194196, 0.005779412, 0.00108074, 0.003013702,0.002317412, 0.001902209] / np.sqrt(5),
@@ -129,6 +141,12 @@ dataset_mnist = {
 }
 
 dataset_cifar = {
+    'Shatter': {
+        'accuracy': [0.1146736, 0.1157064, 0.1242276, 0.1231576, 0.1295816, 0.1363896],
+        'accuracy_std': [0.01749687694, 0.01964500432, 0.0164506518, 0.02030418038, 0.02162403947, 0.01552329201] / np.sqrt(5),
+        'priv_leak': [0.77904, 0.707504, 0.642050909, 0.58631619, 0.546029767, 0.520413176],
+        'priv_leak_std': [0.055474192, 0.026983107, 0.019545441, 0.00979706, 0.004858406, 0.004148291] / np.sqrt(5)
+    },
     'ERIS': {  # compression 24
         'accuracy': [0.2631, 0.33278, 0.34622, 0.37398, 0.38164, 0.38296],
         'accuracy_std': [0.011622908, 0.010554127, 0.014213008, 0.013610496,0.010101208, 0.008779203] / np.sqrt(5),
@@ -181,6 +199,7 @@ baseline_colors = {
     'PriPrune (p=0.3)':  'tab:purple',
     'PriPrune (p=0.01)': mcolors.to_rgba('tab:purple', alpha=0.5),
     'Min. Leakage': 'tab:gray',
+    'Shatter':     'tab:brown',
 }
 
 # Instead of different markers, we define a single marker ('D') but
@@ -303,13 +322,13 @@ def plot_dataset(ax, dataset_name, data_dict):
     # Optionally add a random guess line:
     if dataset_name == 'IMDB':
         ax.axhline(y=0.5, color='gray', linestyle='--', label='Random Guess = 50%')
-        ax.set_ylabel('Accuracy', fontsize=14)
+        ax.set_ylabel('Accuracy', fontsize=15)
     elif dataset_name == 'MNIST':
         ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
     elif dataset_name == 'CIFAR-10':
         ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
-    
-    ax.set_xlabel('1 - MIA Accuracy', fontsize=14)
+
+    ax.set_xlabel('1 - MIA Accuracy', fontsize=15)
     # ax.set_ylabel('Accuracy', fontsize=14)
 
 ###############################################################################
@@ -343,8 +362,8 @@ fig.legend(
     bbox_to_anchor=(0.28, 0.015),
     title=r"$\mathbf{Baselines}$",
     ncol=3, #if 'Min. Leakage' in baseline_labels else 3,
-    fontsize=11,
-    title_fontsize=11,
+    fontsize=12,
+    title_fontsize=12,
     labelspacing=0.85
 )
 
@@ -356,8 +375,8 @@ fig.legend(
     bbox_to_anchor=(0.75, 0.015),
     title=r"$\mathbf{Samples\: Per\: Client}$",
     ncol=3,
-    fontsize=11,
-    title_fontsize=11,
+    fontsize=12,
+    title_fontsize=12,
     labelspacing=0.85
 )
 

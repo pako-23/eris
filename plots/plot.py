@@ -30,7 +30,7 @@ def setup_icml_plot(two_column=False):
         "figure.dpi": 300,  # High resolution for publication
 
         # Grid
-        "axes.grid": True,  # Enable grid
+        "axes.grid": False,  # Enable grid
         "grid.alpha": 0.3,  # Grid transparency
         "grid.linestyle": "--",  # Dashed grid lines
 

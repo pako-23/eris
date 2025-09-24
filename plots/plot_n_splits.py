@@ -61,7 +61,7 @@ min_leakage_std = 0.024344198 / np.sqrt(5)
 fig_size = setup_icml_plot(two_column=True)
 
 # Create the figure and axis objects
-fig, ax = plt.subplots(figsize=(4, 4))
+fig, ax = plt.subplots(figsize=(3, 3))
 
 # Plot MIA Accuracy with error bars
 ax.errorbar(splits, mia_accuracy_mean, yerr=mia_accuracy_std, fmt='o-', 
@@ -76,12 +76,12 @@ ax.axhspan(min_leakage - min_leakage_std, min_leakage + min_leakage_std,
            facecolor='green', alpha=0.2, )#label='Minimum Leakage Std')
 
 # Labeling and formatting
-ax.set_xlabel(r'Number of Aggregators $(A)$', fontsize=14)
-ax.set_ylabel('MIA Accuracy', fontsize=14)
-ax.set_title('Model Partitioning', fontsize=16)
+ax.set_xlabel(r'Number of Aggregators $(A)$', fontsize=13.5)
+ax.set_ylabel('MIA Accuracy', fontsize=13.5)
+ax.set_title('Model Partitioning', fontsize=15)
 # set y-lim
 ax.set_ylim(0.625, 0.78)
-ax.legend(fontsize=12)
+# ax.legend(fontsize=12)
 plt.tight_layout()
 
 # Display the plot
