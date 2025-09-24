@@ -64,10 +64,10 @@ fi
 
 
 
-for exp_n in $(seq 4 4); do
+for exp_n in $(seq 0 4); do
 
     # Cycle through the folds
-    for fold in $(seq 2 $k_folds); do
+    for fold in $(seq 1 $k_folds); do
         if [ $k_folds -gt 1 ]; then
             echo -e "\n\033[1;36mFold $fold\033[0m"
         fi
@@ -135,6 +135,3 @@ for exp_n in $(seq 4 4); do
     echo -e "\n\033[1;36mFinished training correctly on $dataset_name with $n_clients clients\033[0m\n"
 
 done
-
-
-

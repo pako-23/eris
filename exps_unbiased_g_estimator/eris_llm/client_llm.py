@@ -62,11 +62,12 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-# if args.id % 2 == 0:
-#     device = '2'
-# else:
-#     device = '3'
-device = str(args.id % 2)
+if args.id % 2 == 0:
+    device = '0'
+else:
+    device = '2'
+# device = str(args.id % 2)
+# device = '2'
 # device = '3'  # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Libraries
@@ -467,7 +468,7 @@ class ExampleClient(ErisClient):
     def evaluate(self):
         # save previous aggregated model if client 1
         if self.client_id == 1:
-            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config["dataset"]}/model_{self.current_round}.pth")
+            torch.save(self.model.state_dict(), f"checkpoints/{self.predictor_name}/{self.config['dataset']}/model_{self.current_round}.pth")
 
         self.model.eval()  
         self.model.to(self.device) 
@@ -839,10 +840,10 @@ def start_node(
             test_data = load_from_disk(f"../data/datasets/{config['dataset']}_test")
 
             # Reinitialize the model (ensure it matches the trained model architecture)
-            test_model = DistilBertForSequenceClassification.from_pretrained(config["model_name"], num_labels=config["n_classes"])
+            test_model = DistilBertForSequenceClassification.from_pretrained(config['model_name'], num_labels=config['n_classes'])
                 
             # Construct the checkpoint path
-            checkpoint_path = f"checkpoints/{config["model_name"]}/{config['dataset']}/model_{best_loss_round}.pth"
+            checkpoint_path = f"checkpoints/{config['model_name']}/{config['dataset']}/model_{best_loss_round}.pth"
             test_model.load_state_dict(torch.load(checkpoint_path,  weights_only=False))
             
             # Define the number of parameters in the model
@@ -895,8 +896,8 @@ def start_node(
             
             # Print training time in minutes (grey color)
             print(f"\033[90mTraining time: {training_time} minutes\033[0m")
-    
-            np.save(f'test_metrics_fold_{config['fold']}.npy', metrics)
+
+            np.save(f"test_metrics_fold_{config['fold']}.npy", metrics)
 
         return 0
 

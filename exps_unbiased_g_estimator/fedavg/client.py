@@ -18,11 +18,16 @@ using canary samples. After training, results and plots are saved to track perfo
 from collections import OrderedDict
 from torch.utils.data import DataLoader
 import torch
+import numpy as np
+# Compatibility for NumPy 2.0+: restore removed dtype aliases used by some libraries
+if not hasattr(np, "float_"):
+    np.float_ = np.float64
+if not hasattr(np, "int_"):
+    np.int_ = np.int64
 import flwr as fl
 import argparse
 from torch.utils.data import Subset, random_split
 import torch.nn.functional as F
-import numpy as np
 import copy
 import opacus # type: ignore
 import gc

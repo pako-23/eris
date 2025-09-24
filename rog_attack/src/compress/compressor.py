@@ -405,6 +405,122 @@ class ErisCompressor:
         return tensor
 
 
+class ErisPartialCompressor:
+    """
+    Partial-split ERIS (mask-free):
+      - Select exactly k ≈ d / n_splits coordinates *globally* at random.
+      - Zero everything else.
+      - No scaling (matches your DLG/iDLG partial split behavior).
+
+    Config:
+      - n_aggregators (int): number of splits
+      - eris_partial_unbiased (bool, default False): if True, scale kept entries by d/k
+    """
+    def __init__(self, config):
+        self.n_splits = int(getattr(config, "n_aggregators", 2))
+        # self.unbiased = bool(getattr(config, "eris_partial_unbiased", False))
+        self.unbiased = False
+
+        # state after prefit
+        self._keep_masks = None  # List[torch.BoolTensor] on CPU
+        self._scale = 1.0
+        self._cursor = 0
+
+    @property
+    def requires_prefit(self):
+        return True
+
+    @torch.no_grad()
+    def prefit(self, grads_list, n_splits=None, k=None, seed=None):
+        """
+        Build per-tensor boolean keep masks by global random selection.
+
+        grads_list : List[torch.Tensor]
+        n_splits   : optional override for number of splits
+        k          : optional explicit number of kept coords; if None, k = floor(d / n_splits)
+        seed       : RNG seed for reproducibility
+        """
+        ns = int(n_splits) if n_splits is not None else self.n_splits
+
+        # 1) Gather sizes & total dimension d (skip scalars)
+        sizes = []
+        for g in grads_list:
+            if g is None:
+                sizes.append(0)
+            elif g.ndim == 0:
+                sizes.append(0)
+            else:
+                sizes.append(g.numel())
+        d = int(sum(sizes))
+
+        # 2) Decide k
+        if k is None:
+            if ns <= 0:
+                raise ValueError("n_splits must be >= 1.")
+            k_eff = max(1, d // ns)
+        else:
+            k_eff = max(1, int(k))
+        k_eff = min(k_eff, d)  # safety
+
+        # 3) Sample k indices globally
+        gen = torch.Generator(device="cpu")
+        if seed is not None:
+            gen.manual_seed(int(seed))
+        if d == 0:
+            # edge case: nothing to keep
+            self._keep_masks = []
+            self._scale = 1.0
+            self._cursor = 0
+            return
+
+        perm = torch.randperm(d, generator=gen)
+        keep_global = torch.zeros(d, dtype=torch.bool)
+        keep_global[perm[:k_eff]] = True
+
+        # 4) Map back to per-tensor masks
+        self._keep_masks = []
+        self._cursor = 0
+        offset = 0
+        for g, sz in zip(grads_list, sizes):
+            if g is None:
+                self._keep_masks.append(None)
+                continue
+            if g.ndim == 0 or sz == 0:
+                self._keep_masks.append(torch.zeros((), dtype=torch.bool))
+                continue
+            segment = keep_global[offset:offset + sz]
+            offset += sz
+            self._keep_masks.append(segment.view_as(g).cpu())
+
+        # 5) Scaling (disabled by default to match your earlier partial-split)
+        self._scale = (float(d) / float(k_eff)) if self.unbiased and k_eff > 0 else 1.0
+
+    @torch.no_grad()
+    def compress(self, tensor, **kwargs):
+        if tensor is None:
+            return None
+        if self._keep_masks is None:
+            raise RuntimeError("ErisPartialCompressor requires prefit(...) before compress().")
+        if self._cursor >= len(self._keep_masks):
+            raise RuntimeError("Cursor overflow in ErisPartialCompressor.compress().")
+
+        km = self._keep_masks[self._cursor]
+        self._cursor += 1
+
+        if km is None:
+            return tensor
+        if tensor.ndim == 0:
+            return torch.zeros_like(tensor)
+
+        km_dev = km.to(device=tensor.device, dtype=torch.bool, non_blocking=True)
+        # return torch.where(km_dev, tensor * self._scale, torch.zeros_like(tensor))
+        out = torch.where(km_dev, tensor * self._scale, torch.zeros_like(tensor))
+        # count the number of kept coordinates
+        n_keept = int(km_dev.sum().item()) 
+        return out, n_keept
+
+    def decompress(self, tensor):
+        return tensor
 
 class RandomCompressor:
     def __init__(self, config):

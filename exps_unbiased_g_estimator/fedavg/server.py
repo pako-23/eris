@@ -16,8 +16,13 @@ This server must be started before clients connect. Compatible with client.py or
 """
 
 # Libraries
-import flwr as fl
 import numpy as np
+# Compatibility for NumPy 2.0+: restore removed dtype aliases used by some libraries
+if not hasattr(np, "float_"):
+    np.float_ = np.float64
+if not hasattr(np, "int_"):
+    np.int_ = np.int64
+import flwr as fl
 from typing import List, Tuple, Union, Optional, Dict
 from flwr.common import Parameters, Scalar, Metrics
 from flwr.server.client_proxy import ClientProxy

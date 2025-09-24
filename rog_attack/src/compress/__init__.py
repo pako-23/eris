@@ -8,4 +8,5 @@ compress_registry = {
     "pruning": PruneLargest,
     "eris": ErisCompressor,
     "randomcompress": RandomCompressor,
+    "eris_partial": ErisPartialCompressor,  
 }

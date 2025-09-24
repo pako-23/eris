@@ -22,6 +22,13 @@ import torch
 import os
 import csv
 from sklearn.metrics import accuracy_score, f1_score
+import numpy as np
+# Compatibility for NumPy 2.0+: restore removed dtype aliases used by some libraries
+if not hasattr(np, "float_"):
+    np.float_ = np.float64
+if not hasattr(np, "int_"):
+    np.int_ = np.int64
+# Add other aliases if needed: np.bool_ -> np.bool_, np.complex_ -> np.complex128, ...
 from flwr.common import NDArrays
 
 import sys

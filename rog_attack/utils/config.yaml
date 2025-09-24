@@ -1,16 +1,16 @@
 # device: "cuda" | "cpu"
-device: cuda:1
+device: cuda:3
 gpu:
 - 3
 
 # federated learning algorithm, federated model, and simulation settings
 fedalg: "fedavg"
-model: "resnet9" # resnet9, resnet18, lenet
+model: "lenet" # resnet9, resnet18, lenet
 
 # compress: "qsgd"
 # quant_level: 16
 
-compress: "random" # none, uniform, topk, DPSGD, eris, pruning, random, randomcompress
+compress: "eris_partial" # none, uniform, topk, DPSGD, eris, pruning, random, randomcompress
 
 quant_level: 4  # for uniform quantization
 sparsity: 0.99
@@ -21,8 +21,8 @@ dp_sigma: 0.0000001
 pruning_rate: 0.1
 pruning_mode: global
 
-k_frac: 0.1  # for eris only, fraction of coordinates to keep
-n_aggregators: 2  # for eris only, number of masks to create
+k_frac: 1.0  # for eris only, fraction of coordinates to keep
+n_aggregators: 1.2  # for eris only, number of masks to create[1, 1.00001, 1.0001, 1.001, 1.01, 1.1, 1.2, 1.4, 2, 4, 8, 16, 32
 
 fed_lr: 0.003
 tau: 1 # local epochs
@@ -41,7 +41,7 @@ dpsnr: -20
 
 # # IMAGENET
 # train_data_dir: data/imagenet
-# test_data_dir: data/imagenet
+# test_data_dir: data/imagenet 
 # sample_size:  # dim image
 # - 128
 # - 128
@@ -69,13 +69,13 @@ dpsnr: -20
 # CIFAR-10 data (we'll still read your datapair.dat)
 train_data_dir: data/cifar10
 test_data_dir: data/cifar10
-sample_size: [64, 64]
+sample_size: [32, 32]
 channels: 3
 num_classes: 10
 
 postprocess:
   enable: true
-  generator_ckpt: "model_zoos/postmodel_cifar10_6464.pth"   # <- we’ll train this
+  generator_ckpt: "model_zoos/postmodel_cifar10_3232.pth"   # <- we’ll train this
   denoiser_ckpt: null                                   # start without
   usrnet_ckpt: null                                      # start without
   kernel_mat: null

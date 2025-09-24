@@ -10,6 +10,133 @@ import torch.nn.functional as F
 from torch.optim.optimizer import Optimizer
 from typing import List
 
+
+def concatenate_weights(weights_list, n_splits=0, random_seed=1):
+    """
+    Concatenates a flat list of weight matrices into a single vector and stores their original shapes.
+    Optionally zeroes out all but a randomly selected chunk of weights based on the number of splits.
+    
+    Parameters:
+    - weights_list: List of weight matrices (numpy arrays).
+    - n_splits: Number of chunks to divide the concatenated weights into. 
+                If greater than 0, a single chunk_size of weights is randomly kept, and the rest are zeroed out.
+    - random_seed: (Optional) Integer seed for reproducibility of the random sampling.
+    
+    Returns:
+    - concatenated_weights: 1D numpy array of all concatenated weights, with some elements possibly zeroed out.
+    - shapes: List of original shapes of each weight matrix for reconstruction.
+    """
+    flattened_weights = []
+    shapes = []
+
+    # Flatten each weight matrix and store its shape
+    for weight_matrix in weights_list:
+        flattened_weights.append(weight_matrix.flatten())
+        shapes.append(weight_matrix.shape)
+
+    # Concatenate all flattened weights into a single vector
+    concatenated_weights = np.concatenate(flattened_weights)
+    
+    # Zero out parameters if n_splits is specified
+    if n_splits > 0:
+        total_length = len(concatenated_weights)
+        chunk_size = int(total_length // n_splits)
+        # print(f"Chunk size: {chunk_size} out of total {total_length}")
+        
+        if chunk_size == 0:
+            raise ValueError("n_splits is too large, resulting in chunk_size=0.")
+        
+        # Randomly select chunk_size unique indices to keep
+        np.random.seed(random_seed)
+        keep_indices = np.random.choice(total_length, size=chunk_size, replace=False)
+        
+        # Debug statements (optional)
+        # print(f"Total length of concatenated weights: {total_length}")
+        # print(f"Chunk size (number of weights to keep): {chunk_size}")
+        # print(f"Indices to keep: {keep_indices}")
+        
+        # Create a new concatenated_weights vector with zeros
+        concatenated_weights_new = np.zeros_like(concatenated_weights)
+        concatenated_weights_new[keep_indices] = concatenated_weights[keep_indices]
+        
+        return concatenated_weights_new, shapes
+    
+    return concatenated_weights, shapes
+
+def deconcatenate_weights(flat_vector, shapes):
+    """
+    Reconstructs the list of weight matrices from the flat concatenated vector based on the provided shapes.
+    
+    Parameters:
+    - flat_vector: 1D numpy array of concatenated weights.
+    - shapes: List of shapes for each weight matrix.
+    
+    Returns:
+    - reconstructed_weights: List of weight matrices with their original shapes.
+    """
+    reconstructed_weights = []
+    idx = 0
+
+    for shape in shapes:
+        size = np.prod(shape)
+        weight_matrix = flat_vector[idx:idx + size].reshape(shape)
+        reconstructed_weights.append(weight_matrix)
+        idx += size
+
+    return reconstructed_weights
+
+def update_model_parameters(gradients, new_weights):
+    """
+    Updates the model's gradients with the provided new_weights.
+
+    Parameters:
+    - model: The PyTorch model whose parameters are to be updated.
+    - new_weights: A list of numpy arrays representing the new weights.
+    """
+    with torch.no_grad():
+        for param, new_weight in zip(gradients, new_weights):
+            # Ensure the new weight is a numpy array
+            if not isinstance(new_weight, np.ndarray):
+                raise TypeError("All elements in new_weights must be numpy arrays.")
+            
+            # Convert numpy array to torch tensor
+            new_weight_tensor = torch.from_numpy(new_weight).to(param.device).type_as(param)
+            
+            # Ensure the shape matches
+            if param.cpu().data.shape != new_weight_tensor.shape:
+                raise ValueError(f"Shape mismatch: Parameter shape {param.cpu().data.shape} vs new weight shape {new_weight_tensor.shape}")
+            
+            # Copy the data
+            param.copy_(new_weight_tensor)
+
+def count_zero_nonzero(original_dy_dx):
+    """
+    Counts the total number of zero and non-zero elements in the list of tensors.
+
+    Parameters:
+    - original_dy_dx: List of PyTorch tensors.
+
+    Returns:
+    - total_zero: Total number of elements equal to zero.
+    - total_non_zero: Total number of elements not equal to zero.
+    """
+    total_zero = 0
+    total_non_zero = 0
+
+    for param in original_dy_dx:
+        # Ensure the tensor is on CPU and convert to NumPy array
+        data = param.cpu().data.numpy()
+
+        # Count zeros and non-zeros
+        total_zero += np.sum(data == 0)
+        total_non_zero += np.sum(data != 0)
+
+    print(f"Total number of zero elements: {total_zero}")
+    print(f"Total number of non-zero elements: {total_non_zero}")
+
+    return total_zero, total_non_zero
+    
+    
 def get_parameters_from_model(model) -> List[np.ndarray]:
     # Ordered by state_dict() insertion order (stable across same model)
     return [t.detach().cpu().numpy() for _, t in model.state_dict().items()]

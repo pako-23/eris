@@ -43,16 +43,23 @@ def parse_args():
 args = parse_args()
 
 # set device for the client
-if args.id < 8:
-    device = '2'
-else:
-    device = '0'
+# if args.id < 8:
+#     device = '2'
+# else:
+#     device = '0'
 # device = str(args.id % 2)
+device = "1"
 # device = '0'  # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Import Libraies
 from collections import OrderedDict
 import torch
+import numpy as np
+# Compatibility for NumPy 2.0+: restore removed dtype aliases used by some libraries
+if not hasattr(np, "float_"):
+    np.float_ = np.float64
+if not hasattr(np, "int_"):
+    np.int_ = np.int64
 import flwr as fl
 import numpy as np
 import copy

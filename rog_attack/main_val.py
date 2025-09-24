@@ -12,6 +12,7 @@ from src.attack import Attacker, grad_inv
 from src.compress import compress_registry
 from utils import *
 
+            
 def main(config_file):
     config = load_config(config_file)
     output_dir = init_outputfolder(config)
@@ -22,10 +23,11 @@ def main(config_file):
     rec_samples, ori_samples = [], []
     
     # if eris prepare mask once
-    model = nn_registry[config.model](config)
-    d, eris_k, eris_gamma, server_ref_s = init_eris_state(model, fl_rounds=-1,k=None, k_frac=config.k_frac)
-    model_params = get_parameters_from_model(model)
-    masks = create_mask(model_params, config.n_aggregators, seed=1)
+    if config.compress == "eris":
+        model = nn_registry[config.model](config)
+        d, eris_k, eris_gamma, server_ref_s = init_eris_state(model, fl_rounds=-1,k=None, k_frac=config.k_frac)
+        model_params = get_parameters_from_model(model)
+        masks = create_mask(model_params, config.n_aggregators, seed=1)
     # grad_mean, grad_std = [], []
     # img_mean, img_std = [], []
 
@@ -75,7 +77,35 @@ def main(config_file):
 
                     for i, g in enumerate(grad):
                         grad[i] = compressor.decompress(compressor.compress(g))
-                
+
+                elif config.compress == "eris_partial":
+
+                    # compressor = compress_registry["eris_partial"](config)
+                    # # keep ≈ d / n_aggregators randomly (like your DLG/iDLG partial split)
+                    # compressor.prefit(
+                    #     grads_list=grad,
+                    #     n_splits=config.n_aggregators,
+                    #     seed=1  # or (config.seed + rnd*1000 + cid)
+                    #     # k=...  # optional: set explicit k if you want different keep size
+                    # )
+                    # n_kept_total = 0
+                    # for i, g in enumerate(grad):
+                    #     grad[i], n_kept = compressor.decompress(compressor.compress(g))
+                    #     n_kept_total += n_kept
+                    # print(f"Total n. kept in grad: {n_kept_total}")
+
+                    gradient_list = []
+                    for param in grad:
+                        gradient_list.append(param.cpu().data.numpy())
+
+                    # Flat and select only one split, zeroing out the others
+                    w, s = concatenate_weights(gradient_list, n_splits=config.n_aggregators, random_seed=1)
+                    r = deconcatenate_weights(w,s)
+
+                    # update gradient
+                    update_model_parameters(grad, r)
+                    
+        
                 else:
                     compressor = compress_registry[config.compress](config)
                     if getattr(compressor, "requires_prefit", False):
@@ -118,4 +148,3 @@ def main(config_file):
 if __name__ == '__main__':
     torch.manual_seed(0)
     main("config.yaml")
-

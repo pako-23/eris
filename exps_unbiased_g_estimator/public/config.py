@@ -4,12 +4,12 @@ from transformers import TrainingArguments # type: ignore
 dataset_name = "imdb"  # Options: "mnist", "cifar10", "imdb" "fmnist, "breast", "diabetes", "adult", "airline, "lsst"
 data_type = "dirichlet" # Options: "iid", "dirichlet"
 alpha_dirichlet = 0.5  # Dirichlet distribution parameter for non-iid data
-k_folds = 4  # Set 1 to disable cross validation
+k_folds = 5  # Set 1 to disable cross validation
 lr = 0.01
 momentum = 0.9
 seed = 1
 transform = None
-gpu = 3 # select the gpu, -1 use cpu, -2 multiple distributed gpus
+gpu = 1 # select the gpu, -1 use cpu, -2 multiple distributed gpus
 
 # Privacy auditing
 privacy_audit = True
@@ -20,7 +20,7 @@ k_plus = 1 / 3  # Fraction of clients with highest scores
 k_min = 1 / 3  # Fraction of clients with lowest scores
 
 # Differential Privacy
-local_dp = True
+local_dp = False
 use_opacus = False
 clipping_norm = 1.0 # (float) limits the L2 norm of each data point’s contribution, affecting the sensitivity of the function (default: 1.0)
 sensitivity = 1.0 # (float) defines the maximum change to the function’s output that any single input can cause (default: 1.0) - generally equal to the clipping norm
