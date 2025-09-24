@@ -13,6 +13,9 @@ experiments/dlk_attacks/data
 **/distilbert-imdb/
 **/model_zoos/
 **/rog_attack/data/
+**/cifar-10-batches-py/
+**/rog_attack_lfw/
+**/rog_attack_mnist/
 
 # Power Point
 *.pptx
