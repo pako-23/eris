@@ -2,6 +2,17 @@
 # pip install -U "transformers>=4.42.0" "datasets>=2.19.0" "accelerate>=0.30.0" "evaluate>=0.4.2" sentencepiece
 # Optional (for ROUGE): pip install rouge-score
 
+"""
+Shatter training workflow for GPT-style summarization models.
+
+This entry point spins up a full fine-tuning experiment where a causal LM is
+trained on CNN/DailyMail under a federated setting. It handles tokenizer/model 
+setup, dataset tokenization and per-client splits, sequential local training 
+with aggregation, privacy attacks (MIA/SIA), evaluation, and persistence of 
+metrics, checkpoints, and plots.
+
+"""
+
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import math
