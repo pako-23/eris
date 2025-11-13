@@ -71,6 +71,7 @@ y_priprune = 2 * (clients * x * multiplier * (1 - 0.3) * 8 * 4) / rate
 y_soteria = 2 * (clients * x * multiplier * compression_rate * 8 * 4) / rate
 y_ako = (x * multiplier * 8 * 4) / rate
 y_shatter = np.maximum((4*x*multiplier*8*4)/(rate*clients), (4*x*multiplier*8*4)/rate)
+y_eris50_uncomp = 2 * (x * multiplier * 8 * 4 * (clients - 1)) / (50 * rate)
 print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
@@ -81,6 +82,7 @@ ax2.plot(x, y_fedavg, label='FedAvg', color=baseline_colors['FedAvg'], marker='o
 ax2.plot(x, y_eris2, label='ERIS (A=2)', color=baseline_colors['ERIS'], marker='^', markersize=4, linewidth=1)
 ax2.plot(x, y_eris25, label='ERIS (A=25)', color=baseline_colors['ERIS'], marker='x', markersize=4, linewidth=1)
 ax2.plot(x, y_eris50, label='ERIS (A=50)', color=baseline_colors['ERIS'], marker='s', markersize=4, linewidth=1)
+ax2.plot(x, y_eris50_uncomp, label='ERIS (A=50) w/o compression', color=baseline_colors['ERIS'], marker='P', markersize=4, linewidth=1)
 ax2.plot(x, y_priprune, label='PriPrune', color=baseline_colors['Pruning'], marker='o', markersize=4, linewidth=1)
 ax2.plot(x, y_soteria, label='SoteriaFL', color=baseline_colors['SoteriaFL'], marker='o', markersize=4, linewidth=1)
 ax2.plot(x, y_ako, label='Ako', color=baseline_colors['Ako'], marker='o', markersize=4, linewidth=1)
@@ -110,6 +112,7 @@ y_priprune = 2 * (x * priprune_size) / rate
 y_soteria = 2 * (x * compr_size) / rate
 y_ako = (model_size / rate) * np.ones(x.shape)
 y_shatter = np.maximum((4*model_size)/(rate*x), (4*model_size)/rate)
+y_eris50_uncomp = 2 * (model_size * (x - 1)) / (50 * rate)
 print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
@@ -121,6 +124,7 @@ ax1.plot(x, y_fedavg, label='FedAvg', color=baseline_colors['FedAvg'], marker='o
 ax1.plot(x, y_eris2, label='ERIS (A=2)', color=baseline_colors['ERIS'], marker='^', markersize=4, linewidth=1)
 ax1.plot(x, y_eris25, label='ERIS (A=25)', color=baseline_colors['ERIS'], marker='x', markersize=4, linewidth=1)
 ax1.plot(x, y_eris50, label='ERIS (A=50)', color=baseline_colors['ERIS'], marker='s', markersize=4, linewidth=1)
+ax1.plot(x, y_eris50_uncomp, label='ERIS (A=50) w/o compression', color=baseline_colors['ERIS'], marker='P', markersize=4, linewidth=1)
 ax1.plot(x, y_priprune, label='PriPrune', color=baseline_colors['Pruning'], marker='o', markersize=4, linewidth=1)
 ax1.plot(x, y_soteria, label='SoteriaFL', color=baseline_colors['SoteriaFL'], marker='o', markersize=4, linewidth=1)
 ax1.plot(x, y_ako, label='Ako', color=baseline_colors['Ako'], marker='o', markersize=4, linewidth=1)
@@ -144,7 +148,7 @@ fig.legend(
     loc='upper center',
     bbox_to_anchor=(0.5, 0.05),
     title=r"$\mathbf{Methods}$",
-    ncol=4,
+    ncol=3,
     fontsize=11,
     title_fontsize=11,
     labelspacing=0.85)
