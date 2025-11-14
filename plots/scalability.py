@@ -343,7 +343,7 @@ def communication_table(**argv):
         "Method",
         "Upload per-client",
         "Download per-client",
-        "Compression Rate",
+        "Compression Ratio",
         "Dist. Time",
     ]
 
@@ -354,7 +354,7 @@ def communication_table(**argv):
             "FedAvg",
             format_bytes(model_size),
             format_bytes(model_size),
-            f"{model_size/compressed}",
+            f"{compressions[0]}%",
             f"{2*((clients*model_size)/rate)} s",
         ]
     )
@@ -365,7 +365,7 @@ def communication_table(**argv):
             "Shatter",
             format_bytes(model_size + 2 * model_size * shatter),
             format_bytes(model_size + 2 * model_size * shatter),
-            format_num(model_size / compressed),
+            f"{compressions[1]}%",
             f"{format_num(max(model_size/rate, (shatter*model_size)/rate, (shatter*model_size)/(clients*rate)))} s",
         ]
     )
@@ -376,7 +376,7 @@ def communication_table(**argv):
             "PriPrune (0.01)",
             format_bytes(compressed),
             format_bytes(compressed),
-            format_num(model_size / compressed),
+            f"{compressions[2]}%",
             f"{format_num(2*((clients*compressed)/rate))} s",
         ]
     )
@@ -387,7 +387,7 @@ def communication_table(**argv):
             "PriPrune (0.05)",
             format_bytes(compressed),
             format_bytes(compressed),
-            format_num(model_size / compressed),
+            f"{compressions[3]}%",
             f"{format_num(2*((clients*compressed)/rate))} s",
         ]
     )
@@ -398,7 +398,7 @@ def communication_table(**argv):
             "PriPrune (0.1)",
             format_bytes(compressed),
             format_bytes(compressed),
-            format_num(model_size / compressed),
+            f"{compressions[4]}%",
             f"{format_num(2*((clients*compressed)/rate))} s",
         ]
     )
@@ -409,7 +409,7 @@ def communication_table(**argv):
             "SoteriaFL",
             format_bytes(compressed),
             format_bytes(compressed),
-            format_num(model_size / compressed),
+            f"{compressions[5]}%",
             f"{format_num(2*((clients*compressed)/rate))} s",
         ]
     )
@@ -423,7 +423,7 @@ def communication_table(**argv):
             "ERIS",
             format_bytes((clients - 1) * 2 * (compressed / clients)),
             format_bytes((clients - 1) * 2 * (compressed / clients)),
-            format_num(model_size / compressed),
+            f"{compressions[6]}%",
             f"{format_num(distribution)} s",
         ]
     )
