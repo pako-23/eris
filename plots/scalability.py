@@ -421,8 +421,8 @@ def communication_table(**argv):
     table.append(
         [
             "ERIS",
-            format_bytes(2 * compressed),
-            format_bytes(2 * compressed),
+            format_bytes((clients - 1) * 2 * (compressed / clients)),
+            format_bytes((clients - 1) * 2 * (compressed / clients)),
             format_num(model_size / compressed),
             f"{format_num(distribution)} s",
         ]
