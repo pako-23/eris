@@ -454,6 +454,172 @@ def communication_table(**argv):
             )
         )
     print()
+    
+    
+    
+def communication_table_dario(**argv):
+    dataset = argv["dataset"]
+    clients = argv["clients"]
+    params = argv["params"]
+    shatter = argv["shatter"]
+    compressions = argv["compressions"]
+    table = []
+    rate = 20000000
+    header = [
+        "Method",
+        "Compression Ratio",
+        "Upload/Download per-client",
+        "Tot. Communication  per-client",
+        "Dist. Time",
+    ]
+
+    model_size = params * 4
+    compressed = model_size * compressions[0] / 100
+    table.append(
+        [
+            "FedAvg", # same DP-SRM and Distributed DP-SRM
+            f"{compressions[0]}%",
+            format_bytes(model_size),
+            format_bytes(2*model_size),
+            f"{2*((clients*model_size)/rate)} s",
+        ]
+    )
+
+    compressed = model_size * compressions[1] / 100
+    table.append(
+        [
+            "Shatter",
+            f"{compressions[1]}%",
+            format_bytes(compressed),
+            format_bytes(compressed*(1 + 2*shatter)),
+            f"{format_num(max(model_size/rate, (shatter*model_size)/rate, (shatter*model_size)/(clients*rate)))} s",
+        ]
+    )
+
+    compressed = model_size * 100 / 100
+    p = 5
+    table.append(
+        [
+            "Ako (p=5)",
+            f"{100}%",
+            format_bytes(compressed * (clients - 1) / p),
+            format_bytes(2*compressed * (clients - 1) / p),
+            f"{format_num(2*compressed * (clients - 1) / (p*rate))} s",
+        ]
+    )
+
+    s = 3
+    p_c = 0.4
+    neighbors = p_c * (clients - 1)  # average degree
+    compressed = model_size * (s / 16.0)  # s = quantization bits
+    table.append(
+        [
+            "Q-DPSGD-1",
+            f"{100 * s / 16:.1f}%",                         
+            format_bytes(compressed * neighbors),           
+            format_bytes(2 * compressed * neighbors),       
+            f"{format_num(2 * compressed * neighbors / rate)} s",  
+        ]
+    )
+
+    compressed = model_size * compressions[2] / 100
+    table.append(
+        [
+            "PriPrune (0.01)",
+            f"{compressions[2]}%",
+            format_bytes(compressed),
+            format_bytes(2*compressed),
+            f"{format_num(2*((clients*compressed)/rate))} s",
+        ]
+    )
+
+    compressed = model_size * compressions[3] / 100
+    table.append(
+        [
+            "PriPrune (0.05)",
+            f"{compressions[3]}%",
+            format_bytes(compressed),
+            format_bytes(2*compressed),
+            f"{format_num(2*((clients*compressed)/rate))} s",
+        ]
+    )
+
+    compressed = model_size * compressions[4] / 100
+    table.append(
+        [
+            "PriPrune (0.1)",
+            f"{compressions[4]}%",
+            format_bytes(compressed),
+            format_bytes(2*compressed),
+            f"{format_num(2*((clients*compressed)/rate))} s",
+        ]
+    )
+
+    compressed = model_size * compressions[5] / 100
+    table.append(
+        [
+            "SoteriaFL",
+            f"{compressions[5]}%",
+            format_bytes(compressed),
+            format_bytes(2*compressed),
+            f"{format_num(2*((clients*compressed)/rate))} s",
+        ]
+    )
+
+    compressed = model_size * compressions[5] / 100 # compression like soteria
+    distribution = 2 * max(
+        ((clients - 1) * compressed) / (clients * rate), 0
+    )
+    table.append(
+        [
+            "ERIS (with ω_{SoteriaFL})",
+            f"{compressions[5]}%",
+            format_bytes((clients - 1)/clients * compressed),
+            format_bytes(2*(clients - 1)/clients * compressed),
+            f"{format_num(distribution)} s",
+        ]
+    )
+
+    compressed = model_size * compressions[6] / 100
+    distribution = 2 * max(
+        ((clients - 1) * compressed) / (clients * rate), 0
+    )
+    table.append(
+        [
+            "ERIS",
+            f"{compressions[6]}%",
+            format_bytes((clients - 1)/clients * compressed),
+            format_bytes(2*(clients - 1)/clients * compressed),
+            f"{format_num(distribution)} s",
+        ]
+    )
+
+    cellsizes = [len(i) for i in header]
+    for row in table:
+        for i in range(len(row)):
+            cellsizes[i] = max(cellsizes[i], len(row[i]))
+
+    print()
+    header = "|".join(
+        [
+            ("{:^" + str(cellsizes[i] + 2) + "}").format(header[i])
+            for i in range(len(header))
+        ]
+    )
+    print(("{:^" + str(len(header)) + "}").format(dataset))
+    print(("{:^" + str(len(header)) + "}").format("-" * (len(dataset) + 2)))
+    print(header)
+    print("+".join(["-" * (i + 2) for i in cellsizes]))
+    for row in table:
+        print(
+            "|".join(
+                [
+                    ("{:^" + str(cellsizes[i] + 2) + "}").format(row[i])
+                    for i in range(len(row))
+                ]
+            )
+        )
+    print()
 
 
 communication_table(
@@ -463,6 +629,14 @@ communication_table(
     shatter=4,
     compressions=[100, 100, 99, 95, 90, 5, 3.3],
 )
+communication_table_dario(
+    dataset="MNIST",
+    clients=50,
+    params=62000,
+    shatter=4,
+    compressions=[100, 100, 99, 95, 90, 5, 3.3],
+)
+
 communication_table(
     dataset="CIFAR10",
     clients=50,
@@ -470,6 +644,14 @@ communication_table(
     shatter=4,
     compressions=[100, 100, 99, 95, 90, 5, 0.6],
 )
+communication_table_dario(
+    dataset="CIFAR10",
+    clients=50,
+    params=1650000,
+    shatter=4,
+    compressions=[100, 100, 99, 95, 90, 5, 0.6],
+)
+
 communication_table(
     dataset="IMDB",
     clients=25,
@@ -477,7 +659,22 @@ communication_table(
     shatter=4,
     compressions=[100, 100, 90, 80, 70, 5, 0.012],
 )
+communication_table_dario(
+    dataset="IMDB",
+    clients=25,
+    params=67000000,
+    shatter=4,
+    compressions=[100, 100, 90, 80, 70, 5, 0.012],
+)
+
 communication_table(
+    dataset="CNN/Daily Mail",
+    clients=10,
+    params=1300000000,
+    shatter=3,
+    compressions=[100, 100, 90, 80, 70, 5, 1],
+)
+communication_table_dario(
     dataset="CNN/Daily Mail",
     clients=10,
     params=1300000000,
