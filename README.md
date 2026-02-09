@@ -1,65 +1,94 @@
-# ERIS: Enhancing Privacy and Communication Efficiency in Decentralized Federated Learning
+# ERIS: Enhancing Privacy and Communication Efficiency in Serverless Federated Learning
 
-ERIS is a decentralized Federated Learning (FL) framework that jointly addresses the challenges of communication bottlenecks and gradient-based privacy attacks without sacrificing model accuracy. By partitioning model updates across multiple client-side aggregators and employing a distributed shifted compression mechanism, ERIS eliminates the server bottleneck, provably converges under standard assumptions, and bounds mutual information leakage—establishing a new Pareto frontier for scalable, privacy-preserving FL on large models.
+## 🌍 Overview
 
-## 🚀 Key Features
-- **Decentralized Aggregation:** Distributes aggregation workload across \(A\) client-side aggregators, balancing network load and removing the single-server bottleneck.
-- **Distributed Shifted Compression:** Applies a shift-and-compress strategy to each client gradient, reducing transmitted parameters to less than 6% in the worst case while preserving convergence.
-- **Model Partitioning:** Splits compressed gradients into disjoint shards sent to different aggregators, ensuring no single entity sees full updates.
-- **Theoretical Guarantees:** Proves convergence rate matching FedAvg and an information-theoretic bound on privacy leakage that scales inversely with the number of aggregators.
-- **Strong Empirical Performance:** Matches state-of-the-art accuracy on image and text benchmarks (MNIST, CIFAR-10, LFW, IMDB) while reducing membership inference success from ~83% to ~65%, cutting communication cost by >94%, and speeding distribution by up to 1000×.
+**ERIS** is a scalable serverless Federated Learning (FL) framework that removes the server bottleneck while preserving FedAvg utility. The core idea is to partition each client update across multiple client-side aggregators so that (i) aggregation is fully distributed and network load is balanced, and (ii) no single entity ever observes a full client update—only a small, randomized subset—yielding inherent privacy benefits. ERIS further integrates a distributed shifted compression mechanism to drastically reduce the number of transmitted (and exposed) parameters.
 
 
-## 📦 Installation
-1. Clone the repository
-    ``` shell
-    git clone https://github.com/...
-    cd eris
-    ```
-2. Install dependencies
-    ``` shell
-    pip install -r requirements.txt
-    ```
-3. Build and install the package
-    ```shell
-    ./setup.py bdist_wheel
-    pip install $(find dist/ -name '*.whl') --force-reinstall
-    ```
+<p align="center">
+  <img src="plots/eris_overview.png" alt="FLUX Overview" width="100%"/>
+</p>
 
 
-## ⚙️ Configuration
-Experiments are organized under method-specific folders: `eris/`, `fedavg/`, `soteriafl/`, and their respective variations with LLMs. Each contains a `public/config.py` and a `run.sh` script. Additionally, dedicated `exps_*` folders group privacy and attack scenarios:
-- `exps_unbiased_g_estimator` and `exps_unbiased_pareto`: Membership Inference Attacks (MIAs) with unbiased gradient estimator $\mathbb{E}_t[\tilde{\mathbf{g}}_k^t]\!=\!\nabla f_k(\mathbf{x^t})$; varying local sample counts and privacy mechanism strengths to study privacy–utility trade-offs and construct Pareto fronts.
-- `exps_biased_g_estimator` and `exps_biased_pareto`: MIAs with biased gradient estimator $\mathbb{E}_t[\tilde{\mathbf{g}}_k^t]\!=\!\nabla f_k(\mathbf{x^t}) + C$; analogous analyses under biased gradients.
-- `exps_dra`: Data Reconstruction Attacks (DRAs) analysis.
+## 📦 Key Features
+- **Exact serverless aggregation via gradient partitioning.** ERIS introduces a novel gradient partitioning scheme that balances network load and remains mathematically equivalent to FedAvg updates, while amplifying privacy on client updates by limiting the information available to any single observer.
 
-Key configurable parameters in each MIA method folder’s `public/config.py` include:
-- **dataset:** MNIST, CIFAR10, LFW, or IMDB.
-- **model:** e.g., LeNet5, ResNet9, or DistilBERT.
-- **aggregators (A):** Number of client-side aggregators to split updates, denoted as `splits`.
-- **compression:** Compression constant and sparsification type (shifted vs. simple).
-- **privacy mechanism:** Options like pruning, LDP, (for both ERIS and baselines) or native ERIS partitioning.
-- **privacy audit**: Membership inference or reconstruction attack settings.
-- **training**: Learning rate, batch size, local epochs, communication rounds, etc.
-Customize any parameter in `public/config.py` to reproduce different scenarios.
+- **Distributed Shifted Compression.** Applies a shift-and-compress strategy to each client gradient, reducing transmitted parameters to less than $3.3\%$ of the model size and cuts distribution time by up to $10^3\times$ in the worst case. Besides improving communication efficiency, compression further limits exposure by shrinking the parameter subset observed per round.
+
+- **Theory and large-scale validation.** We provide convergence guarantees and information-theoretic privacy bounds showing that leakage decreases with the number of aggregators and the compression level. Extensive experiments on three image and two text datasets—from small networks to modern LLMs—and under two threat models against six SOTA baselines confirm ERIS’s strong privacy–utility–efficiency trade-off.
+
+
+## 🚀 Installation
+1. Create and activate a Python environment.
+2. Install dependencies.
+3. Build the ERIS extension.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+```
+
 
 ## 🏃‍♂️ Running Experiments
-Once configured, to run ERIS-specific experiments:
+Each experiment suite has the same structure:
+- `public/config.py` contains the main settings.
+- `data/` contains dataset download and splitting scripts.
+- `eris/`, `fedavg/`, and `soterafl/` (plus `_llm` variants) contain runnable scripts.
+
+General flow:
+1. Edit the suite config: `exps_*/public/config.py`.
+2. Run a strategy from its folder.
+
+Example (ERIS with unbiased gradient estimator):
 ```bash
-cd 'strategy'
+cd exps_unbiased_g_estimator/eris
 bash run.sh
 ```
-Results—including metrics, training history, visualizations, and model checkpoints—are saved under the `strategy/results`, `strategy/history`, `strategy/images`, and `strategy/checkpoints` directories, respectively.
 
-## License
-This project is licensed under the GNU GENERAL PUBLIC LICENSE – see the LICENSE file for details.
+Run a baseline by switching folders:
+```bash
+cd exps_unbiased_g_estimator/fedavg
+bash run.sh
+```
+
+LLM variants use the `_llm` folders:
+```bash
+cd exps_unbiased_g_estimator/eris_llm
+bash run.sh
+```
+
+## ⚙️ Experiment Suites
+| Suite | Goal | Run From |
+| --- | --- | --- |
+| `exps_unbiased_g_estimator` | ERIS with unbiased gradient estimator | `eris/`, `fedavg/`, `soterafl/` (+ `_llm`) |
+| `exps_biased_g_estimator` | ERIS with biased gradient estimator | `eris/`, `fedavg/`, `soterafl/` (+ `_llm`) |
+| `exps_unbiased_pareto` | Pareto front (privacy vs utility), unbiased | `eris/`, `fedavg/`, `soterafl/` (+ `_llm`) |
+| `exps_biased_pareto` | Pareto front (privacy vs utility), biased | `eris/`, `fedavg/`, `soterafl/` (+ `_llm`) |
+| `exps_dra` | Data Reconstruction Attacks (DLG/iDLG) | `python main.py` |
+| `exps_GPT` | GPT-scale experiments and baselines | `bash run.sh` |
+
+## 🗂️ Datasets
+- Image, tabular, time-series, and text datasets are downloaded on first run via `data/client_datasets_split.py`.
+- To pre-download datasets for a suite:
+```bash
+cd exps_unbiased_g_estimator/data
+python download_datasets.py
+```
+- Supported datasets for each suite are listed in its `public/config.py`.
+
 
 ## Citation
-If you use ERIS in your research, please cite our NeurIPS 2025 paper:
+If you use ERIS, please cite the current preprint:
 ```
-@inproceedings{anonymous2025flux,
-  title        = {{ERIS}: {Enhancing Privacy and Communication Efficiency in Decentralized Federated Learning}},
-  author       = {Anonymous Authors},
-  year         = {2025}
+@misc{fenoglio2026eris,
+  title        = {ERIS: Enhancing Privacy and Communication Efficiency in Serverless Federated Learning},
+  author       = {Dario Fenoglio and Pasquale Polverino and Jacopo Quizi and Martin Gjoreski and Marc Langheinrich},
+  year         = {2026},
+  note         = {Preprint, February 9, 2026}
 }
 ```
+
+## License
+This project is licensed under the GNU General Public License. See `LICENSE` for details.

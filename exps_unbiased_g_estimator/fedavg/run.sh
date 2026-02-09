@@ -78,11 +78,11 @@ for exp_n in $(seq 0 4); do
         cd ../fedavg
         pkill -9 -f server.py
         pkill -9 -f client.py
-        pkill -u dario -f server.py -9
-        pkill -u dario -f client.py -9
+        pkill -u "$(id -un)" -f server.py -9
+        pkill -u "$(id -un)" -f client.py -9
         sleep 2
-        pkill -u dario -f server.py -9
-        pkill -u dario -f client.py -9
+        pkill -u "$(id -un)" -f server.py -9
+        pkill -u "$(id -un)" -f client.py -9
         sleep 2
 
         echo -e "\n\033[1;36mStarting server with model \033[0m\n"
@@ -105,11 +105,11 @@ for exp_n in $(seq 0 4); do
         pkill -9 -f server.py
         pkill -9 -f client.py
         sleep 2
-        pkill -u dario -f server.py -9
-        pkill -u dario -f client.py -9
+        pkill -u "$(id -un)" -f server.py -9
+        pkill -u "$(id -un)" -f client.py -9
         sleep 2
-        pkill -u dario -f server.py -9
-        pkill -u dario -f client.py -9
+        pkill -u "$(id -un)" -f server.py -9
+        pkill -u "$(id -un)" -f client.py -9
     done
 
     # Aggregate results

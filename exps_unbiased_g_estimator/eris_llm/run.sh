@@ -77,8 +77,8 @@ for exp_n in $(seq 0 4); do
         pkill -9 -f coordinator_llm.py
         pkill -9 -f client_llm.py
         sleep 2
-        pkill -u dario -f coordinator_llm.py -9
-        pkill -u dario -f client_llm.py -9
+        pkill -u "$(id -un)" -f coordinator_llm.py -9
+        pkill -u "$(id -un)" -f client_llm.py -9
         sleep 2
 
         echo -e "\n\033[1;36mStarting server with model \033[0m\n"
@@ -111,8 +111,8 @@ for exp_n in $(seq 0 4); do
         pkill -9 -f coordinator_llm.py
         pkill -9 -f client_llm.py
         sleep 2
-        pkill -u dario -f coordinator_llm.py -9
-        pkill -u dario -f client_llm.py -9
+        pkill -u "$(id -un)" -f coordinator_llm.py -9
+        pkill -u "$(id -un)" -f client_llm.py -9
         sleep 2
     done
 

@@ -457,7 +457,7 @@ def communication_table(**argv):
     
     
     
-def communication_table_dario(**argv):
+def communication_table(**argv):
     dataset = argv["dataset"]
     clients = argv["clients"]
     params = argv["params"]
@@ -629,7 +629,7 @@ communication_table(
     shatter=4,
     compressions=[100, 100, 99, 95, 90, 5, 3.3],
 )
-communication_table_dario(
+communication_table(
     dataset="MNIST",
     clients=50,
     params=62000,
@@ -644,7 +644,7 @@ communication_table(
     shatter=4,
     compressions=[100, 100, 99, 95, 90, 5, 0.6],
 )
-communication_table_dario(
+communication_table(
     dataset="CIFAR10",
     clients=50,
     params=1650000,
@@ -659,7 +659,7 @@ communication_table(
     shatter=4,
     compressions=[100, 100, 90, 80, 70, 5, 0.012],
 )
-communication_table_dario(
+communication_table(
     dataset="IMDB",
     clients=25,
     params=67000000,
@@ -674,7 +674,7 @@ communication_table(
     shatter=3,
     compressions=[100, 100, 90, 80, 70, 5, 1],
 )
-communication_table_dario(
+communication_table(
     dataset="CNN/Daily Mail",
     clients=10,
     params=1300000000,
