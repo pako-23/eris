@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 from matplotlib import rcParams
 
@@ -303,6 +304,148 @@ fig.legend(
 
 plt.tight_layout()
 plt.savefig("scalability.pdf", bbox_inches="tight")
+
+fig, (ax1) = plt.subplots(1, 1, figsize=(5, 4))
+
+param = 10000000
+clients = 50
+model_size = param * 8 * 4
+priprune_size = param * (1 - 0.3) * 8 * 4
+compr_size = param * compression_rate * 8 * 4
+
+x = np.linspace(1e4, 1e7, 40)
+
+y_fedavg = 2 * (clients * model_size) / x
+y_eris2 = 2 * (compr_size * (2 - 1)) / (2 * x)
+y_eris25 = 2 * (compr_size * (25 - 1)) / (25 * x)
+y_eris50 = 2 * (compr_size * (50 - 1)) / (50 * x)
+y_priprune = 2 * (clients * priprune_size) / x
+y_soteria = 2 * (clients * compr_size) / x
+y_ako = (model_size / x) * np.ones(x.shape)
+y_shatter = np.maximum((4 * model_size) / (x * clients), (4 * model_size) / x)
+y_eris50_uncomp = 2 * (model_size * (clients - 1)) / (50 * x)
+
+ax1.plot(
+    x,
+    y_fedavg,
+    label="FedAvg",
+    color=baseline_colors["FedAvg"],
+    marker="o",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_eris2,
+    label="ERIS (A=2)",
+    color=baseline_colors["ERIS"],
+    marker="^",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_eris25,
+    label="ERIS (A=25)",
+    color=baseline_colors["ERIS"],
+    marker="x",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_eris50,
+    label="ERIS (A=50)",
+    color=baseline_colors["ERIS"],
+    marker="s",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_eris50_uncomp,
+    label="ERIS (A=50) w/o compression",
+    color=baseline_colors["ERIS"],
+    marker="P",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_priprune,
+    label="PriPrune",
+    color=baseline_colors["Pruning"],
+    marker="o",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_soteria,
+    label="SoteriaFL",
+    color=baseline_colors["SoteriaFL"],
+    marker="o",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_ako,
+    label="Ako",
+    color=baseline_colors["Ako"],
+    marker="o",
+    markersize=4,
+    linewidth=1,
+)
+ax1.plot(
+    x,
+    y_shatter,
+    label="Shatter",
+    color=baseline_colors["Shatter"],
+    marker="o",
+    markersize=4,
+    linewidth=1,
+)
+
+ax1.set_yscale("log")
+ax1.set_xlabel("Transmission Rate (Kbps)", fontsize=14)
+ax1.set_ylabel("Minimum Distribution Time (seconds)", fontsize=14)
+ax1.set_title("Effect of Transmission Rate", fontsize=16)
+ax1.set_xlim(1e4, 1e7)
+ax1.set_xticks(np.arange(1e4, 1e7, 1500000))
+
+
+def log_formatter(x, pos):
+    val = x / 1000
+    if val == 0:
+        return "$0$"
+
+    exponent = int(np.floor(np.log10(abs(val))))
+    coeff = int(val / 10**exponent)
+
+    return r"${:d} \times 10^{{{:d}}}$".format(coeff, exponent)
+
+
+ax1.xaxis.set_major_formatter(ticker.FuncFormatter(log_formatter))
+
+handles, labels = ax1.get_legend_handles_labels()
+
+
+fig.legend(
+    handles=handles,
+    labels=labels,
+    loc="upper center",
+    bbox_to_anchor=(0.5, 0.05),
+    title=r"$\mathbf{Methods}$",
+    ncol=3,
+    fontsize=11,
+    title_fontsize=11,
+    labelspacing=0.85,
+)
+
+
+plt.tight_layout()
+plt.savefig("delays.pdf", bbox_inches="tight")
 
 
 def format_num(number):
