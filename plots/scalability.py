@@ -316,9 +316,9 @@ compr_size = param * compression_rate * 8 * 4
 x = np.linspace(1e4, 1e7, 40)
 
 y_fedavg = 2 * (clients * model_size) / x
-y_eris2 = 2 * (compr_size * (2 - 1)) / (2 * x)
-y_eris25 = 2 * (compr_size * (25 - 1)) / (25 * x)
-y_eris50 = 2 * (compr_size * (50 - 1)) / (50 * x)
+y_eris2 = 2 * (compr_size * (clients - 1)) / (2 * x)
+y_eris25 = 2 * (compr_size * (clients - 1)) / (25 * x)
+y_eris50 = 2 * (compr_size * (clients - 1)) / (50 * x)
 y_priprune = 2 * (clients * priprune_size) / x
 y_soteria = 2 * (clients * compr_size) / x
 y_ako = (model_size / x) * np.ones(x.shape)
