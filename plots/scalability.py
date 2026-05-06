@@ -67,17 +67,27 @@ compression_rate = 0.05
 x = np.linspace(1, 1000, 40)
 
 y_fedavg = 2 * (clients * x * multiplier * 8 * 4) / rate
-y_eris2 = 2 * (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (2 * rate)
-y_eris25 = 2 * (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (25 * rate)
-y_eris50 = 2 * (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (50 * rate)
-y_priprune = 2 * (clients * x * multiplier * (1 - 0.3) * 8 * 4) / rate
-y_soteria = 2 * (clients * x * multiplier * compression_rate * 8 * 4) / rate
+y_eris2 = (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (2 * rate) + (
+    x * multiplier * 8 * 4 * (clients - 1)
+) / (2 * rate)
+y_eris25 = (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (25 * rate) + (
+    x * multiplier * 8 * 4 * (clients - 1)
+) / (25 * rate)
+y_eris50 = (x * multiplier * compression_rate * 8 * 4 * (clients - 1)) / (50 * rate) + (
+    x * multiplier * 8 * 4 * (clients - 1)
+) / (50 * rate)
+y_priprune = (clients * x * multiplier * (1 - 0.3) * 8 * 4) / rate + (
+    clients * x * multiplier * 8 * 4
+) / rate
+y_soteria = (clients * x * multiplier * compression_rate * 8 * 4) / rate + (
+    clients * x * multiplier * 8 * 4
+) / rate
 y_ako = (x * multiplier * 8 * 4) / rate
 y_shatter = np.maximum(
     (4 * x * multiplier * 8 * 4) / (rate * clients), (4 * x * multiplier * 8 * 4) / rate
 )
 y_eris50_uncomp = 2 * (x * multiplier * 8 * 4 * (clients - 1)) / (50 * rate)
-print(f"fedavg/eris2: {y_fedavg[0] / y_eris2[0]}")
+print(f"fedavg/eris2: {np.max(y_fedavg / y_eris2)}")
 print(f"fedavg/eris25: {y_fedavg[0] / y_eris25[0]}")
 print(f"fedavg/eris50: {y_fedavg[0] / y_eris50[0]}")
 print(f"soteria/eris2: {y_soteria[0] / y_eris2[0]}")
@@ -181,11 +191,11 @@ compr_size = param * compression_rate * 8 * 4
 x = np.linspace(10, 300, 50)
 
 y_fedavg = 2 * (x * model_size) / rate
-y_eris2 = 2 * (compr_size * (x - 1)) / (2 * rate)
-y_eris25 = 2 * (compr_size * (x - 1)) / (25 * rate)
-y_eris50 = 2 * (compr_size * (x - 1)) / (50 * rate)
-y_priprune = 2 * (x * priprune_size) / rate
-y_soteria = 2 * (x * compr_size) / rate
+y_eris2 = (compr_size * (x - 1)) / (2 * rate) + (model_size * (x - 1)) / (2 * rate)
+y_eris25 = (compr_size * (x - 1)) / (25 * rate) + (model_size * (x - 1)) / (25 * rate)
+y_eris50 = (compr_size * (x - 1)) / (50 * rate) + (model_size * (x - 1)) / (50 * rate)
+y_priprune = (x * priprune_size) / rate + (x * model_size) / rate
+y_soteria = (x * compr_size) / rate + (x * model_size) / rate
 y_ako = (model_size / rate) * np.ones(x.shape)
 y_shatter = np.maximum((4 * model_size) / (rate * x), (4 * model_size) / rate)
 y_eris50_uncomp = 2 * (model_size * (x - 1)) / (50 * rate)
@@ -316,11 +326,17 @@ compr_size = param * compression_rate * 8 * 4
 x = np.linspace(1e4, 1e7, 40)
 
 y_fedavg = 2 * (clients * model_size) / x
-y_eris2 = 2 * (compr_size * (clients - 1)) / (2 * x)
-y_eris25 = 2 * (compr_size * (clients - 1)) / (25 * x)
-y_eris50 = 2 * (compr_size * (clients - 1)) / (50 * x)
-y_priprune = 2 * (clients * priprune_size) / x
-y_soteria = 2 * (clients * compr_size) / x
+y_eris2 = (compr_size * (clients - 1)) / (2 * x) + (model_size * (clients - 1)) / (
+    2 * x
+)
+y_eris25 = (compr_size * (clients - 1)) / (25 * x) + (model_size * (clients - 1)) / (
+    25 * x
+)
+y_eris50 = (compr_size * (clients - 1)) / (50 * x) + (model_size * (clients - 1)) / (
+    50 * x
+)
+y_priprune = (clients * priprune_size) / x + (clients * model_size) / x
+y_soteria = (clients * compr_size) / x + (clients * model_size) / x
 y_ako = (model_size / x) * np.ones(x.shape)
 y_shatter = np.maximum((4 * model_size) / (x * clients), (4 * model_size) / x)
 y_eris50_uncomp = 2 * (model_size * (clients - 1)) / (50 * x)
@@ -485,7 +501,8 @@ def communication_table(**argv):
     header = [
         "Method",
         "Compression Ratio",
-        "Upload/Download per-client",
+        "Upload per-client",
+        "Download per-client",
         "Tot. Communication  per-client",
         "Dist. Time",
     ]
@@ -496,6 +513,7 @@ def communication_table(**argv):
         [
             "FedAvg",  # same DP-SRM and Distributed DP-SRM
             f"{compressions[0]}%",
+            format_bytes(model_size),
             format_bytes(model_size),
             format_bytes(2 * model_size),
             f"{2*((clients*model_size)/rate)} s",
@@ -508,6 +526,7 @@ def communication_table(**argv):
             "Shatter",
             f"{compressions[1]}%",
             format_bytes(compressed),
+            format_bytes(compressed),
             format_bytes(compressed * (1 + 2 * shatter)),
             f"{format_num(max(model_size/rate, (shatter*model_size)/rate, (shatter*model_size)/(clients*rate)))} s",
         ]
@@ -519,6 +538,7 @@ def communication_table(**argv):
         [
             "Ako (p=5)",
             "100%",
+            format_bytes(compressed * (clients - 1) / p),
             format_bytes(compressed * (clients - 1) / p),
             format_bytes(2 * compressed * (clients - 1) / p),
             f"{format_num(2*compressed * (clients - 1) / (p*rate))} s",
@@ -534,8 +554,9 @@ def communication_table(**argv):
             "Q-DPSGD-1",
             f"{100 * s / 16:.1f}%",
             format_bytes(compressed * neighbors),
-            format_bytes(2 * compressed * neighbors),
-            f"{format_num(2 * compressed * neighbors / rate)} s",
+            format_bytes(compressed * neighbors),
+            format_bytes(2 * model_size * neighbors),
+            f"{format_num(2 * (compressed * neighbors) / rate) } s",
         ]
     )
 
@@ -545,8 +566,9 @@ def communication_table(**argv):
             "PriPrune (0.01)",
             f"{compressions[2]}%",
             format_bytes(compressed),
-            format_bytes(2 * compressed),
-            f"{format_num(2*((clients*compressed)/rate))} s",
+            format_bytes(model_size),
+            format_bytes(compressed + model_size),
+            f"{format_num((clients*compressed)/rate + (model_size*clients)/rate)} s",
         ]
     )
 
@@ -556,8 +578,9 @@ def communication_table(**argv):
             "PriPrune (0.05)",
             f"{compressions[3]}%",
             format_bytes(compressed),
-            format_bytes(2 * compressed),
-            f"{format_num(2*((clients*compressed)/rate))} s",
+            format_bytes(model_size),
+            format_bytes(compressed + model_size),
+            f"{format_num((clients*compressed)/rate + (model_size*clients)/rate)} s",
         ]
     )
 
@@ -567,8 +590,9 @@ def communication_table(**argv):
             "PriPrune (0.1)",
             f"{compressions[4]}%",
             format_bytes(compressed),
-            format_bytes(2 * compressed),
-            f"{format_num(2*((clients*compressed)/rate))} s",
+            format_bytes(model_size),
+            format_bytes(compressed + model_size),
+            f"{format_num((clients*compressed)/rate + (model_size*clients)/rate)} s",
         ]
     )
 
@@ -578,8 +602,9 @@ def communication_table(**argv):
             "SoteriaFL",
             f"{compressions[5]}%",
             format_bytes(compressed),
-            format_bytes(2 * compressed),
-            f"{format_num(2*((clients*compressed)/rate))} s",
+            format_bytes(model_size),
+            format_bytes(compressed + model_size),
+            f"{format_num((clients*compressed)/rate + (clients*model_size)/rate)} s",
         ]
     )
 
@@ -589,31 +614,44 @@ def communication_table(**argv):
             "ERIS (w/o compression)",
             "100%",
             format_bytes((clients - 1) / clients * model_size),
+            format_bytes((clients - 1) / clients * model_size),
             format_bytes(2 * (clients - 1) / clients * model_size),
             f"{format_num(distribution)} s",
         ]
     )
 
     compressed = model_size * compressions[5] / 100  # compression like soteria
-    distribution = 2 * max(((clients - 1) * compressed) / (clients * rate), 0)
+    distribution = max(((clients - 1) * compressed) / (clients * rate), 0) + max(
+        ((clients - 1) * model_size) / (clients * rate), 0
+    )
     table.append(
         [
             "ERIS (with ω_{SoteriaFL})",
             f"{compressions[5]}%",
             format_bytes((clients - 1) / clients * compressed),
-            format_bytes(2 * (clients - 1) / clients * compressed),
+            format_bytes((clients - 1) / clients * model_size),
+            format_bytes(
+                (clients - 1) / clients * compressed
+                + (clients - 1) / clients * model_size
+            ),
             f"{format_num(distribution)} s",
         ]
     )
 
     compressed = model_size * compressions[6] / 100
-    distribution = 2 * max(((clients - 1) * compressed) / (clients * rate), 0)
+    distribution = max(((clients - 1) * compressed) / (clients * rate), 0) + max(
+        ((clients - 1) * model_size) / (clients * rate), 0
+    )
     table.append(
         [
             "ERIS",
             f"{compressions[6]}%",
             format_bytes((clients - 1) / clients * compressed),
-            format_bytes(2 * (clients - 1) / clients * compressed),
+            format_bytes((clients - 1) / clients * model_size),
+            format_bytes(
+                (clients - 1) / clients * compressed
+                + (clients - 1) / clients * model_size
+            ),
             f"{format_num(distribution)} s",
         ]
     )
