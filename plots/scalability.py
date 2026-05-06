@@ -95,7 +95,7 @@ ax2.plot(
 ax2.plot(
     x,
     y_eris2,
-    label="ERIS (A=2)",
+    label="ERIS (+DSC) (A=2)",
     color=baseline_colors["ERIS"],
     marker="^",
     markersize=4,
@@ -104,7 +104,7 @@ ax2.plot(
 ax2.plot(
     x,
     y_eris25,
-    label="ERIS (A=25)",
+    label="ERIS (+DSC) (A=25)",
     color=baseline_colors["ERIS"],
     marker="x",
     markersize=4,
@@ -113,7 +113,7 @@ ax2.plot(
 ax2.plot(
     x,
     y_eris50,
-    label="ERIS (A=50)",
+    label="ERIS (+DSC)(A=50)",
     color=baseline_colors["ERIS"],
     marker="s",
     markersize=4,
@@ -122,7 +122,7 @@ ax2.plot(
 ax2.plot(
     x,
     y_eris50_uncomp,
-    label="ERIS (A=50) w/o compression",
+    label="ERIS (A=50)n",
     color=baseline_colors["ERIS"],
     marker="P",
     markersize=4,
@@ -208,7 +208,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris2,
-    label="ERIS (A=2)",
+    label="ERIS (+DSC) (A=2)",
     color=baseline_colors["ERIS"],
     marker="^",
     markersize=4,
@@ -217,7 +217,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris25,
-    label="ERIS (A=25)",
+    label="ERIS (+DSC) (A=25)",
     color=baseline_colors["ERIS"],
     marker="x",
     markersize=4,
@@ -226,7 +226,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris50,
-    label="ERIS (A=50)",
+    label="ERIS (+DSC)(A=50)",
     color=baseline_colors["ERIS"],
     marker="s",
     markersize=4,
@@ -235,7 +235,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris50_uncomp,
-    label="ERIS (A=50) w/o compression",
+    label="ERIS (A=50)",
     color=baseline_colors["ERIS"],
     marker="P",
     markersize=4,
@@ -337,7 +337,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris2,
-    label="ERIS (A=2)",
+    label="ERIS (+DSC) (A=2)",
     color=baseline_colors["ERIS"],
     marker="^",
     markersize=4,
@@ -346,7 +346,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris25,
-    label="ERIS (A=25)",
+    label="ERIS (+DSC) (A=25)",
     color=baseline_colors["ERIS"],
     marker="x",
     markersize=4,
@@ -355,7 +355,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris50,
-    label="ERIS (A=50)",
+    label="ERIS (+DSC) (A=50)",
     color=baseline_colors["ERIS"],
     marker="s",
     markersize=4,
@@ -364,7 +364,7 @@ ax1.plot(
 ax1.plot(
     x,
     y_eris50_uncomp,
-    label="ERIS (A=50) w/o compression",
+    label="ERIS (A=50)",
     color=baseline_colors["ERIS"],
     marker="P",
     markersize=4,

@@ -78,7 +78,7 @@ ax.axhspan(min_leakage - min_leakage_std, min_leakage + min_leakage_std,
 # Labeling and formatting
 ax.set_xlabel(r'Number of Aggregators $(A)$', fontsize=13.5)
 ax.set_ylabel('MIA Accuracy', fontsize=13.5)
-ax.set_title('Model Partitioning', fontsize=15)
+ax.set_title('FSA', fontsize=15)
 # set y-lim
 ax.set_ylim(0.625, 0.78)
 # ax.legend(fontsize=12)

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy as np
 from matplotlib import rcParams
+from matplotlib.ticker import MaxNLocator
 
 # ICML plot settings
 def setup_icml_plot(two_column=False):
@@ -17,7 +18,7 @@ def setup_icml_plot(two_column=False):
         "font.family": "serif",  # Use serif fonts
         "font.serif": ["Times New Roman"],  # Set font to Times New Roman
         "axes.labelsize": 10.6,  # Font size for axis labels
-        "axes.titlesize": 10.6,  # Font size for titles
+        "axes.titlesize": 11,  # Font size for titles
         "legend.fontsize": 14,  # Font size for legends
         "xtick.labelsize": 10.6,  # Font size for x-axis ticks
         "ytick.labelsize": 10.6,  # Font size for y-axis ticks
@@ -48,7 +49,7 @@ results_4samples =  {
         'priv_leak': [0.152, 0.153333333, 0.166666667, 0.169333333, 0.186666667, 0.202666667, 0.252],
         'priv_leak_std': [0.045879068, 0.042373996,0.041739936, 0.027840817, 0.049351348, 0.03592585, 0.030811253] / np.sqrt(5)
     },
-    'ERIS': { 
+    'ERIS (+LDP)': { 
         'accuracy': [0.2714, 0.241, 0.22292, 0.17236, 0.12034, 0.103796, 0.09972],
         'accuracy_std': [0.009530792, 0.019810603, 0.008626332, 0.021533193, 0.017688256, 0.00160574, 0.000386782] / np.sqrt(5),
         'priv_leak': [0.273253333, 0.306533333, 0.313333333, 0.329573333,0.341333333, 0.333948369, 0.345626667],
@@ -76,7 +77,7 @@ results_8samples = {
         'priv_leak': [0.2416, 0.2456, 0.2592, 0.2784, 0.3088, 0.2712, 0.2872],
         'priv_leak_std': [0.028464715, 0.019032604, 0.025848791, 0.040603448,0.040111844, 0.031025151, 0.023650793] / np.sqrt(5)
     },
-    'ERIS': { 
+    'ERIS (+LDP)': { 
         'accuracy': [0.32414, 0.26868, 0.27078, 0.2409, 0.18718, 0.12868, 0.10912],
         'accuracy_std': [0.013158815, 0.023678378, 0.033285336, 0.003260675,0.02026459, 0.017252409, 0.017983148] / np.sqrt(5),
         'priv_leak': [0.333824, 0.366982809, 0.3867, 0.383981618,0.387584, 0.377904, 0.379608],
@@ -104,11 +105,11 @@ results_16samples = {
         'priv_leak': [0.298545455, 0.304727273, 0.330545455, 0.358181818,0.388727273, 0.360727273, 0.348727273],
         'priv_leak_std': [0.014102341, 0.013141317, 0.012877041, 0.020538213,0.009851794, 0.010450988, 0.010116675] / np.sqrt(5)
     },   
-    'ERIS': {
+    'ERIS (+LDP)': {
         'accuracy': [0.35054, 0.3095, 0.2855, 0.24956, 0.1876, 0.18432, 0.12154],
         'accuracy_std': [0.017494411, 0.013213781, 0.007107461, 0.006315885,0.012321688, 0.009295031, 0.016929335] / np.sqrt(5),
         'priv_leak': [0.411076364, 0.445476364, 0.454138182, 0.453563636,0.455076364, 0.458150056, 0.460094545],
-        'priv_leak_std': [0.024482387, 0.017728451, 0.007673103, 0.007308602,0.011015376, 0.014533019, 0.011097896] / np.sqrt(5)
+        'priv_leak_std': [0.024482387, 0.017728451, 0.007673103, 0.007308602, 0.011015376, 0.014533019, 0.011097896] / np.sqrt(5)
     },
     'PriPrune': {  
         'accuracy': [0.3443, 0.3267, 0.29568, 0.20984, 0.15076, 0.12792, 0.11552],
@@ -136,7 +137,7 @@ results_16samples['Shatter']['priv_leak'] = [1 - val for val in results_16sample
 # (Optional) color map to stay consistent with your previous style:
 baseline_colors = {
     'FedAvg': 'tab:orange',
-    'ERIS':   'tab:blue',
+    'ERIS (+LDP)':   'tab:blue',
     'PriPrune': 'tab:purple',
     'SoteriaFL': 'tab:red',
     'Shatter': 'tab:brown',
@@ -146,7 +147,7 @@ fig_size = setup_icml_plot(two_column=False)
 
 
 # 4 samples plot
-fig, ax = plt.subplots(figsize=(5, 4))
+fig, ax = plt.subplots(figsize=(4.4, 4))
 
 # Plot markers with error bars for each method (without connecting lines)
 for method_name, vals in results_4samples.items():
@@ -207,8 +208,9 @@ pareto_points = pareto_points[np.argsort(pareto_points[:, 0])]
 ax.plot(pareto_points[:, 0], pareto_points[:, 1], color='k', linestyle='-', linewidth=1.5, label='Pareto Front')
 
 # Axis labels and legend (formatted for a scientific paper)
-ax.set_xlabel('1 - MIA Accuracy', fontsize=12)
-ax.set_ylabel('Accuracy', fontsize=12)
+ax.set_xlabel('1 - MIA Accuracy', fontsize=14)
+ax.set_ylabel('Accuracy', fontsize=14)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
 ax.legend(title='Method', fontsize=10.3, title_fontsize=11, frameon=True, framealpha=1)
 # legend.get_frame().set_facecolor('grey')
 
@@ -222,7 +224,7 @@ plt.savefig('pareto_front_same_style_4samples.pdf', bbox_inches='tight')
 
 
 # 8 samples plot
-fig, ax = plt.subplots(figsize=(5, 4))
+fig, ax = plt.subplots(figsize=(4.4, 4))
 
 # Plot markers with error bars for each method (without connecting lines)
 for method_name, vals in results_8samples.items():
@@ -283,8 +285,9 @@ pareto_points = pareto_points[np.argsort(pareto_points[:, 0])]
 ax.plot(pareto_points[:, 0], pareto_points[:, 1], color='k', linestyle='-', linewidth=1.5, label='Pareto Front')
 
 # Axis labels and legend (formatted for a scientific paper)
-ax.set_xlabel('1 - MIA Accuracy', fontsize=12)
-ax.set_ylabel('Accuracy', fontsize=12)
+ax.set_xlabel('1 - MIA Accuracy', fontsize=14)
+ax.set_ylabel('Accuracy', fontsize=14)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
 ax.legend(title='Method', fontsize=10.3, title_fontsize=11, frameon=True, framealpha=1)
 # legend.get_frame().set_facecolor('white')
 
@@ -298,7 +301,7 @@ plt.savefig('pareto_front_same_style_8samples.pdf', bbox_inches='tight')
 
 
 # 16 samples plot
-fig, ax = plt.subplots(figsize=(5, 4))
+fig, ax = plt.subplots(figsize=(4.4, 4))
 
 # Plot markers with error bars for each method (without connecting lines)
 for method_name, vals in results_16samples.items():
@@ -359,8 +362,9 @@ pareto_points = pareto_points[np.argsort(pareto_points[:, 0])]
 ax.plot(pareto_points[:, 0], pareto_points[:, 1], color='k', linestyle='-', linewidth=1.5, label='Pareto Front')
 
 # Axis labels and legend (formatted for a scientific paper)
-ax.set_xlabel('1 - MIA Accuracy', fontsize=12)
-ax.set_ylabel('Accuracy', fontsize=12)
+ax.set_xlabel('1 - MIA Accuracy', fontsize=14)
+ax.set_ylabel('Accuracy', fontsize=14)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
 ax.legend(title='Method', fontsize=10.3, title_fontsize=11, frameon=True, framealpha=1)
 # legend.get_frame().set_facecolor('white')
 
@@ -450,6 +454,7 @@ for ax, (results, title) in zip(axes, datasets):
     
     # Set the x-axis label and subplot title
     ax.set_xlabel(r'1 - MIA Accuracy', fontsize=14)
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
     ax.set_title(title, fontsize=16)
 
 # Label y-axis only for the leftmost subplot

@@ -57,7 +57,7 @@ dataset_imdb = {
         'priv_leak': [0.676666667, 0.62448, 0.5472, 0.539790476, 0.535386047, 0.520847059],
         'priv_leak_std': [0.028867513, 0.037861896, 0.018989758, 0.014811395, 0.009304874, 0.010741995] / np.sqrt(5)
     },
-    'ERIS': {  # compression 2000 
+    'ERIS (+DSC)': {  # compression 2000 
         'accuracy': [0.712808, 0.792848, 0.801064, 0.809856, 0.811584, 0.815912],
         'accuracy_std': [0.047428757, 0.007079182, 0.004625951, 0.002154749,0.001894936, 0.002143104] / np.sqrt(5),
         'priv_leak': [0.65216, 0.60512, 0.541178182, 0.534430476,0.527687442, 0.518000941],
@@ -102,7 +102,7 @@ dataset_mnist = {
         'priv_leak': [0.70392, 0.563536, 0.556043636, 0.520838095, 0.514472558, 0.515301647],
         'priv_leak_std': [0.021896825, 0.028905868, 0.012681735, 0.010380802, 0.008539584, 0.007897464] / np.sqrt(5)
     },
-    'ERIS': {   # compression 4
+    'ERIS (+DSC)': {   # compression 4
         'accuracy': [0.78716, 0.84838, 0.9026, 0.92564, 0.93576, 0.94024],
         'accuracy_std': [0.01194196, 0.005779412, 0.00108074, 0.003013702,0.002317412, 0.001902209] / np.sqrt(5),
         'priv_leak': [0.684826667, 0.551424, 0.561105455, 0.527097143,0.517371163, 0.516486588],
@@ -132,12 +132,12 @@ dataset_mnist = {
         'priv_leak':     [0.772, 0.6832, 0.635636364, 0.569904762, 0.545395349, 0.526541176],
         'priv_leak_std': [0.033306656, 0.042813082, 0.020939898, 0.011438091, 0.010331865, 0.00693603] / np.sqrt(5)
     },
-    # 'Min. Leakage': {
-    #     'accuracy':      [0.80678, 0.86296, 0.89264, 0.91466, 0.9256, 0.9314],
-    #     'accuracy_std':  [0.019521414, 0.010587653, 0.007363586, 0.003940355, 0.000525357, 0.001667333] / np.sqrt(5),
-    #     'priv_leak':     [0.666666667, 0.5432, 0.553818182, 0.520571429, 0.514139535, 0.514964706],
-    #     'priv_leak_std': [0.026666667, 0.016666133, 0.015581298, 0.010443238, 0.008390677, 0.008479211] / np.sqrt(5)
-    # }
+    'Min. Leakage': {
+        'accuracy':      [0.80678, 0.86296, 0.89264, 0.91466, 0.9256, 0.9314],
+        'accuracy_std':  [0.019521414, 0.010587653, 0.007363586, 0.003940355, 0.000525357, 0.001667333] / np.sqrt(5),
+        'priv_leak':     [0.666666667, 0.5432, 0.553818182, 0.520571429, 0.514139535, 0.514964706],
+        'priv_leak_std': [0.026666667, 0.016666133, 0.015581298, 0.010443238, 0.008390677, 0.008479211] / np.sqrt(5)
+    }
 }
 
 dataset_cifar = {
@@ -147,7 +147,7 @@ dataset_cifar = {
         'priv_leak': [0.77904, 0.707504, 0.642050909, 0.58631619, 0.546029767, 0.520413176],
         'priv_leak_std': [0.055474192, 0.026983107, 0.019545441, 0.00979706, 0.004858406, 0.004148291] / np.sqrt(5)
     },
-    'ERIS': {  # compression 24
+    'ERIS (+DSC)': {  # compression 24
         'accuracy': [0.2631, 0.33278, 0.34622, 0.37398, 0.38164, 0.38296],
         'accuracy_std': [0.011622908, 0.010554127, 0.014213008, 0.013610496,0.010101208, 0.008779203] / np.sqrt(5),
         'priv_leak': [0.716346667, 0.684752, 0.595810909, 0.574937143,0.53979907, 0.517015529],
@@ -177,12 +177,12 @@ dataset_cifar = {
         'priv_leak': [0.748, 0.7536, 0.698181818, 0.637333333,0.570883721, 0.532188235],
         'priv_leak_std': [0.028720879, 0.036008888, 0.015933747, 0.009626117,0.006744026, 0.006964706] / np.sqrt(5)
     },
-    # 'Min. Leakage': {
-    #     'accuracy':      [0.27106, 0.33106, 0.34622, 0.37252, 0.38574, 0.38878],
-    #     'accuracy_std':  [0.011716416, 0.006242948, 0.009108326, 0.003781746, 0.003713004, 0.003581843] / np.sqrt(5),
-    #     'priv_leak':     [0.702666667, 0.6544, 0.568727273, 0.558095238, 0.530604651, 0.516658824],
-    #     'priv_leak_std': [0.046875722, 0.024344198, 0.013380632, 0.008148286, 0.004719498, 0.004816121] / np.sqrt(5)
-    # }
+    'Min. Leakage': {
+        'accuracy':      [0.27106, 0.33106, 0.34622, 0.37252, 0.38574, 0.38878],
+        'accuracy_std':  [0.011716416, 0.006242948, 0.009108326, 0.003781746, 0.003713004, 0.003581843] / np.sqrt(5),
+        'priv_leak':     [0.702666667, 0.6544, 0.568727273, 0.558095238, 0.530604651, 0.516658824],
+        'priv_leak_std': [0.046875722, 0.024344198, 0.013380632, 0.008148286, 0.004719498, 0.004816121] / np.sqrt(5)
+    }
 }
 
 
@@ -191,7 +191,7 @@ dataset_cifar = {
 # 2) BASELINE COLORS
 ###############################################################################
 baseline_colors = {
-    'ERIS':        'tab:blue',
+    'ERIS (+DSC)':        'tab:blue',
     'FedAvg':      'tab:orange',
     # 'fedavg+DP':   'tab:green',
     'FedAvg ($\\varepsilon$, $\\delta$)-LDP': 'tab:green',
@@ -242,6 +242,7 @@ datasets = [
 # We'll collect handles for one legend (baselines) + one legend (samples)
 baseline_handles = {}
 sample_handles = {}
+random_guess_label = 'Random Guess'
 
 ###############################################################################
 # 4) PLOTTING FUNCTION
@@ -321,12 +322,18 @@ def plot_dataset(ax, dataset_name, data_dict):
     
     # Optionally add a random guess line:
     if dataset_name == 'IMDB':
-        ax.axhline(y=0.5, color='gray', linestyle='--', label='Random Guess = 50%')
+        ax.axhline(y=0.5, color='gray', linestyle='--', label=random_guess_label)  # = 50%
         ax.set_ylabel('Accuracy', fontsize=15)
     elif dataset_name == 'MNIST':
-        ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
+        ax.axhline(y=0.1, color='gray', linestyle='--', label=random_guess_label) #= 10%
     elif dataset_name == 'CIFAR-10':
-        ax.axhline(y=0.1, color='gray', linestyle='--', label='Random Guess = 10%')
+        ax.axhline(y=0.1, color='gray', linestyle='--', label=random_guess_label) # = 10%
+
+    if random_guess_label not in baseline_handles:
+        baseline_handles[random_guess_label] = plt.Line2D(
+            [0], [0],
+            color='gray', linestyle='--', label=random_guess_label, linewidth=1.2
+        )
 
     ax.set_xlabel('1 - MIA Accuracy', fontsize=15)
     # ax.set_ylabel('Accuracy', fontsize=14)
@@ -348,6 +355,10 @@ if 'Min. Leakage' in baseline_labels:
     baseline_labels.remove('Min. Leakage')
     # baseline_labels.append('Min. Leakage')
     baseline_labels.insert(2, 'Min. Leakage')
+
+if random_guess_label in baseline_labels:
+    baseline_labels.remove(random_guess_label)
+    baseline_labels.append(random_guess_label)
     
 baseline_hlist  = [baseline_handles[lab] for lab in baseline_labels]
 

@@ -181,7 +181,7 @@ for label, data in datasets.items():
 
 ax.set_xlabel(r"Number of samples", fontsize=12)
 ax.set_ylabel("Accuracy", fontsize=12)
-ax.set_title(r"Effect of Shifted Compression ($\omega$)", fontsize=14)
+ax.set_title(r"Effect of DSC ($\omega$)", fontsize=14)
 ax.set_xticks([4, 8, 16, 32, 64, 128])
 ax.set_ylim(0.2, 0.4)
 ax.legend(fontsize=8, ncol=2)  # override tiny default legend font

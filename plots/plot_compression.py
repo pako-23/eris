@@ -70,7 +70,7 @@ ax.axhspan(min_leakage - min_leakage_std, min_leakage + min_leakage_std,
 # Labeling and formatting
 ax.set_xlabel(r'Compression Constant $(\omega)$', fontsize=13.5)
 ax.set_ylabel('MIA Accuracy', fontsize=13.5)
-ax.set_title('Shifted Compression', fontsize=15)
+ax.set_title('FSA + DSC', fontsize=15)
 ax.set_ylim(0.625, 0.78)
 ax.legend(fontsize=12)
 plt.tight_layout()
