@@ -1,9 +1,10 @@
-# ERIS: Enhancing Privacy and Communication Efficiency in Serverless Federated Learning
+# ERIS: Enhancing Privacy and Scalability in Federated Learning via Federated Shard Aggregation
 
 ## 🌍 Overview
 
-**ERIS** is a scalable serverless Federated Learning (FL) framework that removes the server bottleneck while preserving FedAvg utility. The core idea is to partition each client update across multiple client-side aggregators so that (i) aggregation is fully distributed and network load is balanced, and (ii) no single entity ever observes a full client update—only a small, randomized subset—yielding inherent privacy benefits. ERIS further integrates a distributed shifted compression mechanism to drastically reduce the number of transmitted (and exposed) parameters.
+**ERIS** is a scalable Federated Learning (FL) framework designed to jointly address privacy, scalability, and utility. The core idea is Federated Shard Aggregation (FSA): instead of sending a full client update to a central server, each client partitions its update into non-overlapping shards and distributes their aggregation across multiple client-side aggregators. This removes the central aggregation bottleneck, balances communication and computation across participants, and ensures that no single observer sees a complete client update.
 
+Because the shards are disjoint and complete, clients can reassemble the same global update induced by centralized FedAvg-style aggregation, preserving utility without relying on heavy cryptography, noise injection, or perturbations that degrade learning. ERIS can further integrate Distributed Shifted Compression (DSC) as a pre-processing layer to reduce transmitted payloads and exposed coordinates, strengthening both scalability and privacy.
 
 <p align="center">
   <img src="plots/eris_overview.png" alt="FLUX Overview" width="100%"/>
@@ -11,11 +12,12 @@
 
 
 ## 📦 Key Features
-- **Exact serverless aggregation via gradient partitioning.** ERIS introduces a novel gradient partitioning scheme that balances network load and remains mathematically equivalent to FedAvg updates, while amplifying privacy on client updates by limiting the information available to any single observer.
 
-- **Distributed Shifted Compression.** Applies a shift-and-compress strategy to each client gradient, reducing transmitted parameters to less than $3.3\%$ of the model size and cuts distribution time by up to $10^3\times$ in the worst case. Besides improving communication efficiency, compression further limits exposure by shrinking the parameter subset observed per round.
+- **Federated Shard Aggregation.** ERIS introduces FSA, a distributed aggregation mechanism that partitions each client update into non-overlapping shards and assigns their aggregation to multiple client-side aggregators. This removes the central server bottleneck, limits the information visible to any single observer, and preserves the centralized FL update after reassembly.
+  
+- **Optional Distributed Shifted Compression.** ERIS naturally supports DSC as a pre-processing layer before shard aggregation. DSC reduces the number of transmitted parameters and exposed coordinates, further improving communication scalability and privacy while retaining the utility guarantees provided by FSA.
 
-- **Theory and large-scale validation.** We provide convergence guarantees and information-theoretic privacy bounds showing that leakage decreases with the number of aggregators and the compression level. Extensive experiments on three image and two text datasets—from small networks to modern LLMs—and under two threat models against six SOTA baselines confirm ERIS’s strong privacy–utility–efficiency trade-off.
+- **Privacy, scalability, and utility guarantees.** ERIS provides convergence guarantees under standard assumptions and information-theoretic privacy bounds showing that leakage decreases with the observable fraction of each update, the number of aggregators, and, when DSC is enabled, the compression level. Experiments across four image and two text datasets—from small models to modern LLMs—and under two threat models against six SOTA baselines confirm ERIS’s strong privacy–utility–scalability trade-off.
 
 
 ## 🚀 Installation
@@ -83,10 +85,13 @@ python download_datasets.py
 If you use ERIS, please cite the current preprint:
 ```
 @misc{fenoglio2026eris,
-  title        = {ERIS: Enhancing Privacy and Communication Efficiency in Serverless Federated Learning},
-  author       = {Dario Fenoglio and Pasquale Polverino and Jacopo Quizi and Martin Gjoreski and Marc Langheinrich},
+  title        = {ERIS: Enhancing Privacy and Scalability in Federated Learning via Federated Shard Aggregation},
+  author       = {Dario Fenoglio and Pasquale Polverino and Jacopo Quizi and Martin Gjoreski and Akash Dhasade and Marc Langheinrich},
   year         = {2026},
-  note         = {Preprint, February 9, 2026}
+  eprint       = {2602.08617},
+  archivePrefix= {arXiv},
+  primaryClass = {cs.LG},
+  note         = {Preprint, version 2, May 11, 2026}
 }
 ```
 
