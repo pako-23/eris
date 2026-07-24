@@ -11,6 +11,7 @@ FetchContent_Declare(
 set(BUILD_TESTS OFF CACHE INTERNAL "")
 set(BUILD_SHARED OFF CACHE INTERNAL "")
 set(BUILD_STATIC ON CACHE INTERNAL "")
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 FetchContent_MakeAvailable(libzmq)
 
 add_subdirectory(proto)
